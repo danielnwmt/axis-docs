@@ -60,6 +60,7 @@ export default function Users() {
   const [unit, setUnit] = useState("");
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [units, setUnits] = useState<UnitOption[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null);
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
