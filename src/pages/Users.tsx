@@ -72,8 +72,14 @@ export default function Users() {
     }
   };
 
+  const fetchUnits = async () => {
+    const { data } = await supabase.from("units").select("id, name").order("name");
+    if (data) setUnits(data);
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchUnits();
   }, []);
 
   const handleAddUser = async (e: React.FormEvent) => {
