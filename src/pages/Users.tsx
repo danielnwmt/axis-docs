@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Users as UsersIcon, Plus, MoreVertical, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
+import { Users as UsersIcon, Plus, MoreVertical, Trash2, ToggleLeft, ToggleRight, Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface UserProfile {
   id: string;
@@ -57,7 +58,7 @@ export default function Users() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("Usuário");
-  const [unit, setUnit] = useState("");
+  const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [units, setUnits] = useState<UnitOption[]>([]);
@@ -89,7 +90,7 @@ export default function Users() {
     setLoading(true);
     try {
       const response = await supabase.functions.invoke("create-user?action=create", {
-        body: { email, password, role, unit },
+        body: { email, password, role, unit: selectedUnits.join(", ") },
       });
 
       if (response.error) throw new Error(response.error.message);
@@ -100,7 +101,7 @@ export default function Users() {
       setEmail("");
       setPassword("");
       setRole("Usuário");
-      setUnit("");
+      setSelectedUnits([]);
       fetchUsers();
     } catch (error: any) {
       toast({ title: "Erro ao criar usuário", description: error.message, variant: "destructive" });
@@ -242,16 +243,41 @@ export default function Users() {
             </div>
             <div className="space-y-2">
               <Label>Unidade/Setor</Label>
-              <Select value={unit} onValueChange={setUnit}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o setor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {units.map((u) => (
-                    <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                    {selectedUnits.length > 0
+                      ? `${selectedUnits.length} setor(es) selecionado(s)`
+                      : "Selecione os setores"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-2" align="start">
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {units.map((u) => {
+                      const isSelected = selectedUnits.includes(u.name);
+                      return (
+                        <div
+                          key={u.id}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-secondary/50"
+                          onClick={() => {
+                            setSelectedUnits(prev =>
+                              isSelected
+                                ? prev.filter(name => name !== u.name)
+                                : [...prev, u.name]
+                            );
+                          }}
+                        >
+                          <div className={`w-4 h-4 border rounded flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-input'}`}>
+                            {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+                          </div>
+                          <span className="text-sm">{u.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Criando..." : "Criar Usuário"}
