@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
+import { HeroBanner } from "@/components/dashboard/HeroBanner";
 import { StatsCards } from "@/components/dashboard/StatsCards";
 import { RecentDocuments } from "@/components/dashboard/RecentDocuments";
 import { FrequentCategories } from "@/components/dashboard/FrequentCategories";
@@ -6,6 +7,7 @@ import { FrequentCategories } from "@/components/dashboard/FrequentCategories";
 const Index = () => {
   return (
     <AppLayout>
+      <HeroBanner />
       <div className="mb-6">
         <h1 className="text-2xl font-bold font-display text-foreground">Dashboard</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Visão geral do acervo documental</p>
