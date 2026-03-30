@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Search as SearchIcon, FileText } from "lucide-react";
+import { Search as SearchIcon, FileText, Eye, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +11,7 @@ interface SearchResult {
   category: string;
   unit: string;
   file_name: string;
+  file_path: string;
   keywords: string;
   created_at: string;
 }
@@ -36,7 +37,7 @@ export default function Search() {
     const q = term.trim();
     const { data, error } = await supabase
       .from("documents")
-      .select("id, title, category, unit, file_name, keywords, created_at")
+      .select("id, title, category, unit, file_name, file_path, keywords, created_at")
       .or(`title.ilike."%${q}%",category.ilike."%${q}%",unit.ilike."%${q}%",keywords.ilike."%${q}%",file_name.ilike."%${q}%",subject.ilike."%${q}%",ocr_text.ilike."%${q}%"`)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -51,21 +52,30 @@ export default function Search() {
     } catch {}
   }, []);
 
-  // Live search with debounce
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      doSearch(query);
-    }, 300);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
+    debounceRef.current = setTimeout(() => doSearch(query), 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query, doSearch]);
 
-  // Initial search from URL param
   useEffect(() => {
     if (initialQ) doSearch(initialQ);
   }, []);
+
+  const handleView = async (filePath: string) => {
+    const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
+    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+  };
+
+  const handleDownload = async (filePath: string, fileName: string) => {
+    const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
+    if (data?.signedUrl) {
+      const a = document.createElement("a");
+      a.href = data.signedUrl;
+      a.download = fileName;
+      a.click();
+    }
+  };
 
   return (
     <AppLayout>
@@ -100,7 +110,7 @@ export default function Search() {
             </div>
           )}
           {results.map((result) => (
-            <div key={result.id} className="bg-card rounded-xl border border-border shadow-sm p-5 hover:border-primary/30 transition-colors cursor-pointer">
+            <div key={result.id} className="bg-card rounded-xl border border-border shadow-sm p-5 hover:border-primary/30 transition-colors">
               <div className="flex items-start gap-3">
                 <FileText className="w-5 h-5 text-primary mt-0.5 shrink-0" />
                 <div className="flex-1">
@@ -115,6 +125,22 @@ export default function Search() {
                   <p className="text-xs text-muted-foreground mt-1">
                     {result.unit} • {new Date(result.created_at).toLocaleDateString("pt-BR")}
                   </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => handleView(result.file_path)}
+                    className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                    title="Visualizar"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDownload(result.file_path, result.file_name)}
+                    className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                    title="Baixar"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>
