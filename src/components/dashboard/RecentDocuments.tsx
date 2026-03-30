@@ -13,7 +13,7 @@ interface Doc {
   signStatus: string;
 }
 
-function StatusBadge({ ocrStatus, signStatus }: { ocrStatus: string; signStatus: string }) {
+function StatusBadge({ signStatus }: { signStatus: string }) {
   if (signStatus === "assinado") {
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-success border border-success/30 bg-success/5 px-2.5 py-0.5 rounded-full whitespace-nowrap">
@@ -21,23 +21,9 @@ function StatusBadge({ ocrStatus, signStatus }: { ocrStatus: string; signStatus:
       </span>
     );
   }
-  if (ocrStatus === "concluido") {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-info border border-info/30 bg-info/5 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-        OCR Concluído
-      </span>
-    );
-  }
-  if (ocrStatus === "pendente") {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-warning border border-warning/30 bg-warning/5 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-        OCR Pendente
-      </span>
-    );
-  }
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-destructive border border-destructive/30 bg-destructive/5 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-      Erro
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-warning border border-warning/30 bg-warning/5 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+      Pendente
     </span>
   );
 }
