@@ -82,7 +82,7 @@ export function RecentDocuments() {
               <p className="text-sm font-medium text-foreground truncate">{doc.title}</p>
               <p className="text-xs text-muted-foreground">{doc.category} · {doc.date}</p>
             </div>
-            <StatusBadge ocrStatus={doc.ocrStatus} signStatus={doc.signStatus} />
+            <StatusBadge signStatus={doc.signStatus} />
           </div>
         ))}
       </div>
