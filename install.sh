@@ -123,7 +123,7 @@ echo "👤 Criando usuário administrador..."
 ADMIN_RESPONSE=$(curl -s -X POST "http://localhost/auth/v1/admin/users" \
   -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@axisdocs.local","password":"admin123","email_confirm":true}' 2>/dev/null || echo "{}")
+  -d '{"email":"admin@axis.com","password":"admin123","email_confirm":true}' 2>/dev/null || echo "{}")
 
 ADMIN_ID=$(echo "$ADMIN_RESPONSE" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 
@@ -133,7 +133,7 @@ if [ -n "$ADMIN_ID" ]; then
     -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
     -H "Content-Type: application/json" \
     -H "Prefer: return=minimal" \
-    -d "{\"id\":\"$ADMIN_ID\",\"email\":\"admin@axisdocs.local\",\"role\":\"Administrador\",\"unit\":\"\"}" \
+    -d "{\"id\":\"$ADMIN_ID\",\"email\":\"admin@axis.com\",\"role\":\"Administrador\",\"unit\":\"\"}" \
     > /dev/null 2>&1
   echo "✅ Perfil administrador criado"
 else
