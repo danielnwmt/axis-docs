@@ -33,9 +33,7 @@ export function StatsCards() {
     {
       label: "Total de documentos",
       value: totalDocs,
-      subtitle: "12 novos hoje",
-      trend: "↑ +8% este mês",
-      trendColor: "text-success",
+      subtitle: "No acervo",
       icon: FileText,
       iconBg: "bg-info/10",
       iconColor: "text-info",
@@ -43,9 +41,7 @@ export function StatsCards() {
     {
       label: "OCR processado",
       value: ocrDocs,
-      subtitle: `${ocrPercent}% do acervo`,
-      trend: "↑ +12% este mês",
-      trendColor: "text-success",
+      subtitle: totalDocs > 0 ? `${ocrPercent}% do acervo` : "Nenhum documento",
       icon: ScanSearch,
       iconBg: "bg-info/10",
       iconColor: "text-info",
@@ -53,9 +49,7 @@ export function StatsCards() {
     {
       label: "Documentos assinados",
       value: signedDocs,
-      subtitle: `${pendingSign} pendentes`,
-      trend: "↑ +5% este mês",
-      trendColor: "text-success",
+      subtitle: pendingSign > 0 ? `${pendingSign} pendentes` : "Nenhum pendente",
       icon: PenTool,
       iconBg: "bg-success/10",
       iconColor: "text-success",
@@ -63,9 +57,7 @@ export function StatsCards() {
     {
       label: "Pendências OCR",
       value: pendingOcr,
-      subtitle: `${ocrError} com erro`,
-      trend: pendingOcr > 0 ? "↓ -3% este mês" : "Sem pendências",
-      trendColor: pendingOcr > 0 ? "text-warning" : "text-success",
+      subtitle: ocrError > 0 ? `${ocrError} com erro` : "Sem erros",
       icon: AlertCircle,
       iconBg: "bg-warning/10",
       iconColor: "text-warning",
