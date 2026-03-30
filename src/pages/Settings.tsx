@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, ImageIcon, Upload } from "lucide-react";
+import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, ImageIcon, Upload, HardDrive, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "banner" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "banner" | "googledrive" | null;
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
@@ -15,6 +15,7 @@ const sectionCards = [
   { id: "unidades" as Section, icon: FolderTree, title: "Unidades/Setores", description: "Gerenciar a estrutura organizacional" },
   { id: "parametros" as Section, icon: Sliders, title: "Parâmetros do Sistema", description: "Configurações gerais da plataforma" },
   { id: "banner" as Section, icon: ImageIcon, title: "Banner do Dashboard", description: "Alterar a imagem do banner principal" },
+  { id: "googledrive" as Section, icon: HardDrive, title: "Google Drive", description: "Configurar integração com Google Drive via API" },
 ];
 
 function OrgaoSection() {
@@ -241,6 +242,148 @@ function ParametrosSection() {
   );
 }
 
+function GoogleDriveSection() {
+  const [jsonContent, setJsonContent] = useState("");
+  const [rootFolderId, setRootFolderId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Load existing config
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const { data } = await supabase.storage.from("settings").download("google-drive-config.json");
+        if (data) {
+          const text = await data.text();
+          const config = JSON.parse(text);
+          setRootFolderId(config.rootFolderId || "");
+          if (config.serviceAccount) {
+            setJsonContent(JSON.stringify(config.serviceAccount, null, 2));
+          }
+          setStatus("saved");
+        }
+      } catch {
+        // No config yet
+      }
+    };
+    loadConfig();
+  }, []);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      try {
+        JSON.parse(text); // validate
+        setJsonContent(text);
+        setStatus("idle");
+      } catch {
+        toast({ title: "Erro", description: "Arquivo JSON inválido.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSave = async () => {
+    if (!jsonContent.trim()) {
+      toast({ title: "Erro", description: "Cole ou envie o JSON da conta de serviço.", variant: "destructive" });
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonContent);
+    } catch {
+      toast({ title: "Erro", description: "JSON inválido. Verifique o conteúdo.", variant: "destructive" });
+      return;
+    }
+
+    if (!parsed.client_email || !parsed.private_key) {
+      toast({ title: "Erro", description: "JSON precisa conter 'client_email' e 'private_key'.", variant: "destructive" });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const config = {
+        serviceAccount: parsed,
+        rootFolderId: rootFolderId.trim(),
+      };
+      const blob = new Blob([JSON.stringify(config)], { type: "application/json" });
+
+      await supabase.storage.from("settings").remove(["google-drive-config.json"]);
+      const { error } = await supabase.storage.from("settings").upload("google-drive-config.json", blob, { upsert: true });
+
+      if (error) throw error;
+
+      setStatus("saved");
+      toast({ title: "Configuração do Google Drive salva!" });
+    } catch (err: any) {
+      setStatus("error");
+      toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <div className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 border border-border">
+        <HardDrive className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+        <div className="text-sm text-muted-foreground">
+          <p>Configure a integração com o Google Drive usando uma <strong>Conta de Serviço</strong>.</p>
+          <p className="mt-1">O arquivo JSON pode ser obtido no <strong>Google Cloud Console → IAM → Contas de Serviço → Chaves</strong>.</p>
+          <p className="mt-1">Lembre-se de compartilhar a pasta raiz do Drive com o e-mail da conta de serviço.</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>ID da Pasta Raiz no Google Drive</Label>
+        <Input
+          placeholder="Ex: 1A2B3C4D5E6F..."
+          value={rootFolderId}
+          onChange={(e) => { setRootFolderId(e.target.value); setStatus("idle"); }}
+        />
+        <p className="text-xs text-muted-foreground">O ID está na URL da pasta: drive.google.com/drive/folders/<strong>ID_AQUI</strong></p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>JSON da Conta de Serviço</Label>
+        <div className="flex gap-2 mb-2">
+          <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleFileUpload} />
+          <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()} className="gap-2">
+            <Upload className="w-4 h-4" /> Carregar arquivo .json
+          </Button>
+        </div>
+        <textarea
+          className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[200px]"
+          placeholder='Cole aqui o conteúdo do arquivo JSON da conta de serviço...'
+          value={jsonContent}
+          onChange={(e) => { setJsonContent(e.target.value); setStatus("idle"); }}
+        />
+      </div>
+
+      {status === "saved" && (
+        <div className="flex items-center gap-2 text-sm text-primary">
+          <CheckCircle className="w-4 h-4" /> Configuração salva e ativa
+        </div>
+      )}
+      {status === "error" && (
+        <div className="flex items-center gap-2 text-sm text-destructive">
+          <AlertCircle className="w-4 h-4" /> Erro na configuração
+        </div>
+      )}
+
+      <Button onClick={handleSave} disabled={saving} className="gap-2">
+        <Save className="w-4 h-4" /> {saving ? "Salvando..." : "Salvar Configuração"}
+      </Button>
+    </div>
+  );
+}
+
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<Section>(null);
 
@@ -251,6 +394,7 @@ export default function Settings() {
       case "unidades": return <ListManager itemLabel="Unidade/Setor" tableName="units" />;
       case "parametros": return <ParametrosSection />;
       case "banner": return <BannerSection />;
+      case "googledrive": return <GoogleDriveSection />;
       default: return null;
     }
   };
