@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "banner" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "banner" | "googledrive" | null;
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
@@ -15,6 +15,7 @@ const sectionCards = [
   { id: "unidades" as Section, icon: FolderTree, title: "Unidades/Setores", description: "Gerenciar a estrutura organizacional" },
   { id: "parametros" as Section, icon: Sliders, title: "Parâmetros do Sistema", description: "Configurações gerais da plataforma" },
   { id: "banner" as Section, icon: ImageIcon, title: "Banner do Dashboard", description: "Alterar a imagem do banner principal" },
+  { id: "googledrive" as Section, icon: HardDrive, title: "Google Drive", description: "Configurar integração com Google Drive via API" },
 ];
 
 function OrgaoSection() {
