@@ -1,9 +1,20 @@
-import { Search, Bell, Mail, Settings } from "lucide-react";
+import { Search, Bell, Mail, Settings, FileText, Download, Eye } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+
+interface SearchResult {
+  id: string;
+  title: string;
+  category: string;
+  file_path: string;
+  file_name: string;
+}
 
 export function AppHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
   const isDashboard = location.pathname === "/";
   const { user } = useAuth();
   const email = user?.email ?? "";
@@ -14,17 +25,119 @@ export function AppHeader() {
     .join("")
     .slice(0, 2);
 
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const doSearch = useCallback(async (term: string) => {
+    if (!term.trim()) {
+      setResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    setLoading(true);
+    const q = term.trim();
+    const { data } = await supabase
+      .from("documents")
+      .select("id, title, category, file_path, file_name")
+      .or(`title.ilike."%${q}%",subject.ilike."%${q}%",notes.ilike."%${q}%",keywords.ilike."%${q}%",ocr_text.ilike."%${q}%"`)
+      .order("created_at", { ascending: false })
+      .limit(8);
+    setResults(data || []);
+    setShowDropdown(true);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doSearch(query), 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query, doSearch]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleDownload = async (filePath: string, fileName: string) => {
+    const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
+    if (data?.signedUrl) {
+      const a = document.createElement("a");
+      a.href = data.signedUrl;
+      a.download = fileName;
+      a.click();
+    }
+  };
+
+  const handleView = async (filePath: string) => {
+    const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, "_blank");
+    }
+  };
+
   return (
     <header className="flex items-center justify-between h-16 px-6 bg-card border-b border-border">
       {/* Search */}
       {isDashboard ? (
-        <div className="relative flex-1 max-w-xl">
+        <div ref={wrapperRef} className="relative flex-1 max-w-xl">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
             placeholder="Buscar documentos..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => { if (results.length > 0) setShowDropdown(true); }}
             className="w-full pl-10 pr-4 py-2 rounded-lg bg-secondary text-foreground text-sm placeholder:text-muted-foreground border border-border focus:outline-none focus:ring-2 focus:ring-ring/20"
           />
+          {showDropdown && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-lg z-50 max-h-80 overflow-auto">
+              {loading && (
+                <div className="flex justify-center py-4">
+                  <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
+                </div>
+              )}
+              {!loading && results.length === 0 && query.trim() && (
+                <p className="px-4 py-3 text-sm text-muted-foreground text-center">Nenhum documento encontrado.</p>
+              )}
+              {!loading && results.map((r) => (
+                <div key={r.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/50 transition-colors border-b border-border last:border-b-0">
+                  <div className="w-7 h-7 rounded-md bg-info/10 flex items-center justify-center shrink-0">
+                    <FileText className="w-3.5 h-3.5 text-info" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{r.title}</p>
+                    <p className="text-xs text-muted-foreground">{r.category || "Sem categoria"}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => handleView(r.file_path)}
+                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                      title="Visualizar"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDownload(r.file_path, r.file_name)}
+                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                      title="Baixar"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex-1" />
