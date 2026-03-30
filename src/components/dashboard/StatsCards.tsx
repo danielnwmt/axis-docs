@@ -6,10 +6,11 @@ interface StatData {
   icon: typeof FileText;
   label: string;
   value: number;
+  subtitle: string;
   trend: string;
   trendUp: boolean;
-  badgeColor: string;
   iconBg: string;
+  iconColor: string;
 }
 
 export function StatsCards() {
@@ -22,7 +23,7 @@ export function StatsCards() {
     const fetchStats = async () => {
       const { data } = await supabase
         .from("documents")
-        .select("ocr_status, sign_status");
+        .select("ocr_status, sign_status, created_at");
 
       if (data) {
         setTotalDocs(data.length);
@@ -37,39 +38,43 @@ export function StatsCards() {
   const stats: StatData[] = [
     {
       icon: FileText,
-      label: "Total de Documentos",
+      label: "Total de documentos",
       value: totalDocs,
-      trend: "+12% este mês",
+      subtitle: "12 novos hoje",
+      trend: "+8% este mês",
       trendUp: true,
-      badgeColor: "text-success",
       iconBg: "bg-info/10",
+      iconColor: "text-info",
     },
     {
       icon: ScanSearch,
       label: "OCR Processado",
       value: ocrDocs,
-      trend: "+8% este mês",
+      subtitle: "5 processados hoje",
+      trend: "+12% este mês",
       trendUp: true,
-      badgeColor: "text-success",
       iconBg: "bg-success/10",
+      iconColor: "text-success",
     },
     {
       icon: PenTool,
       label: "Documentos Assinados",
       value: signedDocs,
-      trend: "+5 hoje",
+      subtitle: "3 assinados hoje",
+      trend: "+5% este mês",
       trendUp: true,
-      badgeColor: "text-success",
       iconBg: "bg-accent/10",
+      iconColor: "text-accent",
     },
     {
       icon: AlertTriangle,
       label: "Assinaturas Pendentes",
       value: pendingSign,
-      trend: pendingSign > 0 ? "Ação necessária" : "Tudo em dia",
+      subtitle: pendingSign > 0 ? "Ação necessária" : "Tudo em dia",
+      trend: pendingSign > 0 ? "Requer atenção" : "Sem pendências",
       trendUp: pendingSign === 0,
-      badgeColor: pendingSign > 0 ? "text-warning" : "text-success",
       iconBg: "bg-warning/10",
+      iconColor: "text-warning",
     },
   ];
 
@@ -80,21 +85,26 @@ export function StatsCards() {
           key={stat.label}
           className="bg-card rounded-xl p-5 border border-border shadow-sm animate-fade-in"
         >
-          <div className="flex items-center justify-between mb-4">
-            <div className={`w-10 h-10 rounded-lg ${stat.iconBg} flex items-center justify-center`}>
-              <stat.icon className="w-5 h-5 text-primary" />
+          <div className="flex items-start justify-between">
+            <div className="flex-1 min-w-0">
+              <p className="text-2xl font-bold font-display text-foreground leading-none">
+                {stat.value.toLocaleString("pt-BR")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">{stat.subtitle}</p>
+              <div className={`flex items-center gap-1 mt-1.5 text-xs ${stat.trendUp ? "text-success" : "text-warning"}`}>
+                {stat.trendUp ? (
+                  <TrendingUp className="w-3 h-3" />
+                ) : (
+                  <TrendingDown className="w-3 h-3" />
+                )}
+                <span>{stat.trend}</span>
+              </div>
+            </div>
+            <div className={`w-10 h-10 rounded-lg ${stat.iconBg} flex items-center justify-center shrink-0 ml-3`}>
+              <stat.icon className={`w-5 h-5 ${stat.iconColor}`} />
             </div>
           </div>
-          <p className="text-2xl font-bold font-display text-foreground">{stat.value}</p>
-          <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
-          <div className={`flex items-center gap-1 mt-2 text-xs ${stat.badgeColor}`}>
-            {stat.trendUp ? (
-              <TrendingUp className="w-3 h-3" />
-            ) : (
-              <TrendingDown className="w-3 h-3" />
-            )}
-            <span>{stat.trend}</span>
-          </div>
+          <p className="text-[11px] font-medium text-muted-foreground mt-3 uppercase tracking-wide">{stat.label}</p>
         </div>
       ))}
     </div>
