@@ -64,21 +64,22 @@ install_nodejs() {
   success "Node.js $(node -v) instalado"
 }
 
+clean_previous() {
+  if [ -d "$APP_DIR" ]; then
+    log "Removendo instalação anterior em $APP_DIR"
+    rm -rf "$APP_DIR"
+    success "Instalação anterior removida"
+  fi
+
+  # Limpar configuração antiga do Nginx
+  rm -f /etc/nginx/sites-enabled/axisdocs
+  rm -f /etc/nginx/sites-available/axisdocs
+  rm -f /etc/nginx/sites-enabled/default
+  rm -f /etc/nginx/sites-available/default
+}
+
 prepare_repo() {
-  if [ -d "$APP_DIR/.git" ]; then
-    log "Atualizando repositório existente"
-    git -C "$APP_DIR" fetch --all --prune
-    git -C "$APP_DIR" pull --ff-only origin main || git -C "$APP_DIR" pull --ff-only origin master || true
-    success "Repositório atualizado"
-    return
-  fi
-
-  if [ -d "$APP_DIR" ] && [ -n "$(ls -A "$APP_DIR" 2>/dev/null)" ]; then
-    fail "$APP_DIR já existe e não é um repositório git limpo"
-  fi
-
   log "Clonando repositório"
-  rm -rf "$APP_DIR"
   git clone "$REPO_URL" "$APP_DIR"
   success "Repositório clonado"
 }
@@ -219,6 +220,7 @@ print_success() {
 main() {
   print_header
   require_root
+  clean_previous
   install_base_packages
   install_nodejs
   prepare_repo
