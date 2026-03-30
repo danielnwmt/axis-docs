@@ -242,7 +242,16 @@ export default function Users() {
             </div>
             <div className="space-y-2">
               <Label>Unidade/Setor</Label>
-              <Input placeholder="Ex: Jurídico, TI" value={unit} onChange={(e) => setUnit(e.target.value)} />
+              <Select value={unit} onValueChange={setUnit}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o setor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {units.map((u) => (
+                    <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Criando..." : "Criar Usuário"}
