@@ -7,6 +7,7 @@ import { FrequentCategories } from "@/components/dashboard/FrequentCategories";
 const Index = () => {
   return (
     <AppLayout>
+      <HeroBanner />
       <div className="mb-6">
         <h1 className="text-2xl font-bold font-display text-foreground">Dashboard</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Visão geral do acervo documental</p>
