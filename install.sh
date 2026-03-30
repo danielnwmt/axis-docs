@@ -220,6 +220,7 @@ print_success() {
 main() {
   print_header
   require_root
+  clean_previous
   install_base_packages
   install_nodejs
   prepare_repo
