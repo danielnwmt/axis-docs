@@ -367,7 +367,7 @@ function GoogleDriveSection() {
       </div>
 
       {status === "saved" && (
-        <div className="flex items-center gap-2 text-sm text-green-600">
+        <div className="flex items-center gap-2 text-sm text-primary">
           <CheckCircle className="w-4 h-4" /> Configuração salva e ativa
         </div>
       )}
