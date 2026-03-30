@@ -79,7 +79,6 @@ export function StatsCards() {
       value: totalDocs,
       subtitle: newToday > 0 ? `${newToday} novos hoje` : "No acervo",
       trend: monthGrowth,
-      trendLabel: "este mês",
       icon: FileText,
       iconBg: "bg-info/10",
       iconColor: "text-info",
@@ -88,8 +87,7 @@ export function StatsCards() {
       label: "OCR processado",
       value: ocrDocs,
       subtitle: totalDocs > 0 ? `${ocrPercent}% do acervo` : "Nenhum documento",
-      trend: ocrToday > 0 ? ocrToday : null,
-      trendLabel: ocrToday > 0 ? `processados hoje` : "",
+      trend: ocrGrowth,
       icon: ScanSearch,
       iconBg: "bg-info/10",
       iconColor: "text-info",
@@ -98,8 +96,7 @@ export function StatsCards() {
       label: "Documentos assinados",
       value: signedDocs,
       subtitle: totalDocs > 0 ? `${signedPercent}% do acervo` : "Nenhum documento",
-      trend: pendingSign > 0 ? pendingSign : null,
-      trendLabel: pendingSign > 0 ? "pendentes" : "",
+      trend: signGrowth,
       icon: PenTool,
       iconBg: "bg-success/10",
       iconColor: "text-success",
@@ -108,8 +105,7 @@ export function StatsCards() {
       label: "Pendências OCR",
       value: pendingOcr,
       subtitle: ocrError > 0 ? `${ocrError} com erro` : "Sem erros",
-      trend: null,
-      trendLabel: "",
+      trend: pendingGrowth,
       icon: AlertCircle,
       iconBg: "bg-warning/10",
       iconColor: "text-warning",
@@ -133,25 +129,16 @@ export function StatsCards() {
             {stat.value.toLocaleString("pt-BR")}
           </p>
           <p className="text-xs text-muted-foreground mt-1.5">{stat.subtitle}</p>
-          {stat.trend !== null && stat.trend !== 0 && (
+          {stat.trend !== 0 && (
             <p className={`text-xs mt-1 flex items-center gap-1 font-medium ${
-              typeof stat.trend === "number" && stat.label === "Total de documentos"
-                ? stat.trend > 0 ? "text-success" : "text-destructive"
-                : stat.label === "Documentos assinados" ? "text-warning" : "text-success"
+              stat.trend > 0 ? "text-success" : "text-destructive"
             }`}>
-              {stat.label === "Total de documentos" && (
-                <>
-                  {stat.trend > 0 ? (
-                    <TrendingUp className="w-3 h-3" />
-                  ) : (
-                    <TrendingDown className="w-3 h-3" />
-                  )}
-                  <span>↑ +{Math.abs(stat.trend)}% {stat.trendLabel}</span>
-                </>
+              {stat.trend > 0 ? (
+                <TrendingUp className="w-3 h-3" />
+              ) : (
+                <TrendingDown className="w-3 h-3" />
               )}
-              {stat.label !== "Total de documentos" && (
-                <span>{stat.trend} {stat.trendLabel}</span>
-              )}
+              <span>{stat.trend > 0 ? "+" : ""}{stat.trend}% este mês</span>
             </p>
           )}
         </div>
