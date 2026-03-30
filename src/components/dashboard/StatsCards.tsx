@@ -11,7 +11,11 @@ export function StatsCards() {
   const [ocrError, setOcrError] = useState(0);
   const [newToday, setNewToday] = useState(0);
   const [monthGrowth, setMonthGrowth] = useState(0);
+  const [ocrGrowth, setOcrGrowth] = useState(0);
+  const [signGrowth, setSignGrowth] = useState(0);
+  const [pendingGrowth, setPendingGrowth] = useState(0);
   const [ocrToday, setOcrToday] = useState(0);
+  const [signedToday, setSignedToday] = useState(0);
   const [signedThisMonth, setSignedThisMonth] = useState(0);
 
   useEffect(() => {
