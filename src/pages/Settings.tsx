@@ -394,6 +394,7 @@ export default function Settings() {
       case "unidades": return <ListManager itemLabel="Unidade/Setor" tableName="units" />;
       case "parametros": return <ParametrosSection />;
       case "banner": return <BannerSection />;
+      case "googledrive": return <GoogleDriveSection />;
       default: return null;
     }
   };
