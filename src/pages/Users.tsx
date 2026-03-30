@@ -100,7 +100,7 @@ export default function Users() {
       setEmail("");
       setPassword("");
       setRole("Usuário");
-      setUnit("");
+      setSelectedUnits([]);
       fetchUsers();
     } catch (error: any) {
       toast({ title: "Erro ao criar usuário", description: error.message, variant: "destructive" });
