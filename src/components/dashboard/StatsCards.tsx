@@ -11,7 +11,11 @@ export function StatsCards() {
   const [ocrError, setOcrError] = useState(0);
   const [newToday, setNewToday] = useState(0);
   const [monthGrowth, setMonthGrowth] = useState(0);
+  const [ocrGrowth, setOcrGrowth] = useState(0);
+  const [signGrowth, setSignGrowth] = useState(0);
+  const [pendingGrowth, setPendingGrowth] = useState(0);
   const [ocrToday, setOcrToday] = useState(0);
+  const [signedToday, setSignedToday] = useState(0);
   const [signedThisMonth, setSignedThisMonth] = useState(0);
 
   useEffect(() => {
@@ -36,23 +40,31 @@ export function StatsCards() {
         // OCR concluído hoje
         setOcrToday(todayDocs.filter((d) => d.ocr_status === "concluido").length);
 
+        // Assinados hoje
+        setSignedToday(todayDocs.filter((d) => d.sign_status === "assinado").length);
+
         // Assinados este mês
         const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
         setSignedThisMonth(data.filter((d) => d.sign_status === "assinado" && new Date(d.created_at) >= monthStart).length);
 
-        // Crescimento mensal (%)
+        // Crescimento mensal helper
         const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
         const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-        const thisMonthDocs = data.filter((d) => new Date(d.created_at) >= monthStart).length;
-        const lastMonthDocs = data.filter((d) => {
-          const dt = new Date(d.created_at);
-          return dt >= lastMonthStart && dt <= lastMonthEnd;
-        }).length;
-        if (lastMonthDocs > 0) {
-          setMonthGrowth(Math.round(((thisMonthDocs - lastMonthDocs) / lastMonthDocs) * 100));
-        } else {
-          setMonthGrowth(thisMonthDocs > 0 ? 100 : 0);
-        }
+
+        const calcGrowth = (filterFn: (d: typeof data[0]) => boolean) => {
+          const thisM = data.filter((d) => new Date(d.created_at) >= monthStart && filterFn(d)).length;
+          const lastM = data.filter((d) => {
+            const dt = new Date(d.created_at);
+            return dt >= lastMonthStart && dt <= lastMonthEnd && filterFn(d);
+          }).length;
+          if (lastM > 0) return Math.round(((thisM - lastM) / lastM) * 100);
+          return thisM > 0 ? 100 : 0;
+        };
+
+        setMonthGrowth(calcGrowth(() => true));
+        setOcrGrowth(calcGrowth((d) => d.ocr_status === "concluido"));
+        setSignGrowth(calcGrowth((d) => d.sign_status === "assinado"));
+        setPendingGrowth(calcGrowth((d) => d.ocr_status === "pendente" || d.ocr_status === "erro"));
       }
     };
     fetchStats();
@@ -67,7 +79,6 @@ export function StatsCards() {
       value: totalDocs,
       subtitle: newToday > 0 ? `${newToday} novos hoje` : "No acervo",
       trend: monthGrowth,
-      trendLabel: "este mês",
       icon: FileText,
       iconBg: "bg-info/10",
       iconColor: "text-info",
@@ -76,8 +87,7 @@ export function StatsCards() {
       label: "OCR processado",
       value: ocrDocs,
       subtitle: totalDocs > 0 ? `${ocrPercent}% do acervo` : "Nenhum documento",
-      trend: ocrToday > 0 ? ocrToday : null,
-      trendLabel: ocrToday > 0 ? `processados hoje` : "",
+      trend: ocrGrowth,
       icon: ScanSearch,
       iconBg: "bg-info/10",
       iconColor: "text-info",
@@ -86,8 +96,7 @@ export function StatsCards() {
       label: "Documentos assinados",
       value: signedDocs,
       subtitle: totalDocs > 0 ? `${signedPercent}% do acervo` : "Nenhum documento",
-      trend: pendingSign > 0 ? pendingSign : null,
-      trendLabel: pendingSign > 0 ? "pendentes" : "",
+      trend: signGrowth,
       icon: PenTool,
       iconBg: "bg-success/10",
       iconColor: "text-success",
@@ -96,8 +105,7 @@ export function StatsCards() {
       label: "Pendências OCR",
       value: pendingOcr,
       subtitle: ocrError > 0 ? `${ocrError} com erro` : "Sem erros",
-      trend: null,
-      trendLabel: "",
+      trend: pendingGrowth,
       icon: AlertCircle,
       iconBg: "bg-warning/10",
       iconColor: "text-warning",
@@ -121,25 +129,16 @@ export function StatsCards() {
             {stat.value.toLocaleString("pt-BR")}
           </p>
           <p className="text-xs text-muted-foreground mt-1.5">{stat.subtitle}</p>
-          {stat.trend !== null && stat.trend !== 0 && (
+          {stat.trend !== 0 && (
             <p className={`text-xs mt-1 flex items-center gap-1 font-medium ${
-              typeof stat.trend === "number" && stat.label === "Total de documentos"
-                ? stat.trend > 0 ? "text-success" : "text-destructive"
-                : stat.label === "Documentos assinados" ? "text-warning" : "text-success"
+              stat.trend > 0 ? "text-success" : "text-destructive"
             }`}>
-              {stat.label === "Total de documentos" && (
-                <>
-                  {stat.trend > 0 ? (
-                    <TrendingUp className="w-3 h-3" />
-                  ) : (
-                    <TrendingDown className="w-3 h-3" />
-                  )}
-                  <span>↑ +{Math.abs(stat.trend)}% {stat.trendLabel}</span>
-                </>
+              {stat.trend > 0 ? (
+                <TrendingUp className="w-3 h-3" />
+              ) : (
+                <TrendingDown className="w-3 h-3" />
               )}
-              {stat.label !== "Total de documentos" && (
-                <span>{stat.trend} {stat.trendLabel}</span>
-              )}
+              <span>{stat.trend > 0 ? "+" : ""}{stat.trend}% este mês</span>
             </p>
           )}
         </div>
