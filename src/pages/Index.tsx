@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
+import { HeroBanner } from "@/components/dashboard/HeroBanner";
 import { StatsCards } from "@/components/dashboard/StatsCards";
 import { RecentDocuments } from "@/components/dashboard/RecentDocuments";
 import { FrequentCategories } from "@/components/dashboard/FrequentCategories";
