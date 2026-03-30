@@ -81,9 +81,6 @@ export function StatsCards() {
             {stat.value.toLocaleString("pt-BR")}
           </p>
           <p className="text-xs text-muted-foreground mt-1.5">{stat.subtitle}</p>
-          {stat.trend && (
-            <p className={`text-xs font-medium mt-0.5 ${stat.trendColor}`}>{stat.trend}</p>
-          )}
         </div>
       ))}
     </div>
