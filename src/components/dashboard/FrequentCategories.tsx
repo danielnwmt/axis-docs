@@ -1,39 +1,76 @@
-import { Folder, Calendar } from "lucide-react";
+import { Folder } from "lucide-react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
-const categories: { name: string; count: string; sub: string; date: string }[] = [];
+interface CategoryStat {
+  name: string;
+  count: number;
+  percentage: number;
+}
 
-const colors = [
-  "bg-info/10 text-info",
-  "bg-success/10 text-success",
-  "bg-warning/10 text-warning",
-  "bg-accent/10 text-accent",
+const barColors = [
+  "bg-info",
+  "bg-success",
+  "bg-warning",
+  "bg-accent",
+  "bg-primary",
+  "bg-destructive",
 ];
 
 export function FrequentCategories() {
+  const [categories, setCategories] = useState<CategoryStat[]>([]);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      const { data } = await supabase
+        .from("documents")
+        .select("category");
+
+      if (data) {
+        const counts: Record<string, number> = {};
+        data.forEach((d) => {
+          const cat = d.category || "Sem categoria";
+          counts[cat] = (counts[cat] || 0) + 1;
+        });
+        const total = data.length || 1;
+        const sorted = Object.entries(counts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 6)
+          .map(([name, count]) => ({
+            name,
+            count,
+            percentage: Math.round((count / total) * 100),
+          }));
+        setCategories(sorted);
+      }
+    };
+    fetchCategories();
+  }, []);
+
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm animate-fade-in">
       <div className="px-5 py-4 border-b border-border">
         <h3 className="font-display font-semibold text-foreground">Categorias Frequentes</h3>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5">
+      <div className="p-5 space-y-4">
+        {categories.length === 0 && (
+          <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada.</p>
+        )}
         {categories.map((cat, i) => (
-          <div
-            key={cat.name}
-            className="rounded-xl bg-secondary/50 p-4 hover:bg-secondary transition-colors cursor-pointer group"
-          >
-            <div className={`w-10 h-10 rounded-lg ${colors[i]} flex items-center justify-center mb-3`}>
-              <Folder className="w-5 h-5" />
-            </div>
-            <p className="text-sm font-semibold text-foreground leading-tight mb-1">{cat.name}</p>
-            <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground">{cat.count}</span> {cat.sub}
-            </p>
-            {cat.date && (
-              <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                <Calendar className="w-3 h-3" />
-                {cat.date}
+          <div key={cat.name}>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-2">
+                <Folder className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground">{cat.name}</span>
               </div>
-            )}
+              <span className="text-xs text-muted-foreground">{cat.count} docs · {cat.percentage}%</span>
+            </div>
+            <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full ${barColors[i % barColors.length]} transition-all duration-500`}
+                style={{ width: `${cat.percentage}%` }}
+              />
+            </div>
           </div>
         ))}
       </div>

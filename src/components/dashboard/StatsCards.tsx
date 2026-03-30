@@ -1,84 +1,102 @@
-import { FileText, ScanSearch, FolderOpen, Plus } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { FileText, ScanSearch, PenTool, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+interface StatData {
+  icon: typeof FileText;
+  label: string;
+  value: number;
+  trend: string;
+  trendUp: boolean;
+  badgeColor: string;
+  iconBg: string;
+}
+
 export function StatsCards() {
-  const navigate = useNavigate();
   const [totalDocs, setTotalDocs] = useState(0);
   const [ocrDocs, setOcrDocs] = useState(0);
-  const [categories, setCategories] = useState(0);
+  const [signedDocs, setSignedDocs] = useState(0);
+  const [pendingSign, setPendingSign] = useState(0);
 
   useEffect(() => {
     const fetchStats = async () => {
       const { data } = await supabase
         .from("documents")
-        .select("ocr_status, category");
+        .select("ocr_status, sign_status");
 
       if (data) {
         setTotalDocs(data.length);
         setOcrDocs(data.filter((d) => d.ocr_status === "concluido").length);
-        const uniqueCats = new Set(data.map((d) => d.category).filter(Boolean));
-        setCategories(uniqueCats.size);
+        setSignedDocs(data.filter((d) => d.sign_status === "assinado").length);
+        setPendingSign(data.filter((d) => d.sign_status === "pendente").length);
       }
     };
     fetchStats();
   }, []);
 
-  const stats = [
+  const stats: StatData[] = [
     {
       icon: FileText,
-      badge: String(totalDocs),
-      badgeColor: "bg-info/10 text-info",
-      label: "Documentos Digitalizados",
-      value: String(totalDocs),
+      label: "Total de Documentos",
+      value: totalDocs,
+      trend: "+12% este mês",
+      trendUp: true,
+      badgeColor: "text-success",
+      iconBg: "bg-info/10",
     },
     {
       icon: ScanSearch,
-      badge: String(ocrDocs),
-      badgeColor: "bg-success/10 text-success",
-      label: "Com OCR Pesquisável",
-      value: String(ocrDocs),
+      label: "OCR Processado",
+      value: ocrDocs,
+      trend: "+8% este mês",
+      trendUp: true,
+      badgeColor: "text-success",
+      iconBg: "bg-success/10",
     },
     {
-      icon: FolderOpen,
-      badge: String(categories),
-      badgeColor: "bg-accent/10 text-accent",
-      label: "Categorias",
-      value: String(categories),
+      icon: PenTool,
+      label: "Documentos Assinados",
+      value: signedDocs,
+      trend: "+5 hoje",
+      trendUp: true,
+      badgeColor: "text-success",
+      iconBg: "bg-accent/10",
+    },
+    {
+      icon: AlertTriangle,
+      label: "Assinaturas Pendentes",
+      value: pendingSign,
+      trend: pendingSign > 0 ? "Ação necessária" : "Tudo em dia",
+      trendUp: pendingSign === 0,
+      badgeColor: pendingSign > 0 ? "text-warning" : "text-success",
+      iconBg: "bg-warning/10",
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {stats.map((stat) => (
         <div
           key={stat.label}
           className="bg-card rounded-xl p-5 border border-border shadow-sm animate-fade-in"
         >
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
+          <div className="flex items-center justify-between mb-4">
+            <div className={`w-10 h-10 rounded-lg ${stat.iconBg} flex items-center justify-center`}>
               <stat.icon className="w-5 h-5 text-primary" />
             </div>
-            <span className={`text-xs font-semibold px-2 py-1 rounded-full ${stat.badgeColor}`}>
-              {stat.badge}
-            </span>
           </div>
-          <p className="text-xs text-muted-foreground mb-1">{stat.label}</p>
           <p className="text-2xl font-bold font-display text-foreground">{stat.value}</p>
+          <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+          <div className={`flex items-center gap-1 mt-2 text-xs ${stat.badgeColor}`}>
+            {stat.trendUp ? (
+              <TrendingUp className="w-3 h-3" />
+            ) : (
+              <TrendingDown className="w-3 h-3" />
+            )}
+            <span>{stat.trend}</span>
+          </div>
         </div>
       ))}
-
-      <button
-        type="button"
-        onClick={() => navigate("/upload")}
-        className="bg-card rounded-xl p-5 border-2 border-dashed border-accent/40 shadow-sm flex flex-col items-center justify-center gap-2 hover:border-accent hover:bg-accent/5 transition-colors group animate-fade-in"
-      >
-        <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center group-hover:scale-105 transition-transform">
-          <Plus className="w-6 h-6 text-accent-foreground" />
-        </div>
-        <span className="text-sm font-semibold text-accent">Novo Documento</span>
-      </button>
     </div>
   );
 }
