@@ -40,23 +40,31 @@ export function StatsCards() {
         // OCR concluído hoje
         setOcrToday(todayDocs.filter((d) => d.ocr_status === "concluido").length);
 
+        // Assinados hoje
+        setSignedToday(todayDocs.filter((d) => d.sign_status === "assinado").length);
+
         // Assinados este mês
         const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
         setSignedThisMonth(data.filter((d) => d.sign_status === "assinado" && new Date(d.created_at) >= monthStart).length);
 
-        // Crescimento mensal (%)
+        // Crescimento mensal helper
         const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
         const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-        const thisMonthDocs = data.filter((d) => new Date(d.created_at) >= monthStart).length;
-        const lastMonthDocs = data.filter((d) => {
-          const dt = new Date(d.created_at);
-          return dt >= lastMonthStart && dt <= lastMonthEnd;
-        }).length;
-        if (lastMonthDocs > 0) {
-          setMonthGrowth(Math.round(((thisMonthDocs - lastMonthDocs) / lastMonthDocs) * 100));
-        } else {
-          setMonthGrowth(thisMonthDocs > 0 ? 100 : 0);
-        }
+
+        const calcGrowth = (filterFn: (d: typeof data[0]) => boolean) => {
+          const thisM = data.filter((d) => new Date(d.created_at) >= monthStart && filterFn(d)).length;
+          const lastM = data.filter((d) => {
+            const dt = new Date(d.created_at);
+            return dt >= lastMonthStart && dt <= lastMonthEnd && filterFn(d);
+          }).length;
+          if (lastM > 0) return Math.round(((thisM - lastM) / lastM) * 100);
+          return thisM > 0 ? 100 : 0;
+        };
+
+        setMonthGrowth(calcGrowth(() => true));
+        setOcrGrowth(calcGrowth((d) => d.ocr_status === "concluido"));
+        setSignGrowth(calcGrowth((d) => d.sign_status === "assinado"));
+        setPendingGrowth(calcGrowth((d) => d.ocr_status === "pendente" || d.ocr_status === "erro"));
       }
     };
     fetchStats();
