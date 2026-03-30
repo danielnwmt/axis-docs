@@ -5,6 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState, useEffect } from "react";
+
+interface UnitOption {
+  id: string;
+  name: string;
+}
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -55,6 +60,7 @@ export default function Users() {
   const [unit, setUnit] = useState("");
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [units, setUnits] = useState<UnitOption[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null);
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
@@ -66,8 +72,14 @@ export default function Users() {
     }
   };
 
+  const fetchUnits = async () => {
+    const { data } = await supabase.from("units").select("id, name").order("name");
+    if (data) setUnits(data);
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchUnits();
   }, []);
 
   const handleAddUser = async (e: React.FormEvent) => {
@@ -230,7 +242,16 @@ export default function Users() {
             </div>
             <div className="space-y-2">
               <Label>Unidade/Setor</Label>
-              <Input placeholder="Ex: Jurídico, TI" value={unit} onChange={(e) => setUnit(e.target.value)} />
+              <Select value={unit} onValueChange={setUnit}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o setor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {units.map((u) => (
+                    <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Criando..." : "Criar Usuário"}
