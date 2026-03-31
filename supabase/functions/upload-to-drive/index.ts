@@ -245,6 +245,32 @@ Deno.serve(async (req) => {
 
     const driveFile = await uploadRes.json();
 
+    // Transfer ownership to the configured owner so file uses their quota
+    if (config.ownerEmail && driveFile.id) {
+      try {
+        const permRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions?supportsAllDrives=true&transferOwnership=true`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              role: "owner",
+              type: "user",
+              emailAddress: config.ownerEmail,
+            }),
+          }
+        );
+        if (!permRes.ok) {
+          console.warn("Ownership transfer failed:", await permRes.text());
+        }
+      } catch (permErr) {
+        console.warn("Error transferring ownership:", permErr);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
