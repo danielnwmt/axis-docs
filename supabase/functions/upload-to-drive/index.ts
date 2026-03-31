@@ -16,20 +16,65 @@ interface GoogleDriveConfig {
   ownerEmail?: string;
 }
 
-async function getAccessToken(sa: GoogleDriveConfig["serviceAccount"]): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const header = btoa(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const payload = btoa(
-    JSON.stringify({
-      iss: sa.client_email,
-      scope: "https://www.googleapis.com/auth/drive.file",
-      aud: sa.token_uri,
-      iat: now,
-      exp: now + 3600,
-    })
-  );
+interface GoogleDriveFolderInfo {
+  id: string;
+  name?: string;
+  driveId?: string;
+}
 
-  // Import private key and sign JWT
+interface GoogleDriveUploadResult {
+  id: string;
+  name: string;
+  webViewLink?: string;
+}
+
+function toBase64UrlFromString(value: string): string {
+  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function toBase64UrlFromBuffer(value: ArrayBuffer): string {
+  return btoa(String.fromCharCode(...new Uint8Array(value)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function isPersonalGoogleAccount(email?: string): boolean {
+  if (!email) return false;
+  const normalized = email.trim().toLowerCase();
+  return normalized.endsWith("@gmail.com") || normalized.endsWith("@googlemail.com");
+}
+
+function buildQuotaExceededMessage(ownerEmail?: string): string {
+  if (ownerEmail && isPersonalGoogleAccount(ownerEmail)) {
+    return `A pasta raiz está no Meu Drive e o proprietário configurado (${ownerEmail}) é uma conta pessoal do Google. Nesse cenário a API não consegue usar a cota do proprietário com Conta de Serviço. Use um Shared Drive ou uma conta Google Workspace com delegação de domínio habilitada.`;
+  }
+  if (ownerEmail) {
+    return `A pasta raiz está no Meu Drive. Para usar a cota de ${ownerEmail}, habilite delegação de domínio na Conta de Serviço e autorize a impersonação desse usuário, ou mova a pasta para um Shared Drive.`;
+  }
+  return "A Conta de Serviço não possui cota própria para gravar no Meu Drive. Mova a pasta raiz para um Shared Drive ou configure um proprietário do Google Workspace com delegação de domínio.";
+}
+
+async function getAccessToken(
+  sa: GoogleDriveConfig["serviceAccount"],
+  delegatedUserEmail?: string
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const header = toBase64UrlFromString(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payloadData: Record<string, string | number> = {
+    iss: sa.client_email,
+    scope: "https://www.googleapis.com/auth/drive",
+    aud: sa.token_uri,
+    iat: now,
+    exp: now + 3600,
+  };
+
+  if (delegatedUserEmail) {
+    payloadData.sub = delegatedUserEmail;
+  }
+
+  const payload = toBase64UrlFromString(JSON.stringify(payloadData));
+
   const pemContent = sa.private_key
     .replace(/-----BEGIN PRIVATE KEY-----/, "")
     .replace(/-----END PRIVATE KEY-----/, "")
@@ -47,15 +92,7 @@ async function getAccessToken(sa: GoogleDriveConfig["serviceAccount"]): Promise<
 
   const signatureInput = new TextEncoder().encode(`${header}.${payload}`);
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, signatureInput);
-
-  // Base64url encode
-  const base64url = (buf: ArrayBuffer) =>
-    btoa(String.fromCharCode(...new Uint8Array(buf)))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-
-  const jwt = `${header}.${payload}.${base64url(signature)}`;
+  const jwt = `${header}.${payload}.${toBase64UrlFromBuffer(signature)}`;
 
   const tokenRes = await fetch(sa.token_uri, {
     method: "POST",
@@ -65,11 +102,29 @@ async function getAccessToken(sa: GoogleDriveConfig["serviceAccount"]): Promise<
 
   if (!tokenRes.ok) {
     const err = await tokenRes.text();
-    throw new Error(`Failed to get access token: ${err}`);
+    const delegationHint = delegatedUserEmail
+      ? ` Não foi possível delegar para ${delegatedUserEmail}. Verifique se a Conta de Serviço tem delegação de domínio habilitada no Google Workspace.`
+      : "";
+    throw new Error(`Failed to get access token: ${err}.${delegationHint}`);
   }
 
   const tokenData = await tokenRes.json();
   return tokenData.access_token;
+}
+
+async function getFolderInfo(accessToken: string, folderId: string): Promise<GoogleDriveFolderInfo> {
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${folderId}?fields=id,name,driveId&supportsAllDrives=true`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Não foi possível validar a pasta raiz do Google Drive [${response.status}]: ${await response.text()}`
+    );
+  }
+
+  return await response.json();
 }
 
 async function findOrCreateFolder(
@@ -77,19 +132,21 @@ async function findOrCreateFolder(
   folderName: string,
   parentId: string
 ): Promise<string> {
-  // Search for existing folder
   const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   const searchRes = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
-  const searchData = await searchRes.json();
 
+  if (!searchRes.ok) {
+    throw new Error(`Erro ao buscar pasta no Google Drive [${searchRes.status}]: ${await searchRes.text()}`);
+  }
+
+  const searchData = await searchRes.json();
   if (searchData.files && searchData.files.length > 0) {
     return searchData.files[0].id;
   }
 
-  // Create folder
   const createRes = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true", {
     method: "POST",
     headers: {
@@ -103,17 +160,18 @@ async function findOrCreateFolder(
     }),
   });
 
+  if (!createRes.ok) {
+    throw new Error(`Erro ao criar pasta no Google Drive [${createRes.status}]: ${await createRes.text()}`);
+  }
+
   const createData = await createRes.json();
   return createData.id;
 }
 
-// Extract folder ID from URL or raw ID
 function extractFolderId(input: string): string {
   if (!input) return "";
-  // Match Google Drive folder URL patterns
   const match = input.match(/folders\/([a-zA-Z0-9_-]+)/);
   if (match) return match[1];
-  // If it looks like a raw ID, return as-is
   return input.trim();
 }
 
@@ -127,7 +185,6 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Validate auth
     const authHeader = req.headers.get("authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Não autorizado" }), {
@@ -136,9 +193,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
 
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Token inválido" }), {
@@ -156,7 +214,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Load Google Drive config from storage
     const { data: configData, error: configError } = await supabase.storage
       .from("settings")
       .download("google-drive-config.json");
@@ -185,7 +242,26 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Download file from Supabase Storage
+    // Step 1: Get initial token and check if root folder is in a Shared Drive
+    let accessToken = await getAccessToken(config.serviceAccount);
+    const rootFolderInfo = await getFolderInfo(accessToken, rootFolderId);
+    const isSharedDriveFolder = Boolean(rootFolderInfo.driveId);
+    const shouldUseDelegation = !isSharedDriveFolder && Boolean(config.ownerEmail);
+
+    // Step 2: If not a Shared Drive folder, try delegated impersonation
+    if (shouldUseDelegation) {
+      if (isPersonalGoogleAccount(config.ownerEmail)) {
+        return new Response(
+          JSON.stringify({ error: buildQuotaExceededMessage(config.ownerEmail) }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Re-authenticate impersonating the owner (requires domain-wide delegation)
+      accessToken = await getAccessToken(config.serviceAccount, config.ownerEmail);
+    }
+
+    // Step 3: Download the file from Supabase Storage
     const { data: fileData, error: fileError } = await supabase.storage
       .from("documents")
       .download(filePath);
@@ -197,34 +273,30 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get Google access token
-    const accessToken = await getAccessToken(config.serviceAccount);
-
-    // Find or create unit subfolder
+    // Step 4: Find or create unit subfolder
     let targetFolderId = rootFolderId;
     if (unitName) {
       targetFolderId = await findOrCreateFolder(accessToken, unitName, rootFolderId);
     }
 
-    // Upload file to Google Drive using multipart upload
+    // Step 5: Upload file to Google Drive
     const metadata = JSON.stringify({
       name: fileName,
       parents: [targetFolderId],
     });
 
-    const boundary = "---boundary" + Date.now();
+    const boundary = `---boundary${Date.now()}`;
     const fileBytes = new Uint8Array(await fileData.arrayBuffer());
 
-    const body = new TextEncoder().encode(
+    const bodyPart = new TextEncoder().encode(
       `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${fileData.type || "application/octet-stream"}\r\nContent-Transfer-Encoding: binary\r\n\r\n`
     );
 
     const ending = new TextEncoder().encode(`\r\n--${boundary}--`);
-
-    const fullBody = new Uint8Array(body.length + fileBytes.length + ending.length);
-    fullBody.set(body, 0);
-    fullBody.set(fileBytes, body.length);
-    fullBody.set(ending, body.length + fileBytes.length);
+    const fullBody = new Uint8Array(bodyPart.length + fileBytes.length + ending.length);
+    fullBody.set(bodyPart, 0);
+    fullBody.set(fileBytes, bodyPart.length);
+    fullBody.set(ending, bodyPart.length + fileBytes.length);
 
     const uploadRes = await fetch(
       "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink&supportsAllDrives=true",
@@ -240,13 +312,16 @@ Deno.serve(async (req) => {
 
     if (!uploadRes.ok) {
       const errText = await uploadRes.text();
+      if (uploadRes.status === 403 && errText.includes("storageQuotaExceeded")) {
+        throw new Error(buildQuotaExceededMessage(config.ownerEmail));
+      }
       throw new Error(`Google Drive upload failed [${uploadRes.status}]: ${errText}`);
     }
 
-    const driveFile = await uploadRes.json();
+    const driveFile: GoogleDriveUploadResult = await uploadRes.json();
 
-    // Transfer ownership to the configured owner so file uses their quota
-    if (config.ownerEmail && driveFile.id) {
+    // Step 6: Transfer ownership when on Shared Drive (optional)
+    if (config.ownerEmail && driveFile.id && isSharedDriveFolder) {
       try {
         const permRes = await fetch(
           `https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions?supportsAllDrives=true&transferOwnership=true`,
@@ -263,6 +338,7 @@ Deno.serve(async (req) => {
             }),
           }
         );
+
         if (!permRes.ok) {
           console.warn("Ownership transfer failed:", await permRes.text());
         }
@@ -277,15 +353,16 @@ Deno.serve(async (req) => {
         driveFileId: driveFile.id,
         driveFileName: driveFile.name,
         driveLink: driveFile.webViewLink,
+        mode: isSharedDriveFolder ? "shared-drive" : shouldUseDelegation ? "delegated-owner" : "service-account",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
     console.error("Error in upload-to-drive:", error);
     const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
