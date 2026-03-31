@@ -259,6 +259,7 @@ function GoogleDriveSection() {
           const text = await data.text();
           const config = JSON.parse(text);
           setRootFolderId(config.rootFolderId || "");
+          setOwnerEmail(config.ownerEmail || "");
           if (config.serviceAccount) {
             setJsonContent(JSON.stringify(config.serviceAccount, null, 2));
           }
