@@ -13,6 +13,7 @@ interface GoogleDriveConfig {
     token_uri: string;
   };
   rootFolderId: string;
+  ownerEmail?: string;
 }
 
 async function getAccessToken(sa: GoogleDriveConfig["serviceAccount"]): Promise<string> {
@@ -79,7 +80,7 @@ async function findOrCreateFolder(
   // Search for existing folder
   const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   const searchRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)`,
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const searchData = await searchRes.json();
@@ -89,7 +90,7 @@ async function findOrCreateFolder(
   }
 
   // Create folder
-  const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
+  const createRes = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -226,7 +227,7 @@ Deno.serve(async (req) => {
     fullBody.set(ending, body.length + fileBytes.length);
 
     const uploadRes = await fetch(
-      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink&supportsAllDrives=true",
       {
         method: "POST",
         headers: {
@@ -243,6 +244,32 @@ Deno.serve(async (req) => {
     }
 
     const driveFile = await uploadRes.json();
+
+    // Transfer ownership to the configured owner so file uses their quota
+    if (config.ownerEmail && driveFile.id) {
+      try {
+        const permRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions?supportsAllDrives=true&transferOwnership=true`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              role: "owner",
+              type: "user",
+              emailAddress: config.ownerEmail,
+            }),
+          }
+        );
+        if (!permRes.ok) {
+          console.warn("Ownership transfer failed:", await permRes.text());
+        }
+      } catch (permErr) {
+        console.warn("Error transferring ownership:", permErr);
+      }
+    }
 
     return new Response(
       JSON.stringify({

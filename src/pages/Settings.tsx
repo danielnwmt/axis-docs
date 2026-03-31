@@ -245,6 +245,7 @@ function ParametrosSection() {
 function GoogleDriveSection() {
   const [jsonContent, setJsonContent] = useState("");
   const [rootFolderId, setRootFolderId] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -258,6 +259,7 @@ function GoogleDriveSection() {
           const text = await data.text();
           const config = JSON.parse(text);
           setRootFolderId(config.rootFolderId || "");
+          setOwnerEmail(config.ownerEmail || "");
           if (config.serviceAccount) {
             setJsonContent(JSON.stringify(config.serviceAccount, null, 2));
           }
@@ -311,6 +313,7 @@ function GoogleDriveSection() {
       const config = {
         serviceAccount: parsed,
         rootFolderId: rootFolderId.trim(),
+        ownerEmail: ownerEmail.trim(),
       };
       const blob = new Blob([JSON.stringify(config)], { type: "application/json" });
 
@@ -348,6 +351,17 @@ function GoogleDriveSection() {
           onChange={(e) => { setRootFolderId(e.target.value); setStatus("idle"); }}
         />
         <p className="text-xs text-muted-foreground">O ID está na URL da pasta: drive.google.com/drive/folders/<strong>ID_AQUI</strong></p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>E-mail do Proprietário (para transferência de cota)</Label>
+        <Input
+          type="email"
+          placeholder="seuemail@gmail.com"
+          value={ownerEmail}
+          onChange={(e) => { setOwnerEmail(e.target.value); setStatus("idle"); }}
+        />
+        <p className="text-xs text-muted-foreground">O arquivo será transferido para este e-mail após o upload, usando a cota de armazenamento dele.</p>
       </div>
 
       <div className="space-y-2">
