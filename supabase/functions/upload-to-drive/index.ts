@@ -246,20 +246,12 @@ Deno.serve(async (req) => {
     let accessToken = await getAccessToken(config.serviceAccount);
     const rootFolderInfo = await getFolderInfo(accessToken, rootFolderId);
     const isSharedDriveFolder = Boolean(rootFolderInfo.driveId);
-    const shouldUseDelegation = !isSharedDriveFolder && Boolean(config.ownerEmail);
 
-    // Step 2: If not a Shared Drive folder, try delegated impersonation
-    if (shouldUseDelegation) {
-      if (isPersonalGoogleAccount(config.ownerEmail)) {
-        return new Response(
-          JSON.stringify({ error: buildQuotaExceededMessage(config.ownerEmail) }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // Re-authenticate impersonating the owner (requires domain-wide delegation)
+    // Step 2: If not a Shared Drive folder and owner is a Workspace account, try delegation
+    if (!isSharedDriveFolder && config.ownerEmail && !isPersonalGoogleAccount(config.ownerEmail)) {
       accessToken = await getAccessToken(config.serviceAccount, config.ownerEmail);
     }
+    // For personal Gmail or no ownerEmail, continue with the service account token directly
 
     // Step 3: Download the file from Supabase Storage
     const { data: fileData, error: fileError } = await supabase.storage
