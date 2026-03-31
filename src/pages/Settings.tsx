@@ -245,6 +245,7 @@ function ParametrosSection() {
 function GoogleDriveSection() {
   const [jsonContent, setJsonContent] = useState("");
   const [rootFolderId, setRootFolderId] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const fileRef = useRef<HTMLInputElement>(null);
