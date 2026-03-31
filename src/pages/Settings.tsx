@@ -354,6 +354,17 @@ function GoogleDriveSection() {
       </div>
 
       <div className="space-y-2">
+        <Label>E-mail do Proprietário (para transferência de cota)</Label>
+        <Input
+          type="email"
+          placeholder="seuemail@gmail.com"
+          value={ownerEmail}
+          onChange={(e) => { setOwnerEmail(e.target.value); setStatus("idle"); }}
+        />
+        <p className="text-xs text-muted-foreground">O arquivo será transferido para este e-mail após o upload, usando a cota de armazenamento dele.</p>
+      </div>
+
+      <div className="space-y-2">
         <Label>JSON da Conta de Serviço</Label>
         <div className="flex gap-2 mb-2">
           <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleFileUpload} />
