@@ -13,6 +13,7 @@ interface GoogleDriveConfig {
     token_uri: string;
   };
   rootFolderId: string;
+  ownerEmail?: string;
 }
 
 async function getAccessToken(sa: GoogleDriveConfig["serviceAccount"]): Promise<string> {
