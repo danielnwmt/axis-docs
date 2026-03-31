@@ -79,7 +79,7 @@ async function findOrCreateFolder(
   // Search for existing folder
   const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   const searchRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)`,
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const searchData = await searchRes.json();
@@ -89,7 +89,7 @@ async function findOrCreateFolder(
   }
 
   // Create folder
-  const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
+  const createRes = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
