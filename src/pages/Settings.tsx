@@ -313,6 +313,7 @@ function GoogleDriveSection() {
       const config = {
         serviceAccount: parsed,
         rootFolderId: rootFolderId.trim(),
+        ownerEmail: ownerEmail.trim(),
       };
       const blob = new Blob([JSON.stringify(config)], { type: "application/json" });
 
