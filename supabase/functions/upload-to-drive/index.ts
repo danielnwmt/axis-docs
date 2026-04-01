@@ -19,7 +19,6 @@ interface GoogleDriveConfig {
 interface GoogleDriveFolderInfo {
   id: string;
   name?: string;
-  driveId?: string;
   parents?: string[];
 }
 
@@ -111,7 +110,7 @@ async function getAccessToken(
 
 async function getFolderInfo(accessToken: string, folderId: string): Promise<GoogleDriveFolderInfo> {
   const response = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${folderId}?fields=id,name,driveId,parents&supportsAllDrives=true`,
+    `https://www.googleapis.com/drive/v3/files/${folderId}?fields=id,name,parents&supportsAllDrives=true`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
@@ -263,26 +262,9 @@ Deno.serve(async (req) => {
     console.log("Access token obtained successfully");
 
     const rootFolderInfo = await getFolderInfo(accessToken, rootFolderId);
-    const rootIsSharedDrive = Boolean(rootFolderInfo.driveId);
     console.log(
-      `Root folder validated: ${rootFolderInfo.id} (${rootFolderInfo.name ?? "sem nome"}), driveId: ${rootFolderInfo.driveId ?? "none"}`
+      `Root folder validated: ${rootFolderInfo.id} (${rootFolderInfo.name ?? "sem nome"})`
     );
-
-    if (!rootIsSharedDrive) {
-      return new Response(
-        JSON.stringify({
-          error:
-            "A pasta raiz configurada não está dentro de um Shared Drive. Uma pasta compartilhada comum do Meu Drive não transfere a cota para a Service Account. Use uma pasta dentro de um Shared Drive ou configure delegação de usuário do Google Workspace.",
-          details: {
-            rootFolderId,
-            rootFolderName: rootFolderInfo.name ?? null,
-            rootFolderDriveId: rootFolderInfo.driveId ?? null,
-            hint: "Confirme que o ID informado em Configurações aponta para uma pasta de Shared Drive, não para uma pasta compartilhada do Meu Drive.",
-          },
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     const { data: fileData, error: fileError } = await supabase.storage
       .from("documents")
@@ -298,28 +280,18 @@ Deno.serve(async (req) => {
     console.log(`File downloaded from storage: ${fileName}, size: ${fileData.size}, type: ${fileData.type}`);
 
     let targetFolderId = rootFolderId;
-    let targetFolderDriveId = rootFolderInfo.driveId;
 
     if (unitName) {
       const existingUnitFolderId = await findFolder(accessToken, unitName, rootFolderId);
 
       if (existingUnitFolderId) {
         targetFolderId = existingUnitFolderId;
-        const targetFolderInfo = await getFolderInfo(accessToken, targetFolderId);
-        targetFolderDriveId = targetFolderInfo.driveId;
         console.log(
-          `Target folder resolved from existing folder: ${targetFolderId} (unit: ${unitName}, driveId: ${targetFolderDriveId ?? "none"})`
-        );
-      } else if (rootIsSharedDrive) {
-        targetFolderId = await createFolder(accessToken, unitName, rootFolderId);
-        targetFolderDriveId = rootFolderInfo.driveId;
-        console.log(
-          `Target folder created inside shared drive: ${targetFolderId} (unit: ${unitName}, driveId: ${targetFolderDriveId ?? "none"})`
+          `Target folder resolved from existing folder: ${targetFolderId} (unit: ${unitName})`
         );
       } else {
-        console.warn(
-          `Subfolder \"${unitName}\" não foi criada porque a pasta raiz configurada não está em um Shared Drive. O upload será feito diretamente na pasta raiz compartilhada ${rootFolderId}.`
-        );
+        targetFolderId = await createFolder(accessToken, unitName, rootFolderId);
+        console.log(`Target folder created: ${targetFolderId} (unit: ${unitName}, parent: ${rootFolderId})`);
       }
     }
 
@@ -331,7 +303,7 @@ Deno.serve(async (req) => {
     };
 
     console.log(
-      `Preparing upload: ${fileBytes.length} bytes, mime: ${mimeType}, root folder: ${rootFolderId}, target folder: ${targetFolderId}, target driveId: ${targetFolderDriveId ?? "none"}`
+      `Preparing upload: ${fileBytes.length} bytes, mime: ${mimeType}, root folder: ${rootFolderId}, target folder: ${targetFolderId}`
     );
 
     const metadata = JSON.stringify(metadataObj);
@@ -377,9 +349,8 @@ Deno.serve(async (req) => {
             filePath,
             unitName: unitName ?? null,
             rootFolderId,
-            rootFolderDriveId: rootFolderInfo.driveId ?? null,
+             rootFolderName: rootFolderInfo.name ?? null,
             targetFolderId,
-            targetFolderDriveId: targetFolderDriveId ?? null,
             parents: metadataObj.parents,
             googleError: parsedError ?? errText,
           },
@@ -392,12 +363,11 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({
             error:
-              "O Google Drive recusou o upload por cota da Service Account. Isso normalmente acontece quando a pasta configurada não está realmente em um Shared Drive acessível para a Service Account.",
+              "O Google Drive recusou o upload por cota da Service Account.",
             details: {
               rootFolderId,
-              rootFolderDriveId: rootFolderInfo.driveId ?? null,
+              rootFolderName: rootFolderInfo.name ?? null,
               targetFolderId,
-              targetFolderDriveId: targetFolderDriveId ?? null,
               parents: metadataObj.parents,
               googleError: parsedError,
             },
