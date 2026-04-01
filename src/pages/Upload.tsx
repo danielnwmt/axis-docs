@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Upload as UploadIcon, FileUp, X, PenTool, ShieldCheck } from "lucide-react";
+import { Upload as UploadIcon, FileUp, X, PenTool, ShieldCheck, Eye, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,7 @@ import { logAudit } from "@/lib/auditLog";
 
 export default function Upload() {
   const [files, setFiles] = useState<File[]>([]);
+  const [existingFile, setExistingFile] = useState<{ name: string; path: string; size: number | null; type: string | null } | null>(null);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [unit, setUnit] = useState("");
@@ -64,12 +65,53 @@ export default function Upload() {
         setSubject(data.subject || "");
         setKeywords(data.keywords || "");
         setNotes(data.notes || "");
+        setExistingFile({
+          name: data.file_name,
+          path: data.file_path,
+          size: data.file_size,
+          type: data.file_type,
+        });
       }
     };
     loadDoc();
   }, [editId]);
 
-  const hasPdf = files.some((f) => f.type === "application/pdf");
+  const hasPdf = files.some((f) => f.type === "application/pdf") || existingFile?.type === "application/pdf";
+
+  const getSignedUrl = async (filePath: string) => {
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(filePath, 3600);
+    if (error || !data?.signedUrl) throw error ?? new Error("Não foi possível gerar o link do arquivo.");
+    return data.signedUrl;
+  };
+
+  const handleExistingFileView = async () => {
+    if (!existingFile) return;
+    try {
+      const url = await getSignedUrl(existingFile.path);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error: any) {
+      toast({ title: "Erro ao visualizar", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleExistingFileDownload = async () => {
+    if (!existingFile) return;
+    try {
+      const url = await getSignedUrl(existingFile.path);
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = existingFile.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error: any) {
+      toast({ title: "Erro ao baixar", description: error.message, variant: "destructive" });
+    }
+  };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -318,12 +360,39 @@ export default function Upload() {
               <UploadIcon className="w-8 h-8 text-accent" />
             </div>
             <div className="text-center">
-              <p className="font-semibold text-foreground">Arraste arquivos aqui</p>
+              <p className="font-semibold text-foreground">{editId ? "Adicionar novos arquivos" : "Arraste arquivos aqui"}</p>
               <p className="text-sm text-muted-foreground mt-1">ou clique para selecionar</p>
               <p className="text-xs text-muted-foreground mt-2">PDF, JPG, PNG, DOCX, XLSX</p>
             </div>
             <input id="file-input" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" className="hidden" onChange={handleFileSelect} />
           </div>
+
+          {editId && existingFile && (
+            <div className="bg-card rounded-xl border border-border shadow-sm p-4 space-y-3">
+              <h3 className="font-semibold text-foreground text-sm">Arquivo anexado</h3>
+              <div className="flex flex-col gap-3 rounded-lg bg-secondary/50 px-3 py-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileUp className="w-4 h-4 text-primary shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm text-foreground truncate">{existingFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {existingFile.size ? `${(existingFile.size / 1024).toFixed(0)} KB` : "Tamanho não informado"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" className="gap-2" onClick={handleExistingFileView}>
+                    <Eye className="w-4 h-4" />
+                    Visualizar
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" className="gap-2" onClick={handleExistingFileDownload}>
+                    <Download className="w-4 h-4" />
+                    Baixar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {files.length > 0 && (
             <div className="bg-card rounded-xl border border-border shadow-sm p-4 space-y-2">
