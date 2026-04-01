@@ -20,12 +20,25 @@ interface GoogleDriveFolderInfo {
   id: string;
   name?: string;
   driveId?: string;
+  parents?: string[];
 }
 
 interface GoogleDriveUploadResult {
   id: string;
   name: string;
   webViewLink?: string;
+}
+
+interface GoogleApiErrorPayload {
+  error?: {
+    code?: number;
+    message?: string;
+    errors?: Array<{
+      message?: string;
+      domain?: string;
+      reason?: string;
+    }>;
+  };
 }
 
 function toBase64UrlFromString(value: string): string {
@@ -37,12 +50,6 @@ function toBase64UrlFromBuffer(value: ArrayBuffer): string {
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
-}
-
-function isPersonalGoogleAccount(email?: string): boolean {
-  if (!email) return false;
-  const normalized = email.trim().toLowerCase();
-  return normalized.endsWith("@gmail.com") || normalized.endsWith("@googlemail.com");
 }
 
 async function getAccessToken(
@@ -104,7 +111,7 @@ async function getAccessToken(
 
 async function getFolderInfo(accessToken: string, folderId: string): Promise<GoogleDriveFolderInfo> {
   const response = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${folderId}?fields=id,name,driveId&supportsAllDrives=true`,
+    `https://www.googleapis.com/drive/v3/files/${folderId}?fields=id,name,driveId,parents&supportsAllDrives=true`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
@@ -117,11 +124,11 @@ async function getFolderInfo(accessToken: string, folderId: string): Promise<Goo
   return await response.json();
 }
 
-async function findOrCreateFolder(
+async function findFolder(
   accessToken: string,
   folderName: string,
   parentId: string
-): Promise<string> {
+): Promise<string | null> {
   const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   const searchRes = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
@@ -137,6 +144,14 @@ async function findOrCreateFolder(
     return searchData.files[0].id;
   }
 
+  return null;
+}
+
+async function createFolder(
+  accessToken: string,
+  folderName: string,
+  parentId: string
+): Promise<string> {
   const createRes = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true", {
     method: "POST",
     headers: {
@@ -156,6 +171,14 @@ async function findOrCreateFolder(
 
   const createData = await createRes.json();
   return createData.id;
+}
+
+function parseGoogleApiError(errorText: string): GoogleApiErrorPayload | null {
+  try {
+    return JSON.parse(errorText) as GoogleApiErrorPayload;
+  } catch {
+    return null;
+  }
 }
 
 function extractFolderId(input: string): string {
@@ -232,11 +255,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Step 1: Get initial token and check if root folder is in a Shared Drive
-    let accessToken = await getAccessToken(config.serviceAccount);
+    const accessToken = await getAccessToken(config.serviceAccount);
     console.log("Access token obtained successfully");
 
-    // Step 2: Download the file from Supabase Storage
+    const rootFolderInfo = await getFolderInfo(accessToken, rootFolderId);
+    const rootIsSharedDrive = Boolean(rootFolderInfo.driveId);
+    console.log(
+      `Root folder validated: ${rootFolderInfo.id} (${rootFolderInfo.name ?? "sem nome"}), driveId: ${rootFolderInfo.driveId ?? "none"}`
+    );
+
     const { data: fileData, error: fileError } = await supabase.storage
       .from("documents")
       .download(filePath);
@@ -250,24 +277,44 @@ Deno.serve(async (req) => {
 
     console.log(`File downloaded from storage: ${fileName}, size: ${fileData.size}, type: ${fileData.type}`);
 
-    // Step 3: Find or create unit subfolder
     let targetFolderId = rootFolderId;
+    let targetFolderDriveId = rootFolderInfo.driveId;
+
     if (unitName) {
-      targetFolderId = await findOrCreateFolder(accessToken, unitName, rootFolderId);
-      console.log(`Target folder resolved: ${targetFolderId} (unit: ${unitName})`);
+      const existingUnitFolderId = await findFolder(accessToken, unitName, rootFolderId);
+
+      if (existingUnitFolderId) {
+        targetFolderId = existingUnitFolderId;
+        const targetFolderInfo = await getFolderInfo(accessToken, targetFolderId);
+        targetFolderDriveId = targetFolderInfo.driveId;
+        console.log(
+          `Target folder resolved from existing folder: ${targetFolderId} (unit: ${unitName}, driveId: ${targetFolderDriveId ?? "none"})`
+        );
+      } else if (rootIsSharedDrive) {
+        targetFolderId = await createFolder(accessToken, unitName, rootFolderId);
+        targetFolderDriveId = rootFolderInfo.driveId;
+        console.log(
+          `Target folder created inside shared drive: ${targetFolderId} (unit: ${unitName}, driveId: ${targetFolderDriveId ?? "none"})`
+        );
+      } else {
+        console.warn(
+          `Subfolder \"${unitName}\" não foi criada porque a pasta raiz configurada não está em um Shared Drive. O upload será feito diretamente na pasta raiz compartilhada ${rootFolderId}.`
+        );
+      }
     }
 
-    // Step 4: Upload file to Google Drive using multipart upload
     const fileBytes = new Uint8Array(await fileData.arrayBuffer());
     const mimeType = fileData.type || "application/octet-stream";
-    console.log(`Preparing upload: ${fileBytes.length} bytes, mime: ${mimeType}, target folder: ${targetFolderId}`);
-
     const metadataObj = {
       name: fileName,
       parents: [targetFolderId],
     };
-    const metadata = JSON.stringify(metadataObj);
 
+    console.log(
+      `Preparing upload: ${fileBytes.length} bytes, mime: ${mimeType}, root folder: ${rootFolderId}, target folder: ${targetFolderId}, target driveId: ${targetFolderDriveId ?? "none"}`
+    );
+
+    const metadata = JSON.stringify(metadataObj);
     const boundary = `---boundary${Date.now()}`;
 
     const metadataPart = new TextEncoder().encode(
@@ -298,14 +345,35 @@ Deno.serve(async (req) => {
 
     if (!uploadRes.ok) {
       const errText = await uploadRes.text();
-      console.error(`Google Drive upload error - Status: ${uploadRes.status}, Response: ${errText}`);
+      const parsedError = parseGoogleApiError(errText);
+
+      console.error(
+        "Google Drive upload error:",
+        JSON.stringify(
+          {
+            status: uploadRes.status,
+            statusText: uploadRes.statusText,
+            fileName,
+            filePath,
+            unitName: unitName ?? null,
+            rootFolderId,
+            rootFolderDriveId: rootFolderInfo.driveId ?? null,
+            targetFolderId,
+            targetFolderDriveId: targetFolderDriveId ?? null,
+            parents: metadataObj.parents,
+            googleError: parsedError ?? errText,
+          },
+          null,
+          2
+        )
+      );
+
       throw new Error(`Google Drive upload failed [${uploadRes.status}]: ${errText}`);
     }
 
     const driveFile: GoogleDriveUploadResult = await uploadRes.json();
     console.log(`Upload successful - File ID: ${driveFile.id}, Name: ${driveFile.name}, Link: ${driveFile.webViewLink}`);
 
-    // Step 5: Share file with owner email (writer, not owner transfer)
     if (config.ownerEmail && driveFile.id) {
       try {
         const permRes = await fetch(
