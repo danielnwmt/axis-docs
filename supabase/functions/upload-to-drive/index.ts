@@ -181,6 +181,10 @@ function parseGoogleApiError(errorText: string): GoogleApiErrorPayload | null {
   }
 }
 
+function hasQuotaExceededError(payload: GoogleApiErrorPayload | null): boolean {
+  return payload?.error?.errors?.some((item) => item.reason === "storageQuotaExceeded") ?? false;
+}
+
 function extractFolderId(input: string): string {
   if (!input) return "";
   const match = input.match(/folders\/([a-zA-Z0-9_-]+)/);
@@ -263,6 +267,22 @@ Deno.serve(async (req) => {
     console.log(
       `Root folder validated: ${rootFolderInfo.id} (${rootFolderInfo.name ?? "sem nome"}), driveId: ${rootFolderInfo.driveId ?? "none"}`
     );
+
+    if (!rootIsSharedDrive) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "A pasta raiz configurada não está dentro de um Shared Drive. Uma pasta compartilhada comum do Meu Drive não transfere a cota para a Service Account. Use uma pasta dentro de um Shared Drive ou configure delegação de usuário do Google Workspace.",
+          details: {
+            rootFolderId,
+            rootFolderName: rootFolderInfo.name ?? null,
+            rootFolderDriveId: rootFolderInfo.driveId ?? null,
+            hint: "Confirme que o ID informado em Configurações aponta para uma pasta de Shared Drive, não para uma pasta compartilhada do Meu Drive.",
+          },
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const { data: fileData, error: fileError } = await supabase.storage
       .from("documents")
@@ -367,6 +387,24 @@ Deno.serve(async (req) => {
           2
         )
       );
+
+      if (hasQuotaExceededError(parsedError)) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "O Google Drive recusou o upload por cota da Service Account. Isso normalmente acontece quando a pasta configurada não está realmente em um Shared Drive acessível para a Service Account.",
+            details: {
+              rootFolderId,
+              rootFolderDriveId: rootFolderInfo.driveId ?? null,
+              targetFolderId,
+              targetFolderDriveId: targetFolderDriveId ?? null,
+              parents: metadataObj.parents,
+              googleError: parsedError,
+            },
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       throw new Error(`Google Drive upload failed [${uploadRes.status}]: ${errText}`);
     }
