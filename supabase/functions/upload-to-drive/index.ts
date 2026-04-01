@@ -45,16 +45,6 @@ function isPersonalGoogleAccount(email?: string): boolean {
   return normalized.endsWith("@gmail.com") || normalized.endsWith("@googlemail.com");
 }
 
-function buildQuotaExceededMessage(ownerEmail?: string): string {
-  if (ownerEmail && isPersonalGoogleAccount(ownerEmail)) {
-    return `A pasta raiz está no Meu Drive e o proprietário configurado (${ownerEmail}) é uma conta pessoal do Google. Nesse cenário a API não consegue usar a cota do proprietário com Conta de Serviço. Use um Shared Drive ou uma conta Google Workspace com delegação de domínio habilitada.`;
-  }
-  if (ownerEmail) {
-    return `A pasta raiz está no Meu Drive. Para usar a cota de ${ownerEmail}, habilite delegação de domínio na Conta de Serviço e autorize a impersonação desse usuário, ou mova a pasta para um Shared Drive.`;
-  }
-  return "A Conta de Serviço não possui cota própria para gravar no Meu Drive. Mova a pasta raiz para um Shared Drive ou configure um proprietário do Google Workspace com delegação de domínio.";
-}
-
 async function getAccessToken(
   sa: GoogleDriveConfig["serviceAccount"],
   delegatedUserEmail?: string
@@ -246,9 +236,11 @@ Deno.serve(async (req) => {
     let accessToken = await getAccessToken(config.serviceAccount);
     const rootFolderInfo = await getFolderInfo(accessToken, rootFolderId);
     const isSharedDriveFolder = Boolean(rootFolderInfo.driveId);
+    const shouldUseDelegation =
+      !isSharedDriveFolder && !!config.ownerEmail && !isPersonalGoogleAccount(config.ownerEmail);
 
     // Step 2: If not a Shared Drive folder and owner is a Workspace account, try delegation
-    if (!isSharedDriveFolder && config.ownerEmail && !isPersonalGoogleAccount(config.ownerEmail)) {
+    if (shouldUseDelegation) {
       accessToken = await getAccessToken(config.serviceAccount, config.ownerEmail);
     }
     // For personal Gmail or no ownerEmail, continue with the service account token directly
@@ -304,9 +296,6 @@ Deno.serve(async (req) => {
 
     if (!uploadRes.ok) {
       const errText = await uploadRes.text();
-      if (uploadRes.status === 403 && errText.includes("storageQuotaExceeded")) {
-        throw new Error(buildQuotaExceededMessage(config.ownerEmail));
-      }
       throw new Error(`Google Drive upload failed [${uploadRes.status}]: ${errText}`);
     }
 
