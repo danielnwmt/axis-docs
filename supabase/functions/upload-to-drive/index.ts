@@ -234,18 +234,9 @@ Deno.serve(async (req) => {
 
     // Step 1: Get initial token and check if root folder is in a Shared Drive
     let accessToken = await getAccessToken(config.serviceAccount);
-    const rootFolderInfo = await getFolderInfo(accessToken, rootFolderId);
-    const isSharedDriveFolder = Boolean(rootFolderInfo.driveId);
-    const shouldUseDelegation =
-      !isSharedDriveFolder && !!config.ownerEmail && !isPersonalGoogleAccount(config.ownerEmail);
+    console.log("Access token obtained successfully");
 
-    // Step 2: If not a Shared Drive folder and owner is a Workspace account, try delegation
-    if (shouldUseDelegation) {
-      accessToken = await getAccessToken(config.serviceAccount, config.ownerEmail);
-    }
-    // For personal Gmail or no ownerEmail, continue with the service account token directly
-
-    // Step 3: Download the file from Supabase Storage
+    // Step 2: Download the file from Supabase Storage
     const { data: fileData, error: fileError } = await supabase.storage
       .from("documents")
       .download(filePath);
@@ -257,30 +248,41 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Step 4: Find or create unit subfolder
+    console.log(`File downloaded from storage: ${fileName}, size: ${fileData.size}, type: ${fileData.type}`);
+
+    // Step 3: Find or create unit subfolder
     let targetFolderId = rootFolderId;
     if (unitName) {
       targetFolderId = await findOrCreateFolder(accessToken, unitName, rootFolderId);
+      console.log(`Target folder resolved: ${targetFolderId} (unit: ${unitName})`);
     }
 
-    // Step 5: Upload file to Google Drive
-    const metadata = JSON.stringify({
+    // Step 4: Upload file to Google Drive using multipart upload
+    const fileBytes = new Uint8Array(await fileData.arrayBuffer());
+    const mimeType = fileData.type || "application/octet-stream";
+    console.log(`Preparing upload: ${fileBytes.length} bytes, mime: ${mimeType}, target folder: ${targetFolderId}`);
+
+    const metadataObj = {
       name: fileName,
       parents: [targetFolderId],
-    });
+    };
+    const metadata = JSON.stringify(metadataObj);
 
     const boundary = `---boundary${Date.now()}`;
-    const fileBytes = new Uint8Array(await fileData.arrayBuffer());
 
-    const bodyPart = new TextEncoder().encode(
-      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${fileData.type || "application/octet-stream"}\r\nContent-Transfer-Encoding: binary\r\n\r\n`
+    const metadataPart = new TextEncoder().encode(
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`
     );
-
+    const mediaPart = new TextEncoder().encode(
+      `--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`
+    );
     const ending = new TextEncoder().encode(`\r\n--${boundary}--`);
-    const fullBody = new Uint8Array(bodyPart.length + fileBytes.length + ending.length);
-    fullBody.set(bodyPart, 0);
-    fullBody.set(fileBytes, bodyPart.length);
-    fullBody.set(ending, bodyPart.length + fileBytes.length);
+
+    const fullBody = new Uint8Array(metadataPart.length + mediaPart.length + fileBytes.length + ending.length);
+    fullBody.set(metadataPart, 0);
+    fullBody.set(mediaPart, metadataPart.length);
+    fullBody.set(fileBytes, metadataPart.length + mediaPart.length);
+    fullBody.set(ending, metadataPart.length + mediaPart.length + fileBytes.length);
 
     const uploadRes = await fetch(
       "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink&supportsAllDrives=true",
@@ -296,16 +298,18 @@ Deno.serve(async (req) => {
 
     if (!uploadRes.ok) {
       const errText = await uploadRes.text();
+      console.error(`Google Drive upload error - Status: ${uploadRes.status}, Response: ${errText}`);
       throw new Error(`Google Drive upload failed [${uploadRes.status}]: ${errText}`);
     }
 
     const driveFile: GoogleDriveUploadResult = await uploadRes.json();
+    console.log(`Upload successful - File ID: ${driveFile.id}, Name: ${driveFile.name}, Link: ${driveFile.webViewLink}`);
 
-    // Step 6: Transfer ownership when on Shared Drive (optional)
-    if (config.ownerEmail && driveFile.id && isSharedDriveFolder) {
+    // Step 5: Share file with owner email (writer, not owner transfer)
+    if (config.ownerEmail && driveFile.id) {
       try {
         const permRes = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions?supportsAllDrives=true&transferOwnership=true`,
+          `https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions?supportsAllDrives=true`,
           {
             method: "POST",
             headers: {
@@ -313,7 +317,7 @@ Deno.serve(async (req) => {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              role: "owner",
+              role: "writer",
               type: "user",
               emailAddress: config.ownerEmail,
             }),
@@ -321,10 +325,12 @@ Deno.serve(async (req) => {
         );
 
         if (!permRes.ok) {
-          console.warn("Ownership transfer failed:", await permRes.text());
+          console.warn("Permission sharing failed:", await permRes.text());
+        } else {
+          console.log(`File shared with ${config.ownerEmail} as writer`);
         }
       } catch (permErr) {
-        console.warn("Error transferring ownership:", permErr);
+        console.warn("Error sharing file:", permErr);
       }
     }
 
@@ -334,7 +340,7 @@ Deno.serve(async (req) => {
         driveFileId: driveFile.id,
         driveFileName: driveFile.name,
         driveLink: driveFile.webViewLink,
-        mode: isSharedDriveFolder ? "shared-drive" : shouldUseDelegation ? "delegated-owner" : "service-account",
+        mode: "service-account",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
