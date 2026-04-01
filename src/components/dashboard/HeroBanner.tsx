@@ -1,4 +1,4 @@
-import heroBanner from "@/assets/hero-banner.jpg";
+import heroBanner from "@/assets/axis-docs-banner.png";
 
 export function HeroBanner() {
   return (
