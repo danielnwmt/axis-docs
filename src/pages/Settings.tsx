@@ -243,13 +243,251 @@ function ParametrosSection() {
 }
 
 function GoogleDriveSection() {
+  const [authMode, setAuthMode] = useState<"service-account" | "oauth2">("oauth2");
   const [jsonContent, setJsonContent] = useState("");
   const [rootFolderId, setRootFolderId] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [refreshToken, setRefreshToken] = useState("");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const { data } = await supabase.storage.from("settings").download("google-drive-config.json");
+        if (data) {
+          const text = await data.text();
+          const config = JSON.parse(text);
+          setRootFolderId(config.rootFolderId || "");
+          setOwnerEmail(config.ownerEmail || "");
+          if (config.oauth2) {
+            setAuthMode("oauth2");
+            setClientId(config.oauth2.clientId || "");
+            setClientSecret(config.oauth2.clientSecret || "");
+            setRefreshToken(config.oauth2.refreshToken || "");
+          } else if (config.serviceAccount) {
+            setAuthMode("service-account");
+            setJsonContent(JSON.stringify(config.serviceAccount, null, 2));
+          }
+          setStatus("saved");
+        }
+      } catch {
+        // No config yet
+      }
+    };
+    loadConfig();
+  }, []);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      try {
+        JSON.parse(text);
+        setJsonContent(text);
+        setStatus("idle");
+      } catch {
+        toast({ title: "Erro", description: "Arquivo JSON inválido.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSave = async () => {
+    if (authMode === "oauth2") {
+      if (!clientId.trim() || !clientSecret.trim() || !refreshToken.trim()) {
+        toast({ title: "Erro", description: "Preencha Client ID, Client Secret e Refresh Token.", variant: "destructive" });
+        return;
+      }
+    } else {
+      if (!jsonContent.trim()) {
+        toast({ title: "Erro", description: "Cole ou envie o JSON da conta de serviço.", variant: "destructive" });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(jsonContent);
+        if (!parsed.client_email || !parsed.private_key) {
+          toast({ title: "Erro", description: "JSON precisa conter 'client_email' e 'private_key'.", variant: "destructive" });
+          return;
+        }
+      } catch {
+        toast({ title: "Erro", description: "JSON inválido.", variant: "destructive" });
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      const config: Record<string, unknown> = {
+        authMode,
+        rootFolderId: rootFolderId.trim(),
+        ownerEmail: ownerEmail.trim(),
+      };
+
+      if (authMode === "oauth2") {
+        config.oauth2 = {
+          clientId: clientId.trim(),
+          clientSecret: clientSecret.trim(),
+          refreshToken: refreshToken.trim(),
+        };
+      } else {
+        config.serviceAccount = JSON.parse(jsonContent);
+      }
+
+      const blob = new Blob([JSON.stringify(config)], { type: "application/json" });
+      await supabase.storage.from("settings").remove(["google-drive-config.json"]);
+      const { error } = await supabase.storage.from("settings").upload("google-drive-config.json", blob, { upsert: true });
+      if (error) throw error;
+
+      setStatus("saved");
+      toast({ title: "Configuração do Google Drive salva!" });
+    } catch (err: unknown) {
+      setStatus("error");
+      toast({ title: "Erro ao salvar", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <div className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 border border-border">
+        <HardDrive className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+        <div className="text-sm text-muted-foreground">
+          <p>Configure a integração com o Google Drive. Escolha o modo de autenticação abaixo.</p>
+          <p className="mt-1"><strong>OAuth2 (Recomendado)</strong>: Usa a cota da sua conta pessoal. Ideal para contas @gmail.com.</p>
+          <p className="mt-1"><strong>Conta de Serviço</strong>: Para contas Google Workspace com domínio corporativo.</p>
+        </div>
+      </div>
+
+      {/* Auth Mode Toggle */}
+      <div className="space-y-2">
+        <Label>Modo de Autenticação</Label>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={authMode === "oauth2" ? "default" : "outline"}
+            size="sm"
+            onClick={() => { setAuthMode("oauth2"); setStatus("idle"); }}
+          >
+            OAuth2 (Pessoal)
+          </Button>
+          <Button
+            type="button"
+            variant={authMode === "service-account" ? "default" : "outline"}
+            size="sm"
+            onClick={() => { setAuthMode("service-account"); setStatus("idle"); }}
+          >
+            Conta de Serviço
+          </Button>
+        </div>
+      </div>
+
+      {/* Root Folder ID */}
+      <div className="space-y-2">
+        <Label>ID da Pasta Raiz no Google Drive</Label>
+        <Input
+          placeholder="Ex: 1A2B3C4D5E6F..."
+          value={rootFolderId}
+          onChange={(e) => { setRootFolderId(e.target.value); setStatus("idle"); }}
+        />
+        <p className="text-xs text-muted-foreground">O ID está na URL da pasta: drive.google.com/drive/folders/<strong>ID_AQUI</strong></p>
+      </div>
+
+      {authMode === "oauth2" ? (
+        <>
+          <div className="p-3 rounded-lg bg-accent/30 border border-border space-y-1">
+            <p className="text-sm font-medium text-foreground">Como obter as credenciais OAuth2:</p>
+            <ol className="text-xs text-muted-foreground list-decimal ml-4 space-y-1">
+              <li>Acesse o <strong>Google Cloud Console</strong> → APIs &amp; Services → Credentials</li>
+              <li>Crie um <strong>OAuth 2.0 Client ID</strong> (tipo: Web application)</li>
+              <li>Ative a <strong>Google Drive API</strong> no projeto</li>
+              <li>Use o <strong>OAuth 2.0 Playground</strong> (developers.google.com/oauthplayground) para gerar o Refresh Token com o escopo <code>https://www.googleapis.com/auth/drive</code></li>
+            </ol>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Client ID</Label>
+            <Input
+              placeholder="xxxxxxx.apps.googleusercontent.com"
+              value={clientId}
+              onChange={(e) => { setClientId(e.target.value); setStatus("idle"); }}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Client Secret</Label>
+            <Input
+              type="password"
+              placeholder="GOCSPX-..."
+              value={clientSecret}
+              onChange={(e) => { setClientSecret(e.target.value); setStatus("idle"); }}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Refresh Token</Label>
+            <Input
+              type="password"
+              placeholder="1//0..."
+              value={refreshToken}
+              onChange={(e) => { setRefreshToken(e.target.value); setStatus("idle"); }}
+            />
+            <p className="text-xs text-muted-foreground">O refresh token não expira, mas pode ser revogado nas configurações de segurança da conta Google.</p>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <Label>E-mail do Proprietário (para transferência de cota)</Label>
+            <Input
+              type="email"
+              placeholder="seuemail@gmail.com"
+              value={ownerEmail}
+              onChange={(e) => { setOwnerEmail(e.target.value); setStatus("idle"); }}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>JSON da Conta de Serviço</Label>
+            <div className="flex gap-2 mb-2">
+              <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleFileUpload} />
+              <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()} className="gap-2">
+                <Upload className="w-4 h-4" /> Carregar arquivo .json
+              </Button>
+            </div>
+            <textarea
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[200px]"
+              placeholder='Cole aqui o conteúdo do arquivo JSON da conta de serviço...'
+              value={jsonContent}
+              onChange={(e) => { setJsonContent(e.target.value); setStatus("idle"); }}
+            />
+          </div>
+        </>
+      )}
+
+      {status === "saved" && (
+        <div className="flex items-center gap-2 text-sm text-primary">
+          <CheckCircle className="w-4 h-4" /> Configuração salva e ativa
+        </div>
+      )}
+      {status === "error" && (
+        <div className="flex items-center gap-2 text-sm text-destructive">
+          <AlertCircle className="w-4 h-4" /> Erro na configuração
+        </div>
+      )}
+
+      <Button onClick={handleSave} disabled={saving} className="gap-2">
+        <Save className="w-4 h-4" /> {saving ? "Salvando..." : "Salvar Configuração"}
+      </Button>
+    </div>
+  );
+}
   // Load existing config
   useEffect(() => {
     const loadConfig = async () => {
