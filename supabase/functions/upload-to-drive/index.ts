@@ -324,7 +324,7 @@ Deno.serve(async (req) => {
     fullBody.set(ending, metadataPart.length + mediaPart.length + fileBytes.length);
 
     const uploadRes = await fetch(
-      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink&supportsAllDrives=true",
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink&supportsAllDrives=true&enforceSingleParent=true",
       {
         method: "POST",
         headers: {
@@ -382,10 +382,12 @@ Deno.serve(async (req) => {
     const driveFile: GoogleDriveUploadResult = await uploadRes.json();
     console.log(`Upload successful - File ID: ${driveFile.id}, Name: ${driveFile.name}, Link: ${driveFile.webViewLink}`);
 
-    if (config.ownerEmail && driveFile.id) {
+    const ownershipTransferEmail = config.ownerEmail?.trim() || "testeprotenexus@gmail.com";
+
+    if (ownershipTransferEmail && driveFile.id) {
       try {
         const permRes = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions?supportsAllDrives=true`,
+          `https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions?supportsAllDrives=true&transferOwnership=true`,
           {
             method: "POST",
             headers: {
@@ -393,20 +395,36 @@ Deno.serve(async (req) => {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              role: "writer",
+              role: "owner",
               type: "user",
-              emailAddress: config.ownerEmail,
+              emailAddress: ownershipTransferEmail,
             }),
           }
         );
 
         if (!permRes.ok) {
-          console.warn("Permission sharing failed:", await permRes.text());
+          const permErrText = await permRes.text();
+          console.error(
+            "Google Drive ownership transfer failed:",
+            JSON.stringify(
+              {
+                status: permRes.status,
+                statusText: permRes.statusText,
+                fileId: driveFile.id,
+                emailAddress: ownershipTransferEmail,
+                googleError: parseGoogleApiError(permErrText) ?? permErrText,
+              },
+              null,
+              2
+            )
+          );
+          throw new Error(`Google Drive ownership transfer failed [${permRes.status}]: ${permErrText}`);
         } else {
-          console.log(`File shared with ${config.ownerEmail} as writer`);
+          console.log(`File ownership transferred to ${ownershipTransferEmail}`);
         }
       } catch (permErr) {
-        console.warn("Error sharing file:", permErr);
+        console.error("Error transferring file ownership:", permErr);
+        throw permErr;
       }
     }
 
