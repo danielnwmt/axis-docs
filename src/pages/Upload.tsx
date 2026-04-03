@@ -183,6 +183,7 @@ export default function Upload() {
         if (dbError) throw dbError;
 
         // Upload to Google Drive
+        let driveFileId: string | null = null;
         try {
           const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", {
             body: {
@@ -196,14 +197,15 @@ export default function Upload() {
             console.warn("Google Drive upload falhou:", driveError);
           } else if (driveResult?.success) {
             console.log("Arquivo enviado ao Google Drive:", driveResult.driveLink);
+            driveFileId = driveResult.driveFileId;
           }
         } catch (driveErr) {
           console.warn("Erro ao enviar para Google Drive:", driveErr);
         }
 
         // Save drive_file_id if available
-        if (driveResult?.success && driveResult?.driveFileId && docData?.id) {
-          await supabase.from("documents").update({ drive_file_id: driveResult.driveFileId }).eq("id", docData.id);
+        if (driveFileId && docData?.id) {
+          await supabase.from("documents").update({ drive_file_id: driveFileId }).eq("id", docData.id);
         }
 
         // Se marcou para assinar e é PDF, chamar edge function
