@@ -115,6 +115,21 @@ export default function Documents() {
   const handleDelete = async () => {
     if (!deleteDoc) return;
     const docTitle = deleteDoc.title;
+
+    // Delete from Google Drive if drive_file_id exists
+    if ((deleteDoc as any).drive_file_id) {
+      try {
+        const { error: driveError } = await supabase.functions.invoke("delete-from-drive", {
+          body: { driveFileId: (deleteDoc as any).drive_file_id },
+        });
+        if (driveError) {
+          console.warn("Erro ao excluir do Google Drive:", driveError);
+        }
+      } catch (driveErr) {
+        console.warn("Erro ao excluir do Google Drive:", driveErr);
+      }
+    }
+
     await supabase.storage.from("documents").remove([deleteDoc.file_path]);
     const { error } = await supabase.from("documents").delete().eq("id", deleteDoc.id);
     if (error) {
