@@ -188,6 +188,8 @@ export default function Upload() {
 
         let driveFileId: string | null = null;
 
+        let driveLink: string | null = null;
+
         try {
           const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", {
             body: {
@@ -203,16 +205,11 @@ export default function Upload() {
 
           console.log("Arquivo enviado ao Google Drive:", driveResult.driveLink);
           driveFileId = driveResult.driveFileId;
+          driveLink = driveResult.driveLink || null;
         } catch (driveErr: any) {
           await cleanupFailedUpload(filePath);
           throw new Error(driveErr?.message || "Não foi possível armazenar o arquivo no Google Drive.");
         }
-
-        let driveLink: string | null = null;
-        try {
-          const driveResultData = JSON.parse(JSON.stringify(driveResult));
-          driveLink = driveResultData?.driveLink || null;
-        } catch {}
 
         // Delete from Supabase Storage since file is now on Drive
         await supabase.storage.from("documents").remove([filePath]);
