@@ -10,6 +10,8 @@ interface SearchResult {
   category: string;
   file_path: string;
   file_name: string;
+  drive_file_id: string | null;
+  drive_link: string | null;
 }
 
 export function AppHeader() {
