@@ -135,10 +135,7 @@ export default function Upload() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const cleanupFailedUpload = async (filePath: string, driveFileId?: string | null) => {
-    // Try to clean up from Storage (may already be deleted)
-    try { await supabase.storage.from("documents").remove([filePath]); } catch {}
-
+  const cleanupDriveFile = async (driveFileId?: string | null) => {
     if (driveFileId) {
       try {
         await supabase.functions.invoke("delete-from-drive", {
@@ -173,46 +170,35 @@ export default function Upload() {
         return;
       }
 
-      // New document mode
+      // New document mode — send file directly to Drive (no Storage middleman)
       for (const file of files) {
-        const filePath = `${user.id}/${Date.now()}_${file.name}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("documents")
-          .upload(filePath, file);
-
-        if (uploadError) throw uploadError;
-
         const isPdf = file.type === "application/pdf";
         const shouldSign = signDocument && isPdf;
 
         let driveFileId: string | null = null;
-
         let driveLink: string | null = null;
 
         try {
+          // Send file directly to edge function via FormData
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("fileName", file.name);
+          formData.append("unitName", unit);
+
           const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", {
-            body: {
-              filePath,
-              fileName: file.name,
-              unitName: unit,
-            },
+            body: formData,
           });
 
           if (driveError || !driveResult?.success || !driveResult?.driveFileId) {
-            throw new Error(driveError?.message || driveResult?.error || "Falha ao sincronizar com o Google Drive.");
+            throw new Error(driveError?.message || driveResult?.error || "Falha ao enviar para o Google Drive.");
           }
 
           console.log("Arquivo enviado ao Google Drive:", driveResult.driveLink);
           driveFileId = driveResult.driveFileId;
           driveLink = driveResult.driveLink || null;
         } catch (driveErr: any) {
-          await cleanupFailedUpload(filePath);
           throw new Error(driveErr?.message || "Não foi possível armazenar o arquivo no Google Drive.");
         }
-
-        // Delete from Supabase Storage since file is now on Drive
-        await supabase.storage.from("documents").remove([filePath]);
 
         const { data: docData, error: dbError } = await supabase.from("documents").insert({
           user_id: user.id,
