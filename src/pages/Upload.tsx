@@ -200,6 +200,8 @@ export default function Upload() {
           throw new Error(driveErr?.message || "Não foi possível armazenar o arquivo no Google Drive.");
         }
 
+        const filePath = `drive://${driveFileId}`;
+
         const { data: docData, error: dbError } = await supabase.from("documents").insert({
           user_id: user.id,
           title: title || file.name,
@@ -218,7 +220,7 @@ export default function Upload() {
         } as any).select().single();
 
         if (dbError) {
-          await cleanupFailedUpload(filePath, driveFileId);
+          await cleanupDriveFile(driveFileId);
           throw dbError;
         }
 
