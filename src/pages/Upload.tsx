@@ -201,6 +201,11 @@ export default function Upload() {
           console.warn("Erro ao enviar para Google Drive:", driveErr);
         }
 
+        // Save drive_file_id if available
+        if (driveResult?.success && driveResult?.driveFileId && docData?.id) {
+          await supabase.from("documents").update({ drive_file_id: driveResult.driveFileId }).eq("id", docData.id);
+        }
+
         // Se marcou para assinar e é PDF, chamar edge function
         if (shouldSign && docData) {
           try {
