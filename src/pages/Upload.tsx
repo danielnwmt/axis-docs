@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Upload as UploadIcon, FileUp, X, PenTool, ShieldCheck, Eye, Download, FileText } from "lucide-react";
+import { Upload as UploadIcon, FileUp, X, PenTool, ShieldCheck, Eye, Download, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +39,8 @@ export default function Upload() {
   const [loading, setLoading] = useState(false);
   const [signDocument, setSignDocument] = useState(false);
   const [certType, setCertType] = useState("A1");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<string>("");
   const [previewTitle, setPreviewTitle] = useState("");
@@ -93,6 +95,8 @@ export default function Upload() {
   const hasPdf = files.some((f) => f.type === "application/pdf") || existingFile?.type === "application/pdf";
 
   const closePreview = () => {
+    setPreviewOpen(false);
+    setPreviewLoading(false);
     setPreviewUrl((currentUrl) => {
       if (currentUrl) URL.revokeObjectURL(currentUrl);
       return null;
@@ -101,25 +105,36 @@ export default function Upload() {
 
   const handleExistingFileView = async () => {
     if (!existingFile || !existingFileDriveId) return;
+
+    const fileType = existingFile.type || "application/octet-stream";
+    setPreviewTitle(existingFile.name);
+    setPreviewType(fileType);
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    setPreviewUrl((currentUrl) => {
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      return null;
+    });
+
     try {
       const { data, error } = await supabase.functions.invoke("serve-drive-file", {
         body: { driveFileId: existingFileDriveId, action: "view" },
       });
       if (error) throw error;
 
-      const fileType = existingFile.type || "application/octet-stream";
       const blob = new Blob([data], { type: fileType });
       const blobUrl = URL.createObjectURL(blob);
 
-      setPreviewType(fileType);
-      setPreviewTitle(existingFile.name);
       setPreviewUrl((currentUrl) => {
         if (currentUrl) URL.revokeObjectURL(currentUrl);
         return blobUrl;
       });
       logAudit("Visualizou documento", "view", existingFile.name);
     } catch (error: any) {
+      closePreview();
       toast({ title: "Erro ao visualizar", description: error.message, variant: "destructive" });
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -145,6 +160,15 @@ export default function Upload() {
   };
 
   const renderPreview = () => {
+    if (previewLoading) {
+      return (
+        <div className="flex h-[70vh] flex-col items-center justify-center gap-3 rounded-lg bg-muted/30 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <p>Carregando arquivo...</p>
+        </div>
+      );
+    }
+
     if (!previewUrl) return null;
 
     if (previewType.startsWith("image/")) {
@@ -489,7 +513,7 @@ export default function Upload() {
         </div>
       </form>
 
-      <Dialog open={!!previewUrl} onOpenChange={(open) => { if (!open) closePreview(); }}>
+      <Dialog open={previewOpen} onOpenChange={(open) => { if (!open) closePreview(); }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>{previewTitle}</DialogTitle>
