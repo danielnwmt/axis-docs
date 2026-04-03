@@ -153,12 +153,7 @@ export default function Documents() {
       return;
     }
 
-    const { error: storageError } = await supabase.storage.from("documents").remove([deleteDoc.file_path]);
-    if (storageError) {
-      toast({ title: "Erro", description: "O arquivo foi removido do Google Drive, mas não do armazenamento interno.", variant: "destructive" });
-      return;
-    }
-
+    // Files are stored only in Drive now, no need to delete from Storage
     const { error } = await supabase.from("documents").delete().eq("id", deleteDoc.id);
     if (error) {
       toast({ title: "Erro", description: "Não foi possível apagar o documento.", variant: "destructive" });

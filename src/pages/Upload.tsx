@@ -136,7 +136,8 @@ export default function Upload() {
   };
 
   const cleanupFailedUpload = async (filePath: string, driveFileId?: string | null) => {
-    await supabase.storage.from("documents").remove([filePath]);
+    // Try to clean up from Storage (may already be deleted)
+    try { await supabase.storage.from("documents").remove([filePath]); } catch {}
 
     if (driveFileId) {
       try {

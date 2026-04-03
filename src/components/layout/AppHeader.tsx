@@ -143,14 +143,14 @@ export function AppHeader() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button
-                      onClick={() => handleView(r.file_path)}
+                      onClick={() => handleView(r.drive_file_id || "", r.drive_link || undefined)}
                       className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                       title="Visualizar"
                     >
                       <Eye className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => handleDownload(r.file_path, r.file_name)}
+                      onClick={() => handleDownload(r.drive_file_id || "", r.file_name)}
                       className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                       title="Baixar"
                     >

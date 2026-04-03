@@ -146,14 +146,14 @@ export default function Search() {
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
-                    onClick={() => handleView(result.file_path)}
+                    onClick={() => handleView(result.drive_file_id || "", result.drive_link || undefined)}
                     className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                     title="Visualizar"
                   >
                     <Eye className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => handleDownload(result.file_path, result.file_name)}
+                    onClick={() => handleDownload(result.drive_file_id || "", result.file_name)}
                     className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                     title="Baixar"
                   >
