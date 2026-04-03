@@ -1,0 +1,1 @@
+ALTER TABLE public.documents ADD COLUMN drive_file_id text DEFAULT NULL;
