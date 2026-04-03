@@ -418,13 +418,12 @@ Deno.serve(async (req) => {
               2
             )
           );
-          throw new Error(`Google Drive ownership transfer failed [${permRes.status}]: ${permErrText}`);
+          console.warn(`Ownership transfer failed (non-fatal), file was uploaded successfully.`);
         } else {
           console.log(`File ownership transferred to ${ownershipTransferEmail}`);
         }
       } catch (permErr) {
-        console.error("Error transferring file ownership:", permErr);
-        throw permErr;
+        console.warn("Ownership transfer error (non-fatal):", permErr);
       }
     }
 
