@@ -75,10 +75,12 @@ export default function Documents() {
       toast({ title: "Erro", description: "Arquivo não vinculado ao Google Drive.", variant: "destructive" });
       return;
     }
-    // Open Drive link if available, otherwise use edge function
+    // Open window synchronously to avoid popup blocker
+    const win = window.open("about:blank", "_blank");
+
     const driveLink = (doc as any).drive_link;
     if (driveLink) {
-      window.open(driveLink, "_blank");
+      if (win) win.location.href = driveLink;
       logAudit("Visualizou documento", "view", doc.title);
       return;
     }
@@ -88,11 +90,14 @@ export default function Documents() {
         body: { driveFileId: doc.drive_file_id, action: "metadata" },
       });
       if (error) throw error;
-      if (data?.webViewLink) {
-        window.open(data.webViewLink, "_blank");
+      if (data?.webViewLink && win) {
+        win.location.href = data.webViewLink;
+      } else {
+        win?.close();
       }
       logAudit("Visualizou documento", "view", doc.title);
     } catch {
+      win?.close();
       toast({ title: "Erro", description: "Não foi possível visualizar o arquivo.", variant: "destructive" });
     }
   };
