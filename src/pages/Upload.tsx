@@ -21,6 +21,8 @@ import { logAudit } from "@/lib/auditLog";
 export default function Upload() {
   const [files, setFiles] = useState<File[]>([]);
   const [existingFile, setExistingFile] = useState<{ name: string; path: string; size: number | null; type: string | null } | null>(null);
+  const [existingFileDriveId, setExistingFileDriveId] = useState<string | null>(null);
+  const [existingFileDriveLink, setExistingFileDriveLink] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [unit, setUnit] = useState("");
