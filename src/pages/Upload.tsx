@@ -73,6 +73,8 @@ export default function Upload() {
           size: data.file_size,
           type: data.file_type,
         });
+        setExistingFileDriveId(data.drive_file_id);
+        setExistingFileDriveLink((data as any).drive_link);
       }
     };
     loadDoc();
