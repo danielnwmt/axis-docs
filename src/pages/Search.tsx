@@ -39,7 +39,7 @@ export default function Search() {
     const q = term.trim();
     const { data, error } = await supabase
       .from("documents")
-      .select("id, title, category, unit, file_name, file_path, keywords, created_at")
+      .select("id, title, category, unit, file_name, file_path, keywords, created_at, drive_file_id, drive_link")
       .or(`title.ilike."%${q}%",category.ilike."%${q}%",unit.ilike."%${q}%",keywords.ilike."%${q}%",file_name.ilike."%${q}%",subject.ilike."%${q}%",ocr_text.ilike."%${q}%"`)
       .order("created_at", { ascending: false })
       .limit(50);
