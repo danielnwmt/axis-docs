@@ -65,17 +65,19 @@ export default function Search() {
   }, []);
 
   const handleView = async (driveFileId: string, driveLink?: string) => {
+    const win = window.open("about:blank", "_blank");
     if (driveLink) {
-      window.open(driveLink, "_blank");
+      if (win) win.location.href = driveLink;
       return;
     }
-    if (!driveFileId) return;
+    if (!driveFileId) { win?.close(); return; }
     try {
       const { data } = await supabase.functions.invoke("serve-drive-file", {
         body: { driveFileId, action: "metadata" },
       });
-      if (data?.webViewLink) window.open(data.webViewLink, "_blank");
-    } catch {}
+      if (data?.webViewLink && win) win.location.href = data.webViewLink;
+      else win?.close();
+    } catch { win?.close(); }
   };
 
   const handleDownload = async (driveFileId: string, fileName: string) => {
