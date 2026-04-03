@@ -70,45 +70,55 @@ export default function Documents() {
     return map[status] || "bg-secondary text-muted-foreground";
   };
 
-  const getSignedUrl = async (filePath: string) => {
-    const { data, error } = await supabase.storage
-      .from("documents")
-      .createSignedUrl(filePath, 3600);
-    if (error) {
-      toast({ title: "Erro", description: "Não foi possível acessar o arquivo.", variant: "destructive" });
-      return null;
-    }
-    return data.signedUrl;
-  };
-
   const handleView = async (doc: typeof documents[0]) => {
-    const url = await getSignedUrl(doc.file_path);
-    if (url) {
-      setPreviewUrl(url);
-      setPreviewType(doc.file_type || "");
-      setPreviewTitle(doc.title);
+    if (!doc.drive_file_id) {
+      toast({ title: "Erro", description: "Arquivo não vinculado ao Google Drive.", variant: "destructive" });
+      return;
+    }
+    // Open Drive link if available, otherwise use edge function
+    const driveLink = (doc as any).drive_link;
+    if (driveLink) {
+      window.open(driveLink, "_blank");
       logAudit("Visualizou documento", "view", doc.title);
+      return;
+    }
+    // Fallback: get metadata with webViewLink
+    try {
+      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId: doc.drive_file_id, action: "metadata" },
+      });
+      if (error) throw error;
+      if (data?.webViewLink) {
+        window.open(data.webViewLink, "_blank");
+      }
+      logAudit("Visualizou documento", "view", doc.title);
+    } catch {
+      toast({ title: "Erro", description: "Não foi possível visualizar o arquivo.", variant: "destructive" });
     }
   };
 
   const handleDownload = async (doc: typeof documents[0]) => {
-    const url = await getSignedUrl(doc.file_path);
-    if (url) {
-      try {
-        const response = await fetch(url);
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = blobUrl;
-        a.download = doc.file_name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-        logAudit("Baixou documento", "download", doc.title);
-      } catch {
-        toast({ title: "Erro", description: "Não foi possível baixar o arquivo.", variant: "destructive" });
-      }
+    if (!doc.drive_file_id) {
+      toast({ title: "Erro", description: "Arquivo não vinculado ao Google Drive.", variant: "destructive" });
+      return;
+    }
+    try {
+      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId: doc.drive_file_id, action: "download" },
+      });
+      if (error) throw error;
+      const blob = new Blob([data]);
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = doc.file_name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      logAudit("Baixou documento", "download", doc.title);
+    } catch {
+      toast({ title: "Erro", description: "Não foi possível baixar o arquivo.", variant: "destructive" });
     }
   };
 
