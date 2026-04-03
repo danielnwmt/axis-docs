@@ -116,21 +116,39 @@ export default function Documents() {
     if (!deleteDoc) return;
     const docTitle = deleteDoc.title;
 
-    // Delete from Google Drive if drive_file_id exists
-    if ((deleteDoc as any).drive_file_id) {
-      try {
-        const { error: driveError } = await supabase.functions.invoke("delete-from-drive", {
-          body: { driveFileId: (deleteDoc as any).drive_file_id },
-        });
-        if (driveError) {
-          console.warn("Erro ao excluir do Google Drive:", driveError);
-        }
-      } catch (driveErr) {
-        console.warn("Erro ao excluir do Google Drive:", driveErr);
-      }
+    if (!deleteDoc.drive_file_id) {
+      toast({
+        title: "Erro",
+        description: "Este documento não está vinculado ao Google Drive, então a exclusão foi bloqueada para evitar dessincronização.",
+        variant: "destructive",
+      });
+      return;
     }
 
-    await supabase.storage.from("documents").remove([deleteDoc.file_path]);
+    try {
+      const { data: driveResult, error: driveError } = await supabase.functions.invoke("delete-from-drive", {
+        body: { driveFileId: deleteDoc.drive_file_id },
+      });
+
+      if (driveError || !driveResult?.success) {
+        throw new Error(driveError?.message || driveResult?.error || "Não foi possível excluir o arquivo no Google Drive.");
+      }
+    } catch (driveErr) {
+      console.warn("Erro ao excluir do Google Drive:", driveErr);
+      toast({
+        title: "Erro",
+        description: "O arquivo não foi removido do Google Drive. O documento foi mantido no sistema para evitar inconsistência.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { error: storageError } = await supabase.storage.from("documents").remove([deleteDoc.file_path]);
+    if (storageError) {
+      toast({ title: "Erro", description: "O arquivo foi removido do Google Drive, mas não do armazenamento interno.", variant: "destructive" });
+      return;
+    }
+
     const { error } = await supabase.from("documents").delete().eq("id", deleteDoc.id);
     if (error) {
       toast({ title: "Erro", description: "Não foi possível apagar o documento.", variant: "destructive" });
