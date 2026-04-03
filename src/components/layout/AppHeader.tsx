@@ -44,7 +44,7 @@ export function AppHeader() {
     const q = term.trim();
     const { data } = await supabase
       .from("documents")
-      .select("id, title, category, file_path, file_name")
+      .select("id, title, category, file_path, file_name, drive_file_id, drive_link")
       .or(`title.ilike."%${q}%",subject.ilike."%${q}%",notes.ilike."%${q}%",keywords.ilike."%${q}%",ocr_text.ilike."%${q}%"`)
       .order("created_at", { ascending: false })
       .limit(8);
