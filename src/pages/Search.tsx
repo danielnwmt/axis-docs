@@ -62,19 +62,35 @@ export default function Search() {
     if (initialQ) doSearch(initialQ);
   }, []);
 
-  const handleView = async (filePath: string) => {
-    const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
-    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+  const handleView = async (driveFileId: string, driveLink?: string) => {
+    if (driveLink) {
+      window.open(driveLink, "_blank");
+      return;
+    }
+    if (!driveFileId) return;
+    try {
+      const { data } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId, action: "metadata" },
+      });
+      if (data?.webViewLink) window.open(data.webViewLink, "_blank");
+    } catch {}
   };
 
-  const handleDownload = async (filePath: string, fileName: string) => {
-    const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
-    if (data?.signedUrl) {
+  const handleDownload = async (driveFileId: string, fileName: string) => {
+    if (!driveFileId) return;
+    try {
+      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId, action: "download" },
+      });
+      if (error) throw error;
+      const blob = new Blob([data]);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = data.signedUrl;
+      a.href = blobUrl;
       a.download = fileName;
       a.click();
-    }
+      URL.revokeObjectURL(blobUrl);
+    } catch {}
   };
 
   return (
