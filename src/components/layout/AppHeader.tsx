@@ -10,6 +10,8 @@ interface SearchResult {
   category: string;
   file_path: string;
   file_name: string;
+  drive_file_id: string | null;
+  drive_link: string | null;
 }
 
 export function AppHeader() {
@@ -42,7 +44,7 @@ export function AppHeader() {
     const q = term.trim();
     const { data } = await supabase
       .from("documents")
-      .select("id, title, category, file_path, file_name")
+      .select("id, title, category, file_path, file_name, drive_file_id, drive_link")
       .or(`title.ilike."%${q}%",subject.ilike."%${q}%",notes.ilike."%${q}%",keywords.ilike."%${q}%",ocr_text.ilike."%${q}%"`)
       .order("created_at", { ascending: false })
       .limit(8);
@@ -68,20 +70,41 @@ export function AppHeader() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleDownload = async (filePath: string, fileName: string) => {
-    const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
-    if (data?.signedUrl) {
+  const handleDownload = async (driveFileId: string, fileName: string) => {
+    if (!driveFileId) return;
+    try {
+      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId, action: "download" },
+      });
+      if (error) throw error;
+      const blob = new Blob([data]);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = data.signedUrl;
+      a.href = blobUrl;
       a.download = fileName;
       a.click();
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      console.error("Erro ao baixar arquivo do Drive");
     }
   };
 
-  const handleView = async (filePath: string) => {
-    const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
-    if (data?.signedUrl) {
-      window.open(data.signedUrl, "_blank");
+  const handleView = async (driveFileId: string, driveLink?: string) => {
+    if (driveLink) {
+      window.open(driveLink, "_blank");
+      return;
+    }
+    if (!driveFileId) return;
+    try {
+      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId, action: "metadata" },
+      });
+      if (error) throw error;
+      if (data?.webViewLink) {
+        window.open(data.webViewLink, "_blank");
+      }
+    } catch {
+      console.error("Erro ao visualizar arquivo do Drive");
     }
   };
 
@@ -120,14 +143,14 @@ export function AppHeader() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button
-                      onClick={() => handleView(r.file_path)}
+                      onClick={() => handleView(r.drive_file_id || "", r.drive_link || undefined)}
                       className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                       title="Visualizar"
                     >
                       <Eye className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => handleDownload(r.file_path, r.file_name)}
+                      onClick={() => handleDownload(r.drive_file_id || "", r.file_name)}
                       className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                       title="Baixar"
                     >

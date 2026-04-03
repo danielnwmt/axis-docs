@@ -14,6 +14,8 @@ interface SearchResult {
   file_path: string;
   keywords: string;
   created_at: string;
+  drive_file_id: string | null;
+  drive_link: string | null;
 }
 
 export default function Search() {
@@ -37,7 +39,7 @@ export default function Search() {
     const q = term.trim();
     const { data, error } = await supabase
       .from("documents")
-      .select("id, title, category, unit, file_name, file_path, keywords, created_at")
+      .select("id, title, category, unit, file_name, file_path, keywords, created_at, drive_file_id, drive_link")
       .or(`title.ilike."%${q}%",category.ilike."%${q}%",unit.ilike."%${q}%",keywords.ilike."%${q}%",file_name.ilike."%${q}%",subject.ilike."%${q}%",ocr_text.ilike."%${q}%"`)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -62,19 +64,35 @@ export default function Search() {
     if (initialQ) doSearch(initialQ);
   }, []);
 
-  const handleView = async (filePath: string) => {
-    const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
-    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+  const handleView = async (driveFileId: string, driveLink?: string) => {
+    if (driveLink) {
+      window.open(driveLink, "_blank");
+      return;
+    }
+    if (!driveFileId) return;
+    try {
+      const { data } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId, action: "metadata" },
+      });
+      if (data?.webViewLink) window.open(data.webViewLink, "_blank");
+    } catch {}
   };
 
-  const handleDownload = async (filePath: string, fileName: string) => {
-    const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
-    if (data?.signedUrl) {
+  const handleDownload = async (driveFileId: string, fileName: string) => {
+    if (!driveFileId) return;
+    try {
+      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId, action: "download" },
+      });
+      if (error) throw error;
+      const blob = new Blob([data]);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = data.signedUrl;
+      a.href = blobUrl;
       a.download = fileName;
       a.click();
-    }
+      URL.revokeObjectURL(blobUrl);
+    } catch {}
   };
 
   return (
@@ -128,14 +146,14 @@ export default function Search() {
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
-                    onClick={() => handleView(result.file_path)}
+                    onClick={() => handleView(result.drive_file_id || "", result.drive_link || undefined)}
                     className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                     title="Visualizar"
                   >
                     <Eye className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => handleDownload(result.file_path, result.file_name)}
+                    onClick={() => handleDownload(result.drive_file_id || "", result.file_name)}
                     className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                     title="Baixar"
                   >

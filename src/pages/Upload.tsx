@@ -21,6 +21,8 @@ import { logAudit } from "@/lib/auditLog";
 export default function Upload() {
   const [files, setFiles] = useState<File[]>([]);
   const [existingFile, setExistingFile] = useState<{ name: string; path: string; size: number | null; type: string | null } | null>(null);
+  const [existingFileDriveId, setExistingFileDriveId] = useState<string | null>(null);
+  const [existingFileDriveLink, setExistingFileDriveLink] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [unit, setUnit] = useState("");
@@ -71,6 +73,8 @@ export default function Upload() {
           size: data.file_size,
           type: data.file_type,
         });
+        setExistingFileDriveId(data.drive_file_id);
+        setExistingFileDriveLink((data as any).drive_link);
       }
     };
     loadDoc();
@@ -78,28 +82,30 @@ export default function Upload() {
 
   const hasPdf = files.some((f) => f.type === "application/pdf") || existingFile?.type === "application/pdf";
 
-  const getSignedUrl = async (filePath: string) => {
-    const { data, error } = await supabase.storage.from("documents").createSignedUrl(filePath, 3600);
-    if (error || !data?.signedUrl) throw error ?? new Error("Não foi possível gerar o link do arquivo.");
-    return data.signedUrl;
-  };
-
   const handleExistingFileView = async () => {
-    if (!existingFile) return;
+    if (!existingFile || !existingFileDriveId) return;
     try {
-      const url = await getSignedUrl(existingFile.path);
-      window.open(url, "_blank", "noopener,noreferrer");
+      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId: existingFileDriveId, action: "view" },
+      });
+      if (error) throw error;
+      // Open drive link directly
+      if (existingFileDriveLink) {
+        window.open(existingFileDriveLink, "_blank", "noopener,noreferrer");
+      }
     } catch (error: any) {
       toast({ title: "Erro ao visualizar", description: error.message, variant: "destructive" });
     }
   };
 
   const handleExistingFileDownload = async () => {
-    if (!existingFile) return;
+    if (!existingFile || !existingFileDriveId) return;
     try {
-      const url = await getSignedUrl(existingFile.path);
-      const response = await fetch(url);
-      const blob = await response.blob();
+      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId: existingFileDriveId, action: "download" },
+      });
+      if (error) throw error;
+      const blob = new Blob([data]);
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
@@ -130,7 +136,8 @@ export default function Upload() {
   };
 
   const cleanupFailedUpload = async (filePath: string, driveFileId?: string | null) => {
-    await supabase.storage.from("documents").remove([filePath]);
+    // Try to clean up from Storage (may already be deleted)
+    try { await supabase.storage.from("documents").remove([filePath]); } catch {}
 
     if (driveFileId) {
       try {
@@ -181,6 +188,8 @@ export default function Upload() {
 
         let driveFileId: string | null = null;
 
+        let driveLink: string | null = null;
+
         try {
           const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", {
             body: {
@@ -196,10 +205,14 @@ export default function Upload() {
 
           console.log("Arquivo enviado ao Google Drive:", driveResult.driveLink);
           driveFileId = driveResult.driveFileId;
+          driveLink = driveResult.driveLink || null;
         } catch (driveErr: any) {
           await cleanupFailedUpload(filePath);
           throw new Error(driveErr?.message || "Não foi possível armazenar o arquivo no Google Drive.");
         }
+
+        // Delete from Supabase Storage since file is now on Drive
+        await supabase.storage.from("documents").remove([filePath]);
 
         const { data: docData, error: dbError } = await supabase.from("documents").insert({
           user_id: user.id,
@@ -214,8 +227,9 @@ export default function Upload() {
           file_size: file.size,
           file_type: file.type,
           drive_file_id: driveFileId,
+          drive_link: driveLink,
           sign_status: shouldSign ? "pendente" : "pendente",
-        }).select().single();
+        } as any).select().single();
 
         if (dbError) {
           await cleanupFailedUpload(filePath, driveFileId);
