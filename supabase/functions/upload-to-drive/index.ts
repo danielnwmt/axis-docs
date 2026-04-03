@@ -16,30 +16,6 @@ interface GoogleDriveConfig {
   ownerEmail?: string;
 }
 
-interface GoogleDriveFolderInfo {
-  id: string;
-  name?: string;
-  parents?: string[];
-}
-
-interface GoogleDriveUploadResult {
-  id: string;
-  name: string;
-  webViewLink?: string;
-}
-
-interface GoogleApiErrorPayload {
-  error?: {
-    code?: number;
-    message?: string;
-    errors?: Array<{
-      message?: string;
-      domain?: string;
-      reason?: string;
-    }>;
-  };
-}
-
 function toBase64UrlFromString(value: string): string {
   return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -51,25 +27,16 @@ function toBase64UrlFromBuffer(value: ArrayBuffer): string {
     .replace(/=+$/, "");
 }
 
-async function getAccessToken(
-  sa: GoogleDriveConfig["serviceAccount"],
-  delegatedUserEmail?: string
-): Promise<string> {
+async function getAccessToken(sa: GoogleDriveConfig["serviceAccount"]): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const header = toBase64UrlFromString(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const payloadData: Record<string, string | number> = {
+  const payload = toBase64UrlFromString(JSON.stringify({
     iss: sa.client_email,
     scope: "https://www.googleapis.com/auth/drive",
     aud: sa.token_uri,
     iat: now,
     exp: now + 3600,
-  };
-
-  if (delegatedUserEmail) {
-    payloadData.sub = delegatedUserEmail;
-  }
-
-  const payload = toBase64UrlFromString(JSON.stringify(payloadData));
+  }));
 
   const pemContent = sa.private_key
     .replace(/-----BEGIN PRIVATE KEY-----/, "")
@@ -77,13 +44,8 @@ async function getAccessToken(
     .replace(/\n/g, "");
 
   const binaryKey = Uint8Array.from(atob(pemContent), (c) => c.charCodeAt(0));
-
   const cryptoKey = await crypto.subtle.importKey(
-    "pkcs8",
-    binaryKey,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"]
+    "pkcs8", binaryKey, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]
   );
 
   const signatureInput = new TextEncoder().encode(`${header}.${payload}`);
@@ -97,98 +59,36 @@ async function getAccessToken(
   });
 
   if (!tokenRes.ok) {
-    const err = await tokenRes.text();
-    const delegationHint = delegatedUserEmail
-      ? ` Não foi possível delegar para ${delegatedUserEmail}. Verifique se a Conta de Serviço tem delegação de domínio habilitada no Google Workspace.`
-      : "";
-    throw new Error(`Failed to get access token: ${err}.${delegationHint}`);
+    throw new Error(`Failed to get access token: ${await tokenRes.text()}`);
   }
-
-  const tokenData = await tokenRes.json();
-  return tokenData.access_token;
-}
-
-async function getFolderInfo(accessToken: string, folderId: string): Promise<GoogleDriveFolderInfo> {
-  const response = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${folderId}?fields=id,name,parents&supportsAllDrives=true`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `Não foi possível validar a pasta raiz do Google Drive [${response.status}]: ${await response.text()}`
-    );
-  }
-
-  return await response.json();
-}
-
-async function findFolder(
-  accessToken: string,
-  folderName: string,
-  parentId: string
-): Promise<string | null> {
-  const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-  const searchRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-
-  if (!searchRes.ok) {
-    throw new Error(`Erro ao buscar pasta no Google Drive [${searchRes.status}]: ${await searchRes.text()}`);
-  }
-
-  const searchData = await searchRes.json();
-  if (searchData.files && searchData.files.length > 0) {
-    return searchData.files[0].id;
-  }
-
-  return null;
-}
-
-async function createFolder(
-  accessToken: string,
-  folderName: string,
-  parentId: string
-): Promise<string> {
-  const createRes = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      name: folderName,
-      mimeType: "application/vnd.google-apps.folder",
-      parents: [parentId],
-    }),
-  });
-
-  if (!createRes.ok) {
-    throw new Error(`Erro ao criar pasta no Google Drive [${createRes.status}]: ${await createRes.text()}`);
-  }
-
-  const createData = await createRes.json();
-  return createData.id;
-}
-
-function parseGoogleApiError(errorText: string): GoogleApiErrorPayload | null {
-  try {
-    return JSON.parse(errorText) as GoogleApiErrorPayload;
-  } catch {
-    return null;
-  }
-}
-
-function hasQuotaExceededError(payload: GoogleApiErrorPayload | null): boolean {
-  return payload?.error?.errors?.some((item) => item.reason === "storageQuotaExceeded") ?? false;
+  return (await tokenRes.json()).access_token;
 }
 
 function extractFolderId(input: string): string {
   if (!input) return "";
   const match = input.match(/folders\/([a-zA-Z0-9_-]+)/);
-  if (match) return match[1];
-  return input.trim();
+  return match ? match[1] : input.trim();
+}
+
+async function findFolder(accessToken: string, folderName: string, parentId: string): Promise<string | null> {
+  const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!res.ok) throw new Error(`Erro ao buscar pasta: ${await res.text()}`);
+  const data = await res.json();
+  return data.files?.[0]?.id || null;
+}
+
+async function createFolder(accessToken: string, folderName: string, parentId: string): Promise<string> {
+  const res = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name: folderName, mimeType: "application/vnd.google-apps.folder", parents: [parentId] }),
+  });
+  if (!res.ok) throw new Error(`Erro ao criar pasta: ${await res.text()}`);
+  return (await res.json()).id;
 }
 
 Deno.serve(async (req) => {
@@ -204,32 +104,31 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Token inválido" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { filePath, fileName, unitName } = await req.json();
+    // Parse FormData - file comes directly from the client
+    const formData = await req.formData();
+    const file = formData.get("file") as File | null;
+    const fileName = formData.get("fileName") as string || file?.name || "arquivo";
+    const unitName = formData.get("unitName") as string || "";
+    const mimeType = file?.type || "application/octet-stream";
 
-    if (!filePath || !fileName) {
-      return new Response(JSON.stringify({ error: "filePath e fileName são obrigatórios" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (!file) {
+      return new Response(JSON.stringify({ error: "Arquivo é obrigatório" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // Load Google Drive config
     const { data: configData, error: configError } = await supabase.storage
       .from("settings")
       .download("google-drive-config.json");
@@ -258,57 +157,24 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Get access token and resolve target folder in parallel
     const accessToken = await getAccessToken(config.serviceAccount);
-    console.log("Access token obtained successfully");
-
-    const rootFolderInfo = await getFolderInfo(accessToken, rootFolderId);
-    console.log(
-      `Root folder validated: ${rootFolderInfo.id} (${rootFolderInfo.name ?? "sem nome"})`
-    );
-
-    const { data: fileData, error: fileError } = await supabase.storage
-      .from("documents")
-      .download(filePath);
-
-    if (fileError || !fileData) {
-      return new Response(
-        JSON.stringify({ error: `Erro ao baixar arquivo: ${fileError?.message}` }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`File downloaded from storage: ${fileName}, size: ${fileData.size}, type: ${fileData.type}`);
+    console.log("Access token obtained");
 
     let targetFolderId = rootFolderId;
-
     if (unitName) {
-      const existingUnitFolderId = await findFolder(accessToken, unitName, rootFolderId);
-
-      if (existingUnitFolderId) {
-        targetFolderId = existingUnitFolderId;
-        console.log(
-          `Target folder resolved from existing folder: ${targetFolderId} (unit: ${unitName})`
-        );
-      } else {
-        targetFolderId = await createFolder(accessToken, unitName, rootFolderId);
-        console.log(`Target folder created: ${targetFolderId} (unit: ${unitName}, parent: ${rootFolderId})`);
-      }
+      const existingId = await findFolder(accessToken, unitName, rootFolderId);
+      targetFolderId = existingId || await createFolder(accessToken, unitName, rootFolderId);
+      console.log(`Target folder: ${targetFolderId} (unit: ${unitName})`);
     }
 
-    const fileBytes = new Uint8Array(await fileData.arrayBuffer());
-    const mimeType = fileData.type || "application/octet-stream";
-    const metadataObj = {
-      name: fileName,
-      parents: [targetFolderId],
-    };
+    // Read file bytes
+    const fileBytes = new Uint8Array(await file.arrayBuffer());
+    console.log(`Uploading ${fileBytes.length} bytes, mime: ${mimeType}`);
 
-    console.log(
-      `Preparing upload: ${fileBytes.length} bytes, mime: ${mimeType}, root folder: ${rootFolderId}, target folder: ${targetFolderId}`
-    );
-
-    const metadata = JSON.stringify(metadataObj);
+    // Build multipart upload
+    const metadata = JSON.stringify({ name: fileName, parents: [targetFolderId] });
     const boundary = `---boundary${Date.now()}`;
-
     const metadataPart = new TextEncoder().encode(
       `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`
     );
@@ -337,93 +203,27 @@ Deno.serve(async (req) => {
 
     if (!uploadRes.ok) {
       const errText = await uploadRes.text();
-      const parsedError = parseGoogleApiError(errText);
-
-      console.error(
-        "Google Drive upload error:",
-        JSON.stringify(
-          {
-            status: uploadRes.status,
-            statusText: uploadRes.statusText,
-            fileName,
-            filePath,
-            unitName: unitName ?? null,
-            rootFolderId,
-             rootFolderName: rootFolderInfo.name ?? null,
-            targetFolderId,
-            parents: metadataObj.parents,
-            googleError: parsedError ?? errText,
-          },
-          null,
-          2
-        )
-      );
-
-      if (hasQuotaExceededError(parsedError)) {
-        return new Response(
-          JSON.stringify({
-            error:
-              "O Google Drive recusou o upload por cota da Service Account.",
-            details: {
-              rootFolderId,
-              rootFolderName: rootFolderInfo.name ?? null,
-              targetFolderId,
-              parents: metadataObj.parents,
-              googleError: parsedError,
-            },
-          }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
+      console.error("Google Drive upload error:", errText);
       throw new Error(`Google Drive upload failed [${uploadRes.status}]: ${errText}`);
     }
 
-    const driveFile: GoogleDriveUploadResult = await uploadRes.json();
-    console.log(`Upload successful - File ID: ${driveFile.id}, Name: ${driveFile.name}, Link: ${driveFile.webViewLink}`);
+    const driveFile = await uploadRes.json();
+    console.log(`Upload OK - ID: ${driveFile.id}, Link: ${driveFile.webViewLink}`);
 
-    const ownershipTransferEmail = config.ownerEmail?.trim() || "testeprotenexus@gmail.com";
-
-    if (ownershipTransferEmail && driveFile.id) {
+    // Non-fatal ownership transfer attempt
+    const ownerEmail = config.ownerEmail?.trim();
+    if (ownerEmail && driveFile.id) {
       try {
-        const permRes = await fetch(
+        await fetch(
           `https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions?supportsAllDrives=true&transferOwnership=true`,
           {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              role: "owner",
-              type: "user",
-              emailAddress: ownershipTransferEmail,
-            }),
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ role: "owner", type: "user", emailAddress: ownerEmail }),
           }
         );
-
-        if (!permRes.ok) {
-          const permErrText = await permRes.text();
-          console.error(
-            "Google Drive ownership transfer failed:",
-            JSON.stringify(
-              {
-                status: permRes.status,
-                statusText: permRes.statusText,
-                fileId: driveFile.id,
-                emailAddress: ownershipTransferEmail,
-                googleError: parseGoogleApiError(permErrText) ?? permErrText,
-              },
-              null,
-              2
-            )
-          );
-          console.warn(`Ownership transfer failed (non-fatal), file was uploaded successfully.`);
-        } else {
-          console.log(`File ownership transferred to ${ownershipTransferEmail}`);
-        }
-      } catch (permErr) {
-        console.warn("Ownership transfer error (non-fatal):", permErr);
+      } catch (e) {
+        console.warn("Ownership transfer failed (non-fatal):", e);
       }
     }
 
@@ -433,7 +233,6 @@ Deno.serve(async (req) => {
         driveFileId: driveFile.id,
         driveFileName: driveFile.name,
         driveLink: driveFile.webViewLink,
-        mode: "service-account",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -441,8 +240,7 @@ Deno.serve(async (req) => {
     console.error("Error in upload-to-drive:", error);
     const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
     return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
