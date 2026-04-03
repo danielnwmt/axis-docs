@@ -1,9 +1,15 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Upload as UploadIcon, FileUp, X, PenTool, ShieldCheck, Eye, Download } from "lucide-react";
+import { Upload as UploadIcon, FileUp, X, PenTool, ShieldCheck, Eye, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -17,6 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { logAudit } from "@/lib/auditLog";
+import { PdfPreview } from "@/components/documents/PdfPreview";
 
 export default function Upload() {
   const [files, setFiles] = useState<File[]>([]);
@@ -32,6 +39,9 @@ export default function Upload() {
   const [loading, setLoading] = useState(false);
   const [signDocument, setSignDocument] = useState(false);
   const [certType, setCertType] = useState("A1");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewType, setPreviewType] = useState<string>("");
+  const [previewTitle, setPreviewTitle] = useState("");
   const [categorias, setCategorias] = useState<string[]>([]);
   const [unidades, setUnidades] = useState<string[]>([]);
   const { toast } = useToast();
@@ -82,6 +92,13 @@ export default function Upload() {
 
   const hasPdf = files.some((f) => f.type === "application/pdf") || existingFile?.type === "application/pdf";
 
+  const closePreview = () => {
+    setPreviewUrl((currentUrl) => {
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      return null;
+    });
+  };
+
   const handleExistingFileView = async () => {
     if (!existingFile || !existingFileDriveId) return;
     try {
@@ -89,10 +106,18 @@ export default function Upload() {
         body: { driveFileId: existingFileDriveId, action: "view" },
       });
       if (error) throw error;
-      // Open drive link directly
-      if (existingFileDriveLink) {
-        window.open(existingFileDriveLink, "_blank", "noopener,noreferrer");
-      }
+
+      const fileType = existingFile.type || "application/octet-stream";
+      const blob = new Blob([data], { type: fileType });
+      const blobUrl = URL.createObjectURL(blob);
+
+      setPreviewType(fileType);
+      setPreviewTitle(existingFile.name);
+      setPreviewUrl((currentUrl) => {
+        if (currentUrl) URL.revokeObjectURL(currentUrl);
+        return blobUrl;
+      });
+      logAudit("Visualizou documento", "view", existingFile.name);
     } catch (error: any) {
       toast({ title: "Erro ao visualizar", description: error.message, variant: "destructive" });
     }
@@ -117,6 +142,28 @@ export default function Upload() {
     } catch (error: any) {
       toast({ title: "Erro ao baixar", description: error.message, variant: "destructive" });
     }
+  };
+
+  const renderPreview = () => {
+    if (!previewUrl) return null;
+
+    if (previewType.startsWith("image/")) {
+      return <img src={previewUrl} alt={previewTitle} className="w-full max-h-[70vh] object-contain rounded-lg" />;
+    }
+
+    if (previewType.includes("pdf")) {
+      return <PdfPreview fileUrl={previewUrl} title={previewTitle} />;
+    }
+
+    return (
+      <div className="text-center py-12 space-y-4">
+        <FileText className="w-16 h-16 text-muted-foreground mx-auto" />
+        <p className="text-muted-foreground">Pré-visualização não disponível para este tipo de arquivo.</p>
+        <a href={previewUrl} target="_blank" rel="noopener noreferrer">
+          <Button className="gap-2"><Download className="w-4 h-4" /> Baixar arquivo</Button>
+        </a>
+      </div>
+    );
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -441,6 +488,15 @@ export default function Upload() {
           </Button>
         </div>
       </form>
+
+      <Dialog open={!!previewUrl} onOpenChange={(open) => { if (!open) closePreview(); }}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{previewTitle}</DialogTitle>
+          </DialogHeader>
+          {renderPreview()}
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
