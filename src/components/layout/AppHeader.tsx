@@ -90,21 +90,22 @@ export function AppHeader() {
   };
 
   const handleView = async (driveFileId: string, driveLink?: string) => {
+    const win = window.open("about:blank", "_blank");
     if (driveLink) {
-      window.open(driveLink, "_blank");
+      if (win) win.location.href = driveLink;
       return;
     }
-    if (!driveFileId) return;
+    if (!driveFileId) { win?.close(); return; }
     try {
       const { data, error } = await supabase.functions.invoke("serve-drive-file", {
         body: { driveFileId, action: "metadata" },
       });
       if (error) throw error;
-      if (data?.webViewLink) {
-        window.open(data.webViewLink, "_blank");
-      }
+      if (data?.webViewLink && win) {
+        win.location.href = data.webViewLink;
+      } else { win?.close(); }
     } catch {
-      console.error("Erro ao visualizar arquivo do Drive");
+      win?.close();
     }
   };
 
