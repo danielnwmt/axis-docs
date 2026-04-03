@@ -299,7 +299,7 @@ export default function Documents() {
         </table>
       </div>
 
-      <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
+      <Dialog open={!!previewUrl} onOpenChange={() => { if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>{previewTitle}</DialogTitle>
