@@ -75,29 +75,20 @@ export default function Documents() {
       toast({ title: "Erro", description: "Arquivo não vinculado ao Google Drive.", variant: "destructive" });
       return;
     }
-    // Open window synchronously to avoid popup blocker
-    const win = window.open("about:blank", "_blank");
-
-    const driveLink = (doc as any).drive_link;
-    if (driveLink) {
-      if (win) win.location.href = driveLink;
-      logAudit("Visualizou documento", "view", doc.title);
-      return;
-    }
-    // Fallback: get metadata with webViewLink
     try {
       const { data, error } = await supabase.functions.invoke("serve-drive-file", {
-        body: { driveFileId: doc.drive_file_id, action: "metadata" },
+        body: { driveFileId: doc.drive_file_id, action: "view" },
       });
       if (error) throw error;
-      if (data?.webViewLink && win) {
-        win.location.href = data.webViewLink;
-      } else {
-        win?.close();
-      }
+
+      const blob = new Blob([data], { type: doc.file_type || "application/octet-stream" });
+      const blobUrl = URL.createObjectURL(blob);
+
+      setPreviewType(doc.file_type || "application/octet-stream");
+      setPreviewTitle(doc.title);
+      setPreviewUrl(blobUrl);
       logAudit("Visualizou documento", "view", doc.title);
     } catch {
-      win?.close();
       toast({ title: "Erro", description: "Não foi possível visualizar o arquivo.", variant: "destructive" });
     }
   };
