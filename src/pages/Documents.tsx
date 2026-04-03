@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Search, Filter, Plus, FileText, Download, Eye, Trash2, ScanText, PenTool, Pencil } from "lucide-react";
+import { Search, Filter, Plus, FileText, Download, Eye, Trash2, PenTool, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { logAudit } from "@/lib/auditLog";
+import { PdfPreview } from "@/components/documents/PdfPreview";
 import {
   Dialog,
   DialogContent,
@@ -70,6 +71,13 @@ export default function Documents() {
     return map[status] || "bg-secondary text-muted-foreground";
   };
 
+  const closePreview = () => {
+    setPreviewUrl((currentUrl) => {
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      return null;
+    });
+  };
+
   const handleView = async (doc: typeof documents[0]) => {
     if (!doc.drive_file_id) {
       toast({ title: "Erro", description: "Arquivo não vinculado ao Google Drive.", variant: "destructive" });
@@ -86,7 +94,10 @@ export default function Documents() {
 
       setPreviewType(doc.file_type || "application/octet-stream");
       setPreviewTitle(doc.title);
-      setPreviewUrl(blobUrl);
+      setPreviewUrl((currentUrl) => {
+        if (currentUrl) URL.revokeObjectURL(currentUrl);
+        return blobUrl;
+      });
       logAudit("Visualizou documento", "view", doc.title);
     } catch {
       toast({ title: "Erro", description: "Não foi possível visualizar o arquivo.", variant: "destructive" });
@@ -166,10 +177,8 @@ export default function Documents() {
     if (previewType.startsWith("image/")) {
       return <img src={previewUrl} alt={previewTitle} className="w-full max-h-[70vh] object-contain rounded-lg" />;
     }
-    if (previewType === "application/pdf") {
-      return (
-        <iframe src={previewUrl} className="w-full h-[70vh] rounded-lg border-0" title={previewTitle} />
-      );
+    if (previewType.includes("pdf")) {
+      return <PdfPreview fileUrl={previewUrl} title={previewTitle} />;
     }
     return (
       <div className="text-center py-12 space-y-4">
@@ -297,7 +306,7 @@ export default function Documents() {
         </table>
       </div>
 
-      <Dialog open={!!previewUrl} onOpenChange={() => { if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }}>
+      <Dialog open={!!previewUrl} onOpenChange={(open) => { if (!open) closePreview(); }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>{previewTitle}</DialogTitle>
