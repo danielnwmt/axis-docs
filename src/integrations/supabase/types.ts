@@ -70,6 +70,7 @@ export type Database = {
           category: string
           created_at: string
           drive_file_id: string | null
+          drive_link: string | null
           file_name: string
           file_path: string
           file_size: number | null
@@ -90,6 +91,7 @@ export type Database = {
           category?: string
           created_at?: string
           drive_file_id?: string | null
+          drive_link?: string | null
           file_name: string
           file_path: string
           file_size?: number | null
@@ -110,6 +112,7 @@ export type Database = {
           category?: string
           created_at?: string
           drive_file_id?: string | null
+          drive_link?: string | null
           file_name?: string
           file_path?: string
           file_size?: number | null
