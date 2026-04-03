@@ -129,6 +129,20 @@ export default function Upload() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const cleanupFailedUpload = async (filePath: string, driveFileId?: string | null) => {
+    await supabase.storage.from("documents").remove([filePath]);
+
+    if (driveFileId) {
+      try {
+        await supabase.functions.invoke("delete-from-drive", {
+          body: { driveFileId },
+        });
+      } catch (error) {
+        console.warn("Falha ao reverter arquivo no Google Drive:", error);
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || (!editId && files.length === 0)) return;
@@ -165,6 +179,28 @@ export default function Upload() {
         const isPdf = file.type === "application/pdf";
         const shouldSign = signDocument && isPdf;
 
+        let driveFileId: string | null = null;
+
+        try {
+          const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", {
+            body: {
+              filePath,
+              fileName: file.name,
+              unitName: unit,
+            },
+          });
+
+          if (driveError || !driveResult?.success || !driveResult?.driveFileId) {
+            throw new Error(driveError?.message || driveResult?.error || "Falha ao sincronizar com o Google Drive.");
+          }
+
+          console.log("Arquivo enviado ao Google Drive:", driveResult.driveLink);
+          driveFileId = driveResult.driveFileId;
+        } catch (driveErr: any) {
+          await cleanupFailedUpload(filePath);
+          throw new Error(driveErr?.message || "Não foi possível armazenar o arquivo no Google Drive.");
+        }
+
         const { data: docData, error: dbError } = await supabase.from("documents").insert({
           user_id: user.id,
           title: title || file.name,
@@ -177,35 +213,13 @@ export default function Upload() {
           file_path: filePath,
           file_size: file.size,
           file_type: file.type,
+          drive_file_id: driveFileId,
           sign_status: shouldSign ? "pendente" : "pendente",
         }).select().single();
 
-        if (dbError) throw dbError;
-
-        // Upload to Google Drive
-        let driveFileId: string | null = null;
-        try {
-          const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", {
-            body: {
-              filePath,
-              fileName: file.name,
-              unitName: unit,
-            },
-          });
-
-          if (driveError) {
-            console.warn("Google Drive upload falhou:", driveError);
-          } else if (driveResult?.success) {
-            console.log("Arquivo enviado ao Google Drive:", driveResult.driveLink);
-            driveFileId = driveResult.driveFileId;
-          }
-        } catch (driveErr) {
-          console.warn("Erro ao enviar para Google Drive:", driveErr);
-        }
-
-        // Save drive_file_id if available
-        if (driveFileId && docData?.id) {
-          await supabase.from("documents").update({ drive_file_id: driveFileId }).eq("id", docData.id);
+        if (dbError) {
+          await cleanupFailedUpload(filePath, driveFileId);
+          throw dbError;
         }
 
         // Se marcou para assinar e é PDF, chamar edge function

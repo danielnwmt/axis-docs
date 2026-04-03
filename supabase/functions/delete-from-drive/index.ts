@@ -34,17 +34,23 @@ function toBase64UrlFromBuffer(value: ArrayBuffer): string {
 }
 
 async function getServiceAccountToken(
-  sa: GoogleDriveConfig["serviceAccount"]
+  sa: GoogleDriveConfig["serviceAccount"],
+  delegatedUserEmail?: string
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const header = toBase64UrlFromString(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const payloadData = {
+  const payloadData: Record<string, string | number> = {
     iss: sa.client_email,
     scope: "https://www.googleapis.com/auth/drive",
     aud: sa.token_uri,
     iat: now,
     exp: now + 3600,
   };
+
+  if (delegatedUserEmail) {
+    payloadData.sub = delegatedUserEmail;
+  }
+
   const payload = toBase64UrlFromString(JSON.stringify(payloadData));
 
   const pemContent = sa.private_key
@@ -148,10 +154,17 @@ Deno.serve(async (req) => {
 
     // Get access token based on auth mode
     let accessToken: string;
+    const ownerEmail = config.ownerEmail?.trim();
+
     if (config.authMode === "oauth2" && config.oauth2) {
       accessToken = await getOAuth2Token(config.oauth2);
     } else {
-      accessToken = await getServiceAccountToken(config.serviceAccount);
+      try {
+        accessToken = await getServiceAccountToken(config.serviceAccount, ownerEmail);
+      } catch (delegationError) {
+        console.warn("Delegação do Google Drive indisponível, tentando com a Service Account:", delegationError);
+        accessToken = await getServiceAccountToken(config.serviceAccount);
+      }
     }
 
     // Delete file from Google Drive
@@ -163,9 +176,17 @@ Deno.serve(async (req) => {
       }
     );
 
-    if (!deleteRes.ok && deleteRes.status !== 404) {
+    if (!deleteRes.ok) {
       const errText = await deleteRes.text();
       console.error("Google Drive delete failed:", errText);
+
+      if (deleteRes.status === 404) {
+        return new Response(
+          JSON.stringify({ error: "Arquivo não encontrado no Google Drive ou sem permissão para excluí-lo." }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       throw new Error(`Erro ao excluir do Google Drive [${deleteRes.status}]: ${errText}`);
     }
 
