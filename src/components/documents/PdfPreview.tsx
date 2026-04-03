@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.js?url";
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
