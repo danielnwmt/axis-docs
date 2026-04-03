@@ -14,6 +14,8 @@ interface SearchResult {
   file_path: string;
   keywords: string;
   created_at: string;
+  drive_file_id: string | null;
+  drive_link: string | null;
 }
 
 export default function Search() {
