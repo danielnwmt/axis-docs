@@ -78,28 +78,30 @@ export default function Upload() {
 
   const hasPdf = files.some((f) => f.type === "application/pdf") || existingFile?.type === "application/pdf";
 
-  const getSignedUrl = async (filePath: string) => {
-    const { data, error } = await supabase.storage.from("documents").createSignedUrl(filePath, 3600);
-    if (error || !data?.signedUrl) throw error ?? new Error("Não foi possível gerar o link do arquivo.");
-    return data.signedUrl;
-  };
-
   const handleExistingFileView = async () => {
-    if (!existingFile) return;
+    if (!existingFile || !existingFileDriveId) return;
     try {
-      const url = await getSignedUrl(existingFile.path);
-      window.open(url, "_blank", "noopener,noreferrer");
+      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId: existingFileDriveId, action: "view" },
+      });
+      if (error) throw error;
+      // Open drive link directly
+      if (existingFileDriveLink) {
+        window.open(existingFileDriveLink, "_blank", "noopener,noreferrer");
+      }
     } catch (error: any) {
       toast({ title: "Erro ao visualizar", description: error.message, variant: "destructive" });
     }
   };
 
   const handleExistingFileDownload = async () => {
-    if (!existingFile) return;
+    if (!existingFile || !existingFileDriveId) return;
     try {
-      const url = await getSignedUrl(existingFile.path);
-      const response = await fetch(url);
-      const blob = await response.blob();
+      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId: existingFileDriveId, action: "download" },
+      });
+      if (error) throw error;
+      const blob = new Blob([data]);
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
