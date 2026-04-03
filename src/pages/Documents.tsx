@@ -168,9 +168,7 @@ export default function Documents() {
     }
     if (previewType === "application/pdf") {
       return (
-        <object data={previewUrl} type="application/pdf" className="w-full h-[70vh] rounded-lg">
-          <iframe src={`https://docs.google.com/gview?url=${encodeURIComponent(previewUrl)}&embedded=true`} className="w-full h-[70vh] rounded-lg border-0" title={previewTitle} />
-        </object>
+        <iframe src={previewUrl} className="w-full h-[70vh] rounded-lg border-0" title={previewTitle} />
       );
     }
     return (
