@@ -150,7 +150,7 @@ EOF_NGINX
 }
 
 write_update_script() {
-  cat > "$APP_DIR/update.sh" <<'EOF_UPDATE'
+cat > "$APP_DIR/update.sh" <<'EOF_UPDATE'
 #!/bin/bash
 set -euo pipefail
 
@@ -161,15 +161,13 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-echo "➡️  Atualizando AxisDocs..."
-git -C "$APP_DIR" fetch --all --prune
-git -C "$APP_DIR" pull --ff-only origin main || git -C "$APP_DIR" pull --ff-only origin master || true
+echo "➡️  Reconstruindo AxisDocs (sem sincronização externa)..."
 cd "$APP_DIR"
 npm install --no-fund --no-audit
 npm run build
 nginx -t
 systemctl reload nginx
-echo "✅ Atualização concluída!"
+echo "✅ Rebuild concluído!"
 EOF_UPDATE
 
   chmod +x "$APP_DIR/update.sh"
