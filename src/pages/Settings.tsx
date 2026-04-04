@@ -177,7 +177,7 @@ function ListManager({ itemLabel, tableName }: { itemLabel: string; tableName: "
                     {item.is_default && <span className="ml-2 text-xs text-muted-foreground">(padrão)</span>}
                     {!item.active && <span className="ml-2 text-xs text-destructive">(inativo)</span>}
                   </span>
-                  <Button size="icon" variant="ghost" onClick={() => startEdit(idx)}><Edit2 className="w-4 h-4" /></Button>
+                  {!item.is_default && <Button size="icon" variant="ghost" onClick={() => startEdit(idx)}><Edit2 className="w-4 h-4" /></Button>}
                   <Button
                     size="icon"
                     variant="ghost"
