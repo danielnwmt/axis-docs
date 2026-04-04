@@ -180,8 +180,8 @@ function BannerSection() {
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
-      const { data } = supabase.storage.from("settings").getPublicUrl("hero-banner");
-      setCurrentUrl(data.publicUrl + "?t=" + Date.now());
+      const { data } = await supabase.storage.from("settings").createSignedUrl("hero-banner", 3600);
+      if (data?.signedUrl) setCurrentUrl(data.signedUrl);
       toast({ title: "Banner atualizado com sucesso!" });
     }
     setUploading(false);
