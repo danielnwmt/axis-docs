@@ -55,8 +55,8 @@ export default function Upload() {
   useEffect(() => {
     const loadLists = async () => {
       const [catRes, unitRes] = await Promise.all([
-        supabase.from("categories").select("name").order("name"),
-        supabase.from("units").select("name").order("name"),
+        supabase.from("categories").select("name").eq("active", true).order("name"),
+        supabase.from("units").select("name").eq("active", true).order("name"),
       ]);
       if (catRes.data) setCategorias(catRes.data.map(c => c.name));
       if (unitRes.data) setUnidades(unitRes.data.map(u => u.name));
