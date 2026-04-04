@@ -1,10 +1,10 @@
 import { Composition } from "remotion";
-import { NetworkBackground } from "./NetworkBackground";
+import { ScanToCloud } from "./ScanToCloud";
 
 export const RemotionRoot = () => (
   <Composition
     id="main"
-    component={NetworkBackground}
+    component={ScanToCloud}
     durationInFrames={300}
     fps={30}
     width={1920}
