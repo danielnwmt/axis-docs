@@ -119,10 +119,11 @@ export default function Upload() {
     try {
       const { data, error } = await supabase.functions.invoke("serve-drive-file", {
         body: { driveFileId: existingFileDriveId, action: "view" },
+        headers: { Accept: fileType },
       });
       if (error) throw error;
 
-      const blob = new Blob([data], { type: fileType });
+      const blob = data instanceof Blob ? data : new Blob([data], { type: fileType });
       const blobUrl = URL.createObjectURL(blob);
 
       setPreviewUrl((currentUrl) => {
@@ -143,9 +144,10 @@ export default function Upload() {
     try {
       const { data, error } = await supabase.functions.invoke("serve-drive-file", {
         body: { driveFileId: existingFileDriveId, action: "download" },
+        headers: { Accept: "application/octet-stream" },
       });
       if (error) throw error;
-      const blob = new Blob([data]);
+      const blob = data instanceof Blob ? data : new Blob([data]);
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;

@@ -85,9 +85,10 @@ export default function Search() {
     try {
       const { data, error } = await supabase.functions.invoke("serve-drive-file", {
         body: { driveFileId, action: "download" },
+        headers: { Accept: "application/octet-stream" },
       });
       if (error) throw error;
-      const blob = new Blob([data]);
+      const blob = data instanceof Blob ? data : new Blob([data]);
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = blobUrl;
