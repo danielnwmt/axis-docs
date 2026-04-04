@@ -453,32 +453,6 @@ export const ScanToCloud: React.FC = () => {
         )}
       </svg>
 
-      {/* ─── Axis Logo (centered, appears with spring) ─── */}
-      {logoOpacity > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: `translate(-50%, -50%) scale(${logoScale * 0.6})`,
-            opacity: logoOpacity * interpolate(
-              frame,
-              [phase3Start, phase3Start + 30, durationInFrames - 30, durationInFrames],
-              [0, 1, 1, 0.8],
-              { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-            ),
-          }}
-        >
-          <Img
-            src={staticFile("images/axis-logo.jpeg")}
-            style={{
-              width: 600,
-              height: "auto",
-              filter: `drop-shadow(0 0 30px rgba(0,150,255,0.3)) drop-shadow(0 0 60px rgba(0,100,200,0.15))`,
-            }}
-          />
-        </div>
-      )}
 
       {/* Vignette */}
       <AbsoluteFill
