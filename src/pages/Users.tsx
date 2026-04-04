@@ -327,6 +327,24 @@ export default function Users() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!resetTarget} onOpenChange={(open) => { if (!open) { setResetTarget(null); setNewPassword(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Alterar Senha</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Definir nova senha para <strong>{resetTarget?.email}</strong></p>
+          <form onSubmit={(e) => { e.preventDefault(); handleResetPassword(); }} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nova Senha</Label>
+              <Input type="password" placeholder="Mínimo 6 caracteres" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} />
+            </div>
+            <Button type="submit" className="w-full" disabled={resetLoading}>
+              {resetLoading ? "Alterando..." : "Alterar Senha"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
