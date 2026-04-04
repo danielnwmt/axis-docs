@@ -159,10 +159,11 @@ function BannerSection() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const { data } = supabase.storage.from("settings").getPublicUrl("hero-banner");
-    fetch(data.publicUrl + "?t=" + Date.now(), { method: "HEAD", cache: "no-store" }).then((res) => {
-      if (res.ok) setCurrentUrl(data.publicUrl + "?t=" + Date.now());
-    }).catch(() => {});
+    const loadBanner = async () => {
+      const { data, error } = await supabase.storage.from("settings").createSignedUrl("hero-banner", 3600);
+      if (!error && data?.signedUrl) setCurrentUrl(data.signedUrl);
+    };
+    loadBanner();
   }, []);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -179,8 +180,8 @@ function BannerSection() {
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
-      const { data } = supabase.storage.from("settings").getPublicUrl("hero-banner");
-      setCurrentUrl(data.publicUrl + "?t=" + Date.now());
+      const { data } = await supabase.storage.from("settings").createSignedUrl("hero-banner", 3600);
+      if (data?.signedUrl) setCurrentUrl(data.signedUrl);
       toast({ title: "Banner atualizado com sucesso!" });
     }
     setUploading(false);
