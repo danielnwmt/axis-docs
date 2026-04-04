@@ -52,15 +52,7 @@ export default function Login() {
       <div className="absolute inset-0 bg-primary/60 z-0" />
       <div className="w-full max-w-md bg-card/30 backdrop-blur-md rounded-2xl shadow-xl p-8 animate-fade-in relative z-10 border border-white/20">
         <div className="text-center mb-8">
-          <img src={axisLogo} alt="Axis Docs" className="h-12 mx-auto mb-4" />
-          <h1 className="font-display text-2xl font-bold text-foreground">
-            {isResetting ? "Recuperar Senha" : "Entrar"}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {isResetting
-              ? "Informe seu e-mail para redefinir a senha"
-              : "Digitalize, encontre, controle"}
-          </p>
+          <img src={axisLogo} alt="Axis Docs" className="h-14 mx-auto" />
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4">
