@@ -380,6 +380,7 @@ main_install() {
   install_nodejs
   install_ssl_packages
   prepare_app_files
+  write_env_file
   build_frontend
   configure_nginx
   enable_ssl
