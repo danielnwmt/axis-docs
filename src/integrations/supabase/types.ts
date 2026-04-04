@@ -49,18 +49,24 @@ export type Database = {
       }
       categories: {
         Row: {
+          active: boolean
           created_at: string
           id: string
+          is_default: boolean
           name: string
         }
         Insert: {
+          active?: boolean
           created_at?: string
           id?: string
+          is_default?: boolean
           name: string
         }
         Update: {
+          active?: boolean
           created_at?: string
           id?: string
+          is_default?: boolean
           name?: string
         }
         Relationships: []
@@ -160,18 +166,24 @@ export type Database = {
       }
       units: {
         Row: {
+          active: boolean
           created_at: string
           id: string
+          is_default: boolean
           name: string
         }
         Insert: {
+          active?: boolean
           created_at?: string
           id?: string
+          is_default?: boolean
           name: string
         }
         Update: {
+          active?: boolean
           created_at?: string
           id?: string
+          is_default?: boolean
           name?: string
         }
         Relationships: []
