@@ -147,6 +147,25 @@ export default function Users() {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!resetTarget || !newPassword) return;
+    setResetLoading(true);
+    try {
+      const response = await supabase.functions.invoke("create-user?action=reset-password", {
+        body: { userId: resetTarget.id, newPassword },
+      });
+      if (response.error) throw new Error(response.error.message);
+      if (response.data?.error) throw new Error(response.data.error);
+      toast({ title: "Senha alterada", description: `Senha de ${resetTarget.email} foi alterada com sucesso.` });
+      setResetTarget(null);
+      setNewPassword("");
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="flex items-center justify-between mb-6">
