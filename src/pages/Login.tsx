@@ -52,7 +52,7 @@ export default function Login() {
       <div className="absolute inset-0 bg-primary/60 z-0" />
       <div className="w-full max-w-md bg-card/30 backdrop-blur-md rounded-2xl shadow-xl p-8 animate-fade-in relative z-10 border border-white/20">
         <div className="text-center mb-8">
-          <img src={axisLogo} alt="Axis Docs" className="h-36 mx-auto" />
+          <img src={axisLogo} alt="Axis Docs" className="h-36 mx-auto mix-blend-screen" />
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4">
