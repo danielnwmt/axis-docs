@@ -63,6 +63,9 @@ export default function Users() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null);
+  const [resetTarget, setResetTarget] = useState<UserProfile | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
 
