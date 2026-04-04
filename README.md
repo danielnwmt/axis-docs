@@ -2,50 +2,47 @@
 
 ## Instalação no Ubuntu
 
-Cada instalação é **independente** — possui seu próprio banco de dados e usuários.
+Cada instalação é **100% independente e local** — possui seu próprio banco de dados PostgreSQL rodando via Docker no servidor.
 
 ### Requisitos
 - Ubuntu 22.04+ ou 24.04+
 - Acesso root (sudo)
-- Conexão com a internet
-- Um projeto Supabase (gratuito em https://supabase.com)
+- Conexão com a internet (para download inicial)
+- Mínimo 2GB RAM (Docker + PostgreSQL)
 - Domínio apontado para o servidor (opcional, apenas para SSL)
 
-### 1. Criar o Banco de Dados
-
-1. Crie um projeto gratuito em [supabase.com](https://supabase.com)
-2. No **SQL Editor** do projeto, execute o conteúdo do arquivo `scripts/setup-database.sql`
-3. Anote a **URL do projeto** e a **Anon Key** (em Settings → API)
-
-### 2. Instalar no Servidor
+### Instalar no Servidor
 
 ```bash
 sudo bash install.sh
 ```
 
-O instalador pedirá:
-- **Domínio** (opcional, para SSL)
-- **URL do Supabase** (ex: `https://xxxxx.supabase.co`)
-- **Anon Key do Supabase**
+O instalador faz tudo automaticamente:
+1. Instala Docker, Node.js e Nginx
+2. Sobe um banco de dados PostgreSQL local (Supabase self-hosted)
+3. Configura o schema, políticas de segurança e dados padrão
+4. Compila o frontend e configura o Nginx
+5. Configura SSL automaticamente (se um domínio for informado)
 
-Ou passe tudo via variáveis de ambiente:
+O único dado opcional solicitado é o **domínio** (para SSL).
+
+Ou passe via variável de ambiente:
 
 ```bash
-sudo SUPABASE_URL=https://xxxxx.supabase.co \
-     SUPABASE_ANON_KEY=eyJhbGciOi... \
-     APP_DOMAIN=docs.seudominio.com \
-     bash install.sh
+sudo APP_DOMAIN=docs.seudominio.com bash install.sh
 ```
 
-### 3. Criar o Primeiro Usuário Administrador
+### Criar o Primeiro Usuário Administrador
 
-Após a instalação, crie o primeiro usuário no painel do Supabase:
+Após a instalação, conecte-se ao banco local e crie o primeiro usuário:
 
-1. Em **Authentication → Users**, clique em "Add user"
-2. Informe e-mail e senha
-3. No **SQL Editor**, promova para administrador:
+```bash
+# Acesse o banco local
+PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres
+```
 
 ```sql
+-- Após o primeiro usuário se cadastrar, promova para admin:
 UPDATE public.profiles SET role = 'Administrador' WHERE email = 'seuemail@exemplo.com';
 ```
 
@@ -58,7 +55,7 @@ UPDATE public.profiles SET role = 'Administrador' WHERE email = 'seuemail@exempl
 | Comando | Descrição |
 |---------|-----------|
 | `sudo bash /opt/axisdocs/update.sh` | Reconstruir localmente |
-| `sudo bash /opt/axisdocs/uninstall.sh` | Remover instalação |
+| `sudo bash /opt/axisdocs/uninstall.sh` | Remover instalação completa |
 
 ### PWA
 O sistema pode ser instalado como aplicativo no navegador (Chrome/Edge) clicando em "Instalar" na barra de endereços.
@@ -66,12 +63,17 @@ O sistema pode ser instalado como aplicativo no navegador (Chrome/Edge) clicando
 ### Arquitetura
 
 ```
-Servidor Ubuntu (local)         Supabase (nuvem)
-┌─────────────────────┐        ┌──────────────────┐
-│  Nginx + Frontend   │◄──────►│  Banco de Dados  │
-│  (React/Vite)       │  API   │  Autenticação    │
-│                     │        │  Storage         │
-└─────────────────────┘        └──────────────────┘
+Servidor Ubuntu (tudo local)
+┌─────────────────────────────────────┐
+│  Nginx (porta 80/443)              │
+│  └─ Frontend React/Vite            │
+│                                     │
+│  Docker                            │
+│  ├─ PostgreSQL (porta 54322)       │
+│  ├─ Supabase Auth                  │
+│  ├─ Supabase REST API (porta 54321)│
+│  └─ Supabase Storage              │
+└─────────────────────────────────────┘
 ```
 
-Cada instalação aponta para seu próprio projeto Supabase. Dados não são compartilhados entre instalações.
+Nenhum dado sai do servidor. Cada instalação é completamente isolada.
