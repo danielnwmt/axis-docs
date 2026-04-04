@@ -6,7 +6,7 @@ export function HeroBanner() {
       <img
         src={heroBanner}
         alt="Axis Docs - Gestão Inteligente de Documentos e Informações"
-        className="w-full h-auto object-cover"
+        className="w-full h-[160px] object-cover object-center"
       />
     </div>
   );
