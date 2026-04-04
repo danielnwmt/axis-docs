@@ -1,39 +1,29 @@
 import { FolderOpen } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-interface CategoryStat {
-  name: string;
-  count: number;
-  percentage: number;
-}
-
 export function FrequentCategories() {
-  const [categories, setCategories] = useState<CategoryStat[]>([]);
-
-  useEffect(() => {
-    const fetchCategories = async () => {
+  const { data: categories = [] } = useQuery({
+    queryKey: ["frequent-categories"],
+    queryFn: async () => {
       const { data } = await supabase.from("documents").select("category");
-      if (data) {
-        const counts: Record<string, number> = {};
-        data.forEach((d) => {
-          const cat = d.category || "Sem categoria";
-          counts[cat] = (counts[cat] || 0) + 1;
-        });
-        const max = Math.max(...Object.values(counts), 1);
-        const sorted = Object.entries(counts)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5)
-          .map(([name, count]) => ({
-            name,
-            count,
-            percentage: Math.round((count / max) * 100),
-          }));
-        setCategories(sorted);
-      }
-    };
-    fetchCategories();
-  }, []);
+      if (!data) return [];
+      const counts: Record<string, number> = {};
+      data.forEach((d) => {
+        const cat = d.category || "Sem categoria";
+        counts[cat] = (counts[cat] || 0) + 1;
+      });
+      const max = Math.max(...Object.values(counts), 1);
+      return Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name, count]) => ({
+          name,
+          count,
+          percentage: Math.round((count / max) * 100),
+        }));
+    },
+  });
 
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm animate-fade-in h-full">

@@ -1,17 +1,9 @@
-import { FileText, Clock, CheckCircle, AlertCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { FileText, Clock } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
-
-interface Doc {
-  title: string;
-  category: string;
-  date: string;
-  ocrStatus: string;
-  signStatus: string;
-}
 
 function StatusBadge({ signStatus }: { signStatus: string }) {
   if (signStatus === "assinado") {
@@ -29,31 +21,25 @@ function StatusBadge({ signStatus }: { signStatus: string }) {
 }
 
 export function RecentDocuments() {
-  const [docs, setDocs] = useState<Doc[]>([]);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchDocs = async () => {
+  const { data: docs = [] } = useQuery({
+    queryKey: ["recent-documents"],
+    queryFn: async () => {
       const { data } = await supabase
         .from("documents")
         .select("title, category, created_at, ocr_status, sign_status")
         .order("created_at", { ascending: false })
         .limit(5);
-
-      if (data) {
-        setDocs(
-          data.map((d) => ({
-            title: d.title,
-            category: d.category || "Sem categoria",
-            date: format(new Date(d.created_at), "dd/MM/yyyy", { locale: ptBR }),
-            ocrStatus: d.ocr_status,
-            signStatus: d.sign_status,
-          }))
-        );
-      }
-    };
-    fetchDocs();
-  }, []);
+      return (data || []).map((d) => ({
+        title: d.title,
+        category: d.category || "Sem categoria",
+        date: format(new Date(d.created_at), "dd/MM/yyyy", { locale: ptBR }),
+        ocrStatus: d.ocr_status,
+        signStatus: d.sign_status,
+      }));
+    },
+  });
 
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm animate-fade-in">
