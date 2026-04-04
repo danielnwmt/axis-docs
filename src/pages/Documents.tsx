@@ -86,10 +86,11 @@ export default function Documents() {
     try {
       const { data, error } = await supabase.functions.invoke("serve-drive-file", {
         body: { driveFileId: doc.drive_file_id, action: "view" },
+        headers: { Accept: doc.file_type || "application/octet-stream" },
       });
       if (error) throw error;
 
-      const blob = new Blob([data], { type: doc.file_type || "application/octet-stream" });
+      const blob = data instanceof Blob ? data : new Blob([data], { type: doc.file_type || "application/octet-stream" });
       const blobUrl = URL.createObjectURL(blob);
 
       setPreviewType(doc.file_type || "application/octet-stream");
