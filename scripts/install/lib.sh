@@ -57,27 +57,23 @@ collect_install_options() {
   sanitize_domain
 
   if [ -z "$APP_DOMAIN" ] && [ -t 0 ]; then
-    printf "Domínio para configurar com SSL (opcional, deixe vazio para usar apenas IP/local): "
+    printf "Domínio (ex: docs.empresa.com) — deixe vazio para usar apenas IP: "
     read -r APP_DOMAIN
     sanitize_domain
   fi
 
   if [ -n "$APP_DOMAIN" ]; then
     if [ "$APP_DOMAIN" = "localhost" ] || printf '%s' "$APP_DOMAIN" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
-      fail "Informe um domínio válido para SSL, não IP ou localhost"
+      fail "Informe um domínio válido, não IP ou localhost"
     fi
 
-    if [ -z "$SSL_EMAIL" ] && [ -t 0 ]; then
-      printf "Email para emissão do SSL Let's Encrypt: "
-      read -r SSL_EMAIL
+    # Gera email automaticamente a partir do domínio
+    if [ -z "$SSL_EMAIL" ]; then
+      SSL_EMAIL="admin@$APP_DOMAIN"
     fi
-
-    case "$SSL_EMAIL" in
-      *@*.*) ;;
-      *) fail "Informe um email válido em SSL_EMAIL para emitir o certificado" ;;
-    esac
 
     SERVER_HOST="$APP_DOMAIN"
+    log "SSL será configurado automaticamente para $APP_DOMAIN (email: $SSL_EMAIL)"
   fi
 }
 
