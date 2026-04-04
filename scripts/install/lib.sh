@@ -184,6 +184,16 @@ prepare_app_files() {
   success "Arquivos locais copiados para $APP_DIR"
 }
 
+write_env_file() {
+  log "Gerando arquivo .env para esta instalação"
+  cat > "$APP_DIR/.env" <<EOF_ENV
+VITE_SUPABASE_URL=$SUPABASE_URL
+VITE_SUPABASE_PUBLISHABLE_KEY=$SUPABASE_ANON_KEY
+VITE_SUPABASE_PROJECT_ID=${SUPABASE_PROJECT_ID:-}
+EOF_ENV
+  success "Arquivo .env gerado com credenciais do backend"
+}
+
 build_frontend() {
   log "Instalando dependências do projeto"
   cd "$APP_DIR"
