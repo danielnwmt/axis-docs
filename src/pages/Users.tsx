@@ -77,7 +77,7 @@ export default function Users() {
   };
 
   const fetchUnits = async () => {
-    const { data } = await supabase.from("units").select("id, name").order("name");
+    const { data } = await supabase.from("units").select("id, name").eq("active", true).order("name");
     if (data) setUnits(data);
   };
 

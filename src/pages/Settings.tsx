@@ -60,15 +60,16 @@ function OrgaoSection() {
 
 
 function ListManager({ itemLabel, tableName }: { itemLabel: string; tableName: "categories" | "units" }) {
-  const [items, setItems] = useState<{ id: string; name: string }[]>([]);
+  const [items, setItems] = useState<{ id: string; name: string; active: boolean; is_default: boolean }[]>([]);
   const [newItem, setNewItem] = useState("");
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
   const [loading, setLoading] = useState(true);
+  const [showInactive, setShowInactive] = useState(false);
 
   const fetchItems = async () => {
-    const { data } = await supabase.from(tableName).select("id, name").order("name");
-    if (data) setItems(data);
+    const { data } = await supabase.from(tableName).select("id, name, active, is_default").order("name");
+    if (data) setItems(data as { id: string; name: string; active: boolean; is_default: boolean }[]);
     setLoading(false);
   };
 
@@ -86,8 +87,24 @@ function ListManager({ itemLabel, tableName }: { itemLabel: string; tableName: "
     fetchItems();
   };
 
+  const toggleActive = async (idx: number) => {
+    const item = items[idx];
+    const { error } = await supabase.from(tableName).update({ active: !item.active }).eq("id", item.id);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: item.active ? `${itemLabel} inativado(a)!` : `${itemLabel} ativado(a)!` });
+    fetchItems();
+  };
+
   const removeItem = async (idx: number) => {
-    const { error } = await supabase.from(tableName).delete().eq("id", items[idx].id);
+    const item = items[idx];
+    if (item.is_default) {
+      toast({ title: "Não permitido", description: "Itens padrão do sistema não podem ser excluídos, apenas inativados.", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from(tableName).delete().eq("id", item.id);
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
       return;
@@ -113,6 +130,8 @@ function ListManager({ itemLabel, tableName }: { itemLabel: string; tableName: "
     fetchItems();
   };
 
+  const filteredItems = showInactive ? items : items.filter(i => i.active);
+
   return (
     <div className="space-y-4 max-w-xl">
       <div className="flex gap-2">
@@ -126,28 +145,55 @@ function ListManager({ itemLabel, tableName }: { itemLabel: string; tableName: "
           <Plus className="w-4 h-4 mr-1" /> Adicionar
         </Button>
       </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="showInactive"
+          checked={showInactive}
+          onChange={(e) => setShowInactive(e.target.checked)}
+          className="rounded border-border"
+        />
+        <Label htmlFor="showInactive" className="text-sm text-muted-foreground cursor-pointer">Mostrar inativos</Label>
+      </div>
       {loading && <p className="text-sm text-muted-foreground">Carregando...</p>}
-      {!loading && items.length === 0 && (
+      {!loading && filteredItems.length === 0 && (
         <p className="text-sm text-muted-foreground">Nenhum(a) {itemLabel.toLowerCase()} cadastrado(a).</p>
       )}
       <div className="space-y-2">
-        {items.map((item, idx) => (
-          <div key={item.id} className="flex items-center gap-2 bg-secondary/50 rounded-lg px-3 py-2">
-            {editingIdx === idx ? (
-              <>
-                <Input value={editValue} onChange={(e) => setEditValue(e.target.value)} className="h-8" onKeyDown={(e) => e.key === "Enter" && saveEdit()} />
-                <Button size="icon" variant="ghost" onClick={saveEdit}><Save className="w-4 h-4" /></Button>
-                <Button size="icon" variant="ghost" onClick={() => setEditingIdx(null)}><X className="w-4 h-4" /></Button>
-              </>
-            ) : (
-              <>
-                <span className="flex-1 text-sm text-foreground">{item.name}</span>
-                <Button size="icon" variant="ghost" onClick={() => startEdit(idx)}><Edit2 className="w-4 h-4" /></Button>
-                <Button size="icon" variant="ghost" onClick={() => removeItem(idx)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-              </>
-            )}
-          </div>
-        ))}
+        {filteredItems.map((item) => {
+          const idx = items.indexOf(item);
+          return (
+            <div key={item.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 ${item.active ? "bg-secondary/50" : "bg-secondary/20 opacity-60"}`}>
+              {editingIdx === idx ? (
+                <>
+                  <Input value={editValue} onChange={(e) => setEditValue(e.target.value)} className="h-8" onKeyDown={(e) => e.key === "Enter" && saveEdit()} />
+                  <Button size="icon" variant="ghost" onClick={saveEdit}><Save className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="ghost" onClick={() => setEditingIdx(null)}><X className="w-4 h-4" /></Button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 text-sm text-foreground">
+                    {item.name}
+                    {item.is_default && <span className="ml-2 text-xs text-muted-foreground">(padrão)</span>}
+                    {!item.active && <span className="ml-2 text-xs text-destructive">(inativo)</span>}
+                  </span>
+                  <Button size="icon" variant="ghost" onClick={() => startEdit(idx)}><Edit2 className="w-4 h-4" /></Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => toggleActive(idx)}
+                    title={item.active ? "Inativar" : "Ativar"}
+                  >
+                    {item.active ? <X className="w-4 h-4 text-warning" /> : <Save className="w-4 h-4 text-primary" />}
+                  </Button>
+                  {!item.is_default && (
+                    <Button size="icon" variant="ghost" onClick={() => removeItem(idx)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
