@@ -49,7 +49,16 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-primary p-4">
+    <div className="min-h-screen flex items-center justify-center bg-primary p-4 relative overflow-hidden">
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover z-0"
+        src="/videos/login-bg.mp4"
+      />
+      <div className="absolute inset-0 bg-primary/60 z-0" />
       <div className="w-full max-w-md bg-card rounded-2xl shadow-xl p-8 animate-fade-in">
         <div className="text-center mb-8">
           <img src={axisLogo} alt="Axis Docs" className="h-12 mx-auto mb-4" />
