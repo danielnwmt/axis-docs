@@ -102,6 +102,15 @@ build_frontend() {
 configure_nginx() {
   log "Configurando Nginx"
 
+  # Remove ALL possible default configs (Ubuntu 22/24)
+  rm -f /etc/nginx/sites-enabled/default
+  rm -f /etc/nginx/sites-available/default
+  rm -f /etc/nginx/conf.d/default.conf
+  rm -f /etc/nginx/conf.d/default
+
+  # Ensure directories exist
+  mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+
   cat > /etc/nginx/sites-available/axisdocs <<EOF_NGINX
 server {
     listen 80 default_server;
@@ -129,8 +138,11 @@ server {
 EOF_NGINX
 
   ln -sfn /etc/nginx/sites-available/axisdocs /etc/nginx/sites-enabled/axisdocs
-  rm -f /etc/nginx/sites-enabled/default
-  rm -f /etc/nginx/sites-available/default
+
+  # Ensure nginx.conf includes sites-enabled
+  if ! grep -q "include /etc/nginx/sites-enabled" /etc/nginx/nginx.conf 2>/dev/null; then
+    sed -i '/http {/a \    include /etc/nginx/sites-enabled/*;' /etc/nginx/nginx.conf
+  fi
 
   nginx -t
   systemctl restart nginx
