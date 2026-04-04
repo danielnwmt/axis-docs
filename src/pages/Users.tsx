@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Users as UsersIcon, Plus, MoreVertical, Trash2, ToggleLeft, ToggleRight, Check, ChevronsUpDown } from "lucide-react";
+import { Users as UsersIcon, Plus, MoreVertical, Trash2, ToggleLeft, ToggleRight, Check, ChevronsUpDown, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
