@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SUPABASE_DIR="/opt/supabase-local"
+
 print_header() {
   echo ""
   echo "╔══════════════════════════════════════════╗"
@@ -67,7 +69,6 @@ collect_install_options() {
       fail "Informe um domínio válido, não IP ou localhost"
     fi
 
-    # Gera email automaticamente a partir do domínio
     if [ -z "$SSL_EMAIL" ]; then
       SSL_EMAIL="admin@$APP_DOMAIN"
     fi
@@ -76,54 +77,34 @@ collect_install_options() {
     log "SSL será configurado automaticamente para $APP_DOMAIN (email: $SSL_EMAIL)"
   fi
 
-  # Configuração do backend (Supabase) independente por instalação
-  echo ""
-  echo "╔══════════════════════════════════════════╗"
-  echo "║  Configuração do Backend (Supabase)      ║"
-  echo "╚══════════════════════════════════════════╝"
-  echo ""
-  echo "Cada instalação precisa de seu próprio projeto Supabase."
-  echo "Crie um projeto gratuito em https://supabase.com ou use Supabase self-hosted."
-  echo ""
-
-  if [ -z "${SUPABASE_URL:-}" ] && [ -t 0 ]; then
-    printf "URL do Supabase (ex: https://xxxxx.supabase.co): "
-    read -r SUPABASE_URL
-  fi
-
-  if [ -z "${SUPABASE_URL:-}" ]; then
-    fail "URL do Supabase é obrigatória"
-  fi
-
-  if [ -z "${SUPABASE_ANON_KEY:-}" ] && [ -t 0 ]; then
-    printf "Anon Key do Supabase: "
-    read -r SUPABASE_ANON_KEY
-  fi
-
-  if [ -z "${SUPABASE_ANON_KEY:-}" ]; then
-    fail "Anon Key do Supabase é obrigatória"
-  fi
-
-  if [ -z "${SUPABASE_PROJECT_ID:-}" ]; then
-    # Extrai o project ref da URL automaticamente
-    SUPABASE_PROJECT_ID=$(echo "$SUPABASE_URL" | sed -n 's|https://\([^.]*\)\.supabase\.co|\1|p')
-  fi
-
-  if [ -z "${SUPABASE_PROJECT_ID:-}" ] && [ -t 0 ]; then
-    printf "Project ID do Supabase: "
-    read -r SUPABASE_PROJECT_ID
-  fi
-
-  success "Backend configurado: $SUPABASE_URL"
+  success "Opções coletadas"
 }
 
 install_base_packages() {
   log "Atualizando pacotes do sistema"
   apt-get update -qq
-  apt-get install -y -qq ca-certificates curl gnupg nginx
+  apt-get install -y -qq ca-certificates curl gnupg nginx jq
   systemctl enable nginx >/dev/null 2>&1 || true
   systemctl start nginx
   success "Dependências base instaladas"
+}
+
+install_docker() {
+  if command -v docker >/dev/null 2>&1; then
+    success "Docker já instalado: $(docker --version)"
+  else
+    log "Instalando Docker"
+    curl -fsSL https://get.docker.com | sh
+    systemctl enable docker
+    systemctl start docker
+    success "Docker instalado: $(docker --version)"
+  fi
+
+  if ! docker compose version >/dev/null 2>&1; then
+    log "Instalando Docker Compose plugin"
+    apt-get install -y -qq docker-compose-plugin
+  fi
+  success "Docker Compose disponível"
 }
 
 install_nodejs() {
@@ -145,6 +126,69 @@ install_nodejs() {
   apt-get update -qq
   apt-get install -y -qq nodejs
   success "Node.js $(node -v) instalado"
+}
+
+install_supabase_cli() {
+  if command -v supabase >/dev/null 2>&1; then
+    success "Supabase CLI já instalado"
+    return
+  fi
+
+  log "Instalando Supabase CLI"
+  npm install -g supabase
+  success "Supabase CLI instalado"
+}
+
+setup_local_supabase() {
+  log "Configurando Supabase local"
+
+  mkdir -p "$SUPABASE_DIR"
+
+  # Inicializa projeto Supabase se não existir
+  if [ ! -f "$SUPABASE_DIR/supabase/config.toml" ]; then
+    cd "$SUPABASE_DIR"
+    supabase init
+  fi
+
+  cd "$SUPABASE_DIR"
+
+  # Para instância anterior se existir
+  supabase stop --no-backup 2>/dev/null || true
+
+  log "Iniciando Supabase local (pode levar alguns minutos na primeira vez)..."
+  supabase start
+
+  # Extrai credenciais automaticamente
+  local status_json
+  status_json=$(supabase status -o json)
+
+  SUPABASE_URL=$(echo "$status_json" | jq -r '.API_URL // .api_url // .API // empty')
+  SUPABASE_ANON_KEY=$(echo "$status_json" | jq -r '.ANON_KEY // .anon_key // empty')
+  SUPABASE_SERVICE_ROLE_KEY=$(echo "$status_json" | jq -r '.SERVICE_ROLE_KEY // .service_role_key // empty')
+  local DB_URL
+  DB_URL=$(echo "$status_json" | jq -r '.DB_URL // .db_url // empty')
+
+  if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+    fail "Não foi possível extrair credenciais do Supabase local. Verifique se o Docker está funcionando."
+  fi
+
+  SUPABASE_PROJECT_ID="local"
+
+  success "Supabase local rodando em $SUPABASE_URL"
+
+  # Executa o setup do banco de dados
+  if [ -f "$SOURCE_DIR/scripts/setup-database.sql" ]; then
+    log "Executando setup do banco de dados..."
+    if [ -n "$DB_URL" ]; then
+      psql "$DB_URL" -f "$SOURCE_DIR/scripts/setup-database.sql"
+    else
+      # Fallback: usa a porta padrão do Supabase local
+      PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -f "$SOURCE_DIR/scripts/setup-database.sql"
+    fi
+    success "Banco de dados configurado"
+  else
+    log "⚠️  Arquivo setup-database.sql não encontrado. Configure o banco manualmente."
+  fi
 }
 
 install_ssl_packages() {
@@ -189,9 +233,9 @@ write_env_file() {
   cat > "$APP_DIR/.env" <<EOF_ENV
 VITE_SUPABASE_URL=$SUPABASE_URL
 VITE_SUPABASE_PUBLISHABLE_KEY=$SUPABASE_ANON_KEY
-VITE_SUPABASE_PROJECT_ID=${SUPABASE_PROJECT_ID:-}
+VITE_SUPABASE_PROJECT_ID=${SUPABASE_PROJECT_ID:-local}
 EOF_ENV
-  success "Arquivo .env gerado com credenciais do backend"
+  success "Arquivo .env gerado com credenciais do backend local"
 }
 
 build_frontend() {
@@ -314,6 +358,7 @@ write_uninstall_script() {
 set -euo pipefail
 
 APP_DIR="/opt/axisdocs"
+SUPABASE_DIR="/opt/supabase-local"
 
 if [ "$EUID" -ne 0 ]; then
   echo "❌ Execute como root: sudo bash uninstall.sh"
@@ -321,15 +366,49 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 echo "➡️  Removendo AxisDocs..."
+
+# Para o Supabase local
+if command -v supabase >/dev/null 2>&1 && [ -d "$SUPABASE_DIR" ]; then
+  echo "➡️  Parando Supabase local..."
+  cd "$SUPABASE_DIR"
+  supabase stop --no-backup 2>/dev/null || true
+fi
+
 rm -f /etc/nginx/sites-enabled/axisdocs
 rm -f /etc/nginx/sites-available/axisdocs
 nginx -t >/dev/null 2>&1 && systemctl restart nginx || true
 rm -rf "$APP_DIR"
+rm -rf "$SUPABASE_DIR"
 echo "✅ AxisDocs removido com sucesso!"
-echo "ℹ️  Nginx e Node.js continuam instalados no servidor."
+echo "ℹ️  Nginx, Node.js e Docker continuam instalados no servidor."
 EOF_UNINSTALL
 
   chmod +x "$APP_DIR/uninstall.sh"
+}
+
+write_supabase_service() {
+  log "Criando serviço systemd para Supabase local"
+  cat > /etc/systemd/system/supabase-local.service <<EOF_SERVICE
+[Unit]
+Description=Supabase Local
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=$SUPABASE_DIR
+ExecStart=$(which supabase) start
+ExecStop=$(which supabase) stop --no-backup
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
+EOF_SERVICE
+
+  systemctl daemon-reload
+  systemctl enable supabase-local
+  success "Serviço supabase-local criado e habilitado para iniciar no boot"
 }
 
 verify_installation() {
@@ -362,6 +441,8 @@ print_success() {
   echo "║                                          ║"
   echo "║  🌐 Acesse: $access_url"
   echo "║                                          ║"
+  echo "║  📦 Supabase local: $SUPABASE_URL"
+  echo "║                                          ║"
   echo "║  Comandos úteis:                         ║"
   echo "║  sudo bash $APP_DIR/update.sh"
   echo "║  sudo bash $APP_DIR/uninstall.sh"
@@ -377,13 +458,17 @@ main_install() {
   collect_install_options
   clean_previous
   install_base_packages
+  install_docker
   install_nodejs
+  install_supabase_cli
+  setup_local_supabase
   install_ssl_packages
   prepare_app_files
   write_env_file
   build_frontend
   configure_nginx
   enable_ssl
+  write_supabase_service
   write_update_script
   write_uninstall_script
   verify_installation
