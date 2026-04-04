@@ -223,6 +223,9 @@ export default function Users() {
                             <><ToggleRight className="w-4 h-4 mr-2" /> Ativar</>
                           )}
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setResetTarget(user)}>
+                          <KeyRound className="w-4 h-4 mr-2" /> Alterar Senha
+                        </DropdownMenuItem>
                         <DropdownMenuItem className="text-destructive" onClick={() => setDeleteTarget(user)}>
                           <Trash2 className="w-4 h-4 mr-2" /> Excluir
                         </DropdownMenuItem>
