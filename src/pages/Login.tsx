@@ -10,7 +10,6 @@ import axisLogo from "@/assets/axis-logo.png";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isSignUp, setIsSignUp] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -28,14 +27,6 @@ export default function Login() {
         if (error) throw error;
         toast({ title: "E-mail enviado", description: "Verifique sua caixa de entrada para redefinir a senha." });
         setIsResetting(false);
-      } else if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin },
-        });
-        if (error) throw error;
-        toast({ title: "Conta criada!", description: "Verifique seu e-mail para confirmar o cadastro." });
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -63,7 +54,7 @@ export default function Login() {
         <div className="text-center mb-8">
           <img src={axisLogo} alt="Axis Docs" className="h-12 mx-auto mb-4" />
           <h1 className="font-display text-2xl font-bold text-foreground">
-            {isResetting ? "Recuperar Senha" : isSignUp ? "Criar Conta" : "Entrar"}
+            {isResetting ? "Recuperar Senha" : "Entrar"}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             {isResetting
@@ -105,33 +96,19 @@ export default function Login() {
               ? "Carregando..."
               : isResetting
               ? "Enviar Link"
-              : isSignUp
-              ? "Criar Conta"
               : "Entrar"}
           </Button>
         </form>
 
         <div className="mt-6 text-center space-y-2">
-          {!isResetting && (
+          {!isResetting ? (
             <button
               onClick={() => setIsResetting(true)}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Esqueceu a senha?
             </button>
-          )}
-          <div>
-            <button
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setIsResetting(false);
-              }}
-              className="text-sm text-accent hover:text-accent/80 font-medium transition-colors"
-            >
-              {isSignUp ? "Já tem conta? Entrar" : "Criar nova conta"}
-            </button>
-          </div>
-          {isResetting && (
+          ) : (
             <button
               onClick={() => setIsResetting(false)}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
