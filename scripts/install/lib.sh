@@ -75,6 +75,46 @@ collect_install_options() {
     SERVER_HOST="$APP_DOMAIN"
     log "SSL será configurado automaticamente para $APP_DOMAIN (email: $SSL_EMAIL)"
   fi
+
+  # Configuração do backend (Supabase) independente por instalação
+  echo ""
+  echo "╔══════════════════════════════════════════╗"
+  echo "║  Configuração do Backend (Supabase)      ║"
+  echo "╚══════════════════════════════════════════╝"
+  echo ""
+  echo "Cada instalação precisa de seu próprio projeto Supabase."
+  echo "Crie um projeto gratuito em https://supabase.com ou use Supabase self-hosted."
+  echo ""
+
+  if [ -z "${SUPABASE_URL:-}" ] && [ -t 0 ]; then
+    printf "URL do Supabase (ex: https://xxxxx.supabase.co): "
+    read -r SUPABASE_URL
+  fi
+
+  if [ -z "${SUPABASE_URL:-}" ]; then
+    fail "URL do Supabase é obrigatória"
+  fi
+
+  if [ -z "${SUPABASE_ANON_KEY:-}" ] && [ -t 0 ]; then
+    printf "Anon Key do Supabase: "
+    read -r SUPABASE_ANON_KEY
+  fi
+
+  if [ -z "${SUPABASE_ANON_KEY:-}" ]; then
+    fail "Anon Key do Supabase é obrigatória"
+  fi
+
+  if [ -z "${SUPABASE_PROJECT_ID:-}" ]; then
+    # Extrai o project ref da URL automaticamente
+    SUPABASE_PROJECT_ID=$(echo "$SUPABASE_URL" | sed -n 's|https://\([^.]*\)\.supabase\.co|\1|p')
+  fi
+
+  if [ -z "${SUPABASE_PROJECT_ID:-}" ] && [ -t 0 ]; then
+    printf "Project ID do Supabase: "
+    read -r SUPABASE_PROJECT_ID
+  fi
+
+  success "Backend configurado: $SUPABASE_URL"
 }
 
 install_base_packages() {
