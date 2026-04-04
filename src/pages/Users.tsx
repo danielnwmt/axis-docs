@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Users as UsersIcon, Plus, MoreVertical, Trash2, ToggleLeft, ToggleRight, Check, ChevronsUpDown } from "lucide-react";
+import { Users as UsersIcon, Plus, MoreVertical, Trash2, ToggleLeft, ToggleRight, Check, ChevronsUpDown, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -63,6 +63,9 @@ export default function Users() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null);
+  const [resetTarget, setResetTarget] = useState<UserProfile | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
 
@@ -144,6 +147,25 @@ export default function Users() {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!resetTarget || !newPassword) return;
+    setResetLoading(true);
+    try {
+      const response = await supabase.functions.invoke("create-user?action=reset-password", {
+        body: { userId: resetTarget.id, newPassword },
+      });
+      if (response.error) throw new Error(response.error.message);
+      if (response.data?.error) throw new Error(response.data.error);
+      toast({ title: "Senha alterada", description: `Senha de ${resetTarget.email} foi alterada com sucesso.` });
+      setResetTarget(null);
+      setNewPassword("");
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="flex items-center justify-between mb-6">
@@ -200,6 +222,9 @@ export default function Users() {
                           ) : (
                             <><ToggleRight className="w-4 h-4 mr-2" /> Ativar</>
                           )}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setResetTarget(user)}>
+                          <KeyRound className="w-4 h-4 mr-2" /> Alterar Senha
                         </DropdownMenuItem>
                         <DropdownMenuItem className="text-destructive" onClick={() => setDeleteTarget(user)}>
                           <Trash2 className="w-4 h-4 mr-2" /> Excluir
@@ -302,6 +327,24 @@ export default function Users() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!resetTarget} onOpenChange={(open) => { if (!open) { setResetTarget(null); setNewPassword(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Alterar Senha</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Definir nova senha para <strong>{resetTarget?.email}</strong></p>
+          <form onSubmit={(e) => { e.preventDefault(); handleResetPassword(); }} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nova Senha</Label>
+              <Input type="password" placeholder="Mínimo 6 caracteres" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} />
+            </div>
+            <Button type="submit" className="w-full" disabled={resetLoading}>
+              {resetLoading ? "Alterando..." : "Alterar Senha"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
