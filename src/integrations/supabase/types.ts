@@ -143,6 +143,7 @@ export type Database = {
           created_at: string
           email: string
           id: string
+          must_change_password: boolean
           role: string
           unit: string
         }
@@ -151,6 +152,7 @@ export type Database = {
           created_at?: string
           email?: string
           id: string
+          must_change_password?: boolean
           role?: string
           unit?: string
         }
@@ -159,6 +161,7 @@ export type Database = {
           created_at?: string
           email?: string
           id?: string
+          must_change_password?: boolean
           role?: string
           unit?: string
         }
