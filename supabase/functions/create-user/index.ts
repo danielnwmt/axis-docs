@@ -56,6 +56,7 @@ Deno.serve(async (req) => {
         role: role || "Usuário",
         unit: unit || "",
         active: true,
+        must_change_password: true,
       });
 
       return new Response(JSON.stringify({ user: userData.user }), {

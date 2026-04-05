@@ -19,6 +19,7 @@ const Audit = lazy(() => import("./pages/Audit"));
 const Users = lazy(() => import("./pages/Users"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Signature = lazy(() => import("./pages/Signature"));
+const ChangePassword = lazy(() => import("./pages/ChangePassword"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -58,6 +59,7 @@ const App = () => (
               <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
               <Route path="/signature" element={<ProtectedRoute><Signature /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+              <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
