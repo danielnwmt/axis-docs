@@ -64,6 +64,48 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (req.method === "POST" && action === "ensure-profile") {
+      const { email, role, unit } = await req.json();
+
+      // Find user by email in auth
+      const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      if (listError) {
+        return new Response(JSON.stringify({ error: listError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const authUser = users.find((u: any) => u.email === email);
+      if (!authUser) {
+        return new Response(JSON.stringify({ error: "Usuário não encontrado na autenticação" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Upsert profile
+      const { error: upsertError } = await supabaseAdmin.from("profiles").upsert({
+        id: authUser.id,
+        email,
+        role: role || "Administrador",
+        unit: unit || "",
+        active: true,
+      });
+
+      if (upsertError) {
+        return new Response(JSON.stringify({ error: upsertError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true, userId: authUser.id }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (req.method === "POST" && action === "toggle") {
       const { userId, active } = await req.json();
 
@@ -84,7 +126,6 @@ Deno.serve(async (req) => {
     if (req.method === "POST" && action === "delete") {
       const { userId } = await req.json();
 
-      // Delete from auth (cascade will delete profile)
       const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
       if (error) {
         return new Response(JSON.stringify({ error: error.message }), {
