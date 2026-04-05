@@ -19,6 +19,7 @@ const Audit = lazy(() => import("./pages/Audit"));
 const Users = lazy(() => import("./pages/Users"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Signature = lazy(() => import("./pages/Signature"));
+const ChangePassword = lazy(() => import("./pages/ChangePassword"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
