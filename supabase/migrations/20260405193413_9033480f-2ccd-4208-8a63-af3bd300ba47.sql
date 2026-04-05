@@ -1,0 +1,1 @@
+UPDATE public.profiles SET must_change_password = true WHERE email = 'admin@axis.com';
