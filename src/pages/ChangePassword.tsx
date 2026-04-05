@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import axisLogo from "@/assets/axis-logo.png";
 
 export default function ChangePassword() {
@@ -13,8 +14,9 @@ export default function ChangePassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +31,12 @@ export default function ChangePassword() {
       return;
     }
 
+    if (!session || !user) {
+      toast({ title: "Erro", description: "Sessão expirada. Faça login novamente.", variant: "destructive" });
+      navigate("/login", { replace: true });
+      return;
+    }
+
     setLoading(true);
     try {
       const { error: pwError } = await supabase.auth.updateUser({ password: newPassword });
@@ -36,9 +44,12 @@ export default function ChangePassword() {
 
       const { error: profileError } = await supabase
         .from("profiles")
-        .update({ must_change_password: false } as any)
-        .eq("id", user!.id);
+        .update({ must_change_password: false })
+        .eq("id", user.id);
       if (profileError) throw profileError;
+
+      // Invalidate the profile cache so ProtectedRoute won't redirect back
+      await queryClient.invalidateQueries({ queryKey: ["profile-password-check"] });
 
       toast({ title: "Senha alterada", description: "Sua senha foi atualizada com sucesso." });
       navigate("/", { replace: true });
