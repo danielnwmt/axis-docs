@@ -6,7 +6,7 @@ export function HeroBanner() {
         loop
         muted
         playsInline
-        className="block w-full max-h-[180px] object-cover object-center"
+        className="block w-full max-h-[240px] object-cover object-center"
         width={1920}
         height={540}
       >
