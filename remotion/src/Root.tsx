@@ -1,13 +1,13 @@
 import { Composition } from "remotion";
-import { ScanToCloud } from "./ScanToCloud";
+import { ScannerBanner } from "./ScannerBanner";
 
 export const RemotionRoot = () => (
   <Composition
     id="main"
-    component={ScanToCloud}
-    durationInFrames={300}
+    component={ScannerBanner}
+    durationInFrames={240}
     fps={30}
     width={1920}
-    height={1080}
+    height={540}
   />
 );
