@@ -11,6 +11,8 @@ PG_PASS=""
 JWT_SECRET=""
 ANON_KEY=""
 SERVICE_KEY=""
+ADMIN_EMAIL=""
+ADMIN_PASSWORD=""
 
 print_header() {
   echo ""
