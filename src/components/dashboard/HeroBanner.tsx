@@ -1,4 +1,4 @@
-import heroBanner from "@/assets/axis-docs-banner-v3.png";
+import heroBanner from "@/assets/axis-docs-banner-v2.png";
 
 export function HeroBanner() {
   return (
@@ -6,9 +6,7 @@ export function HeroBanner() {
       <img
         src={heroBanner}
         alt="Axis Docs - Gestão Inteligente de Documentos e Informações"
-        className="block w-full max-h-[140px] object-cover object-left"
-        width={1920}
-        height={512}
+        className="block w-full max-h-[160px] object-cover object-center"
       />
     </div>
   );
