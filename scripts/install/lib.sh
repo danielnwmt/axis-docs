@@ -1349,28 +1349,35 @@ EOF_BACKUP
 verify_installation() {
   log "Validando serviços"
 
-  # Verifica PostgREST
+  # Verifica PostgREST (401 é resposta válida — significa que está rodando)
+  local postgrest_ok=false
   for _ in $(seq 1 10); do
-    if curl -fsSI http://127.0.0.1:3001/ >/dev/null 2>&1; then break; fi
-    sleep 1
-  done
-
-  # Verifica Auth
-  for _ in $(seq 1 10); do
-    if curl -fsSI http://127.0.0.1:9999/auth/v1/user >/dev/null 2>&1; then break; fi
-    sleep 1
-  done
-
-  # Verifica Nginx
-  for _ in $(seq 1 15); do
-    if curl -fsSI http://127.0.0.1/ >/dev/null 2>&1; then
-      success "Aplicação respondendo localmente"
-      return
+    if curl -sI http://127.0.0.1:3001/ 2>/dev/null | head -1 | grep -q "HTTP"; then
+      postgrest_ok=true; break
     fi
     sleep 1
   done
+  if [ "$postgrest_ok" = true ]; then success "PostgREST respondendo"; else fail "PostgREST não respondeu"; fi
 
-  fail "A aplicação não respondeu corretamente após a instalação"
+  # Verifica Auth (404 é resposta válida — significa que está rodando)
+  local auth_ok=false
+  for _ in $(seq 1 10); do
+    if curl -sI http://127.0.0.1:9999/auth/v1/user 2>/dev/null | head -1 | grep -q "HTTP"; then
+      auth_ok=true; break
+    fi
+    sleep 1
+  done
+  if [ "$auth_ok" = true ]; then success "Auth respondendo"; else fail "Auth não respondeu"; fi
+
+  # Verifica Nginx
+  local nginx_ok=false
+  for _ in $(seq 1 15); do
+    if curl -sI http://127.0.0.1/ 2>/dev/null | head -1 | grep -q "HTTP"; then
+      nginx_ok=true; break
+    fi
+    sleep 1
+  done
+  if [ "$nginx_ok" = true ]; then success "Aplicação respondendo localmente"; else fail "A aplicação não respondeu corretamente após a instalação"; fi
 }
 
 print_success() {
