@@ -28,11 +28,11 @@ await renderMedia({
   composition,
   serveUrl: bundled,
   codec: "h264",
-  outputLocation: "/mnt/documents/login-bg.mp4",
+  outputLocation: "/mnt/documents/scanner-banner.mp4",
   puppeteerInstance: browser,
   muted: true,
   concurrency: 1,
 });
 
 await browser.close({ silent: false });
-console.log("Done! Video saved to /mnt/documents/login-bg.mp4");
+console.log("Done! Video saved to /mnt/documents/scanner-banner.mp4");
