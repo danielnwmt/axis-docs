@@ -89,7 +89,57 @@ collect_install_options() {
     log "SSL será configurado automaticamente para $APP_DOMAIN (email: $SSL_EMAIL)"
   fi
 
-  success "Opções coletadas"
+  # Coleta credenciais do administrador
+  if [ -z "$ADMIN_EMAIL" ] && [ -t 0 ]; then
+    printf "E-mail do administrador (padrão: admin@axisdocs.com.br): "
+    read -r ADMIN_EMAIL
+  fi
+  ADMIN_EMAIL="${ADMIN_EMAIL:-admin@axisdocs.com.br}"
+
+  if [ -z "$ADMIN_PASSWORD" ] && [ -t 0 ]; then
+    printf "Senha do administrador (mínimo 6 caracteres, padrão: admin123): "
+    read -rs ADMIN_PASSWORD
+    echo ""
+  fi
+  ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
+
+  if [ ${#ADMIN_PASSWORD} -lt 6 ]; then
+    fail "A senha do administrador deve ter no mínimo 6 caracteres"
+  fi
+
+  success "Opções coletadas (admin: $ADMIN_EMAIL)"
+}
+
+create_admin_user() {
+  log "Criando usuário administrador: $ADMIN_EMAIL"
+
+  local encrypted
+  encrypted=$(node -e "
+    const crypto = require('crypto');
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync('$ADMIN_PASSWORD', salt, 64).toString('hex');
+    console.log(salt + ':' + hash);
+  ")
+
+  sudo -u postgres psql -d "$PG_DB" <<ADMINSQL
+DO \$\$
+DECLARE
+  _uid uuid;
+BEGIN
+  -- Remove admin anterior com mesmo email (reinstalação)
+  DELETE FROM auth.users WHERE email = '${ADMIN_EMAIL}';
+
+  INSERT INTO auth.users (email, encrypted_password, email_confirmed_at)
+  VALUES ('${ADMIN_EMAIL}', '${encrypted}', now())
+  RETURNING id INTO _uid;
+
+  INSERT INTO public.profiles (id, email, role, unit, active, must_change_password)
+  VALUES (_uid, '${ADMIN_EMAIL}', 'Administrador', '', true, true)
+  ON CONFLICT (id) DO UPDATE SET role = 'Administrador', active = true, must_change_password = true;
+END \$\$;
+ADMINSQL
+
+  success "Administrador criado: $ADMIN_EMAIL"
 }
 
 install_base_packages() {
