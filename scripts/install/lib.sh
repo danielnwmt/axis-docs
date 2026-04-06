@@ -89,18 +89,8 @@ collect_install_options() {
     log "SSL será configurado automaticamente para $APP_DOMAIN (email: $SSL_EMAIL)"
   fi
 
-  # Coleta credenciais do administrador
-  if [ -z "$ADMIN_EMAIL" ] && [ -t 0 ]; then
-    printf "E-mail do administrador (padrão: admin@axisdocs.com.br): "
-    read -r ADMIN_EMAIL
-  fi
+  # Credenciais padrão do administrador (criação automática)
   ADMIN_EMAIL="${ADMIN_EMAIL:-admin@axisdocs.com.br}"
-
-  if [ -z "$ADMIN_PASSWORD" ] && [ -t 0 ]; then
-    printf "Senha do administrador (mínimo 6 caracteres, padrão: admin123): "
-    read -rs ADMIN_PASSWORD
-    echo ""
-  fi
   ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
 
   if [ ${#ADMIN_PASSWORD} -lt 6 ]; then
