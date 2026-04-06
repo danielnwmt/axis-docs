@@ -1273,15 +1273,22 @@ enable_ssl() {
   if certbot --nginx --non-interactive --agree-tos --redirect -m "$SSL_EMAIL" -d "$APP_DOMAIN"; then
     SSL_CONFIGURED="true"
     success "SSL configurado com sucesso"
-
-    # Reescreve .env com HTTPS
     write_env_file
-    # Rebuilda com a URL correta
     build_frontend
     return
   fi
 
-  fail "Falha ao configurar SSL. Verifique se o domínio aponta para este servidor e tente novamente"
+  # Se falhou mas já existe certificado válido (rate limit), reutiliza
+  if [ -f "/etc/letsencrypt/live/$APP_DOMAIN/fullchain.pem" ]; then
+    echo "⚠️  Não foi possível emitir novo certificado (possível rate limit), mas certificado existente será usado."
+    SSL_CONFIGURED="true"
+    write_env_file
+    build_frontend
+    return
+  fi
+
+  echo "⚠️  Falha ao configurar SSL. O sistema continuará via HTTP."
+  echo "   Tente novamente mais tarde com: sudo certbot --nginx -d $APP_DOMAIN"
 }
 
 write_credentials_file() {
