@@ -310,6 +310,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   unit text NOT NULL DEFAULT '',
   email text NOT NULL DEFAULT ''
 );
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT true;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Tabela de categorias documentais
@@ -522,8 +523,14 @@ APPSQL
 
   # Permissões do owner
   sudo -u postgres psql -d "$PG_DB" -c "GRANT $PG_USER TO authenticator;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "GRANT USAGE ON SCHEMA auth TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL TABLES IN SCHEMA auth TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA auth TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE auth.users OWNER TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE auth.refresh_tokens OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER SEQUENCE IF EXISTS auth.refresh_tokens_id_seq OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON TABLES TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON SEQUENCES TO $PG_USER;" 2>/dev/null || true
 
   success "Tabelas da aplicação configuradas"
 }

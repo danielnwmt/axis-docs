@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   created_at timestamptz NOT NULL DEFAULT now(),
   active boolean NOT NULL DEFAULT true,
   role text NOT NULL DEFAULT 'Usuário',
+  must_change_password boolean NOT NULL DEFAULT true,
   unit text NOT NULL DEFAULT '',
   email text NOT NULL DEFAULT ''
 );
