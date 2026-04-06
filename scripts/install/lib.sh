@@ -1478,6 +1478,7 @@ main_install() {
   generate_jwt_keys
   setup_application_database
   install_postgrest
+  create_admin_user
   install_auth_server
   install_storage_server
   install_ssl_packages
