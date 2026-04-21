@@ -253,7 +253,6 @@ function BannerSection() {
 
 function ParametrosSection() {
   const [params, setParams] = useState({
-    retencaoDias: "365",
     tamanhoMaxMB: "50",
     autoOCR: true,
   });
@@ -264,10 +263,6 @@ function ParametrosSection() {
 
   return (
     <div className="space-y-4 max-w-xl">
-      <div className="space-y-1">
-        <Label>Retenção de documentos (dias)</Label>
-        <Input type="number" value={params.retencaoDias} onChange={(e) => setParams({ ...params, retencaoDias: e.target.value })} />
-      </div>
       <div className="space-y-1">
         <Label>Tamanho máximo de arquivo (MB)</Label>
         <Input type="number" value={params.tamanhoMaxMB} onChange={(e) => setParams({ ...params, tamanhoMaxMB: e.target.value })} />
