@@ -23,11 +23,12 @@ export function DocumentsTrendChart() {
         .select("created_at, category");
       if (!data) return [];
 
-      // últimos 12 meses
+      // últimos 12 meses, ignorando meses de 2025
       const now = new Date();
       const months: { key: string; label: string; year: number; month: number }[] = [];
       for (let i = 11; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        if (d.getFullYear() === 2025) continue;
         months.push({
           key: `${d.getFullYear()}-${d.getMonth()}`,
           label: `${MONTHS_PT[d.getMonth()]}/${String(d.getFullYear()).slice(-2)}`,
