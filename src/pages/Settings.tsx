@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, ImageIcon, Upload, HardDrive, CheckCircle, AlertCircle } from "lucide-react";
+import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, ImageIcon, Upload, HardDrive, CheckCircle, AlertCircle, RefreshCw, DatabaseBackup } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -261,6 +261,14 @@ function ParametrosSection() {
     toast({ title: "Parâmetros salvos com sucesso!" });
   };
 
+  const handleSystemUpdate = () => {
+    toast({ title: "Atualização do sistema", description: "No servidor, execute: sudo /opt/axisdocs/update.sh" });
+  };
+
+  const handleSystemBackup = () => {
+    toast({ title: "Backup do sistema", description: "No servidor, execute: sudo /opt/axisdocs/backup.sh" });
+  };
+
   return (
     <div className="space-y-4 max-w-xl">
       <div className="space-y-1">
@@ -280,6 +288,18 @@ function ParametrosSection() {
       <Button onClick={handleSave} className="mt-2">
         <Save className="w-4 h-4 mr-2" /> Salvar
       </Button>
+
+      <div className="pt-4 mt-4 border-t border-border space-y-3">
+        <Label>Manutenção do sistema</Label>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button type="button" variant="outline" onClick={handleSystemUpdate} className="gap-2">
+            <RefreshCw className="w-4 h-4" /> Atualizar sistema
+          </Button>
+          <Button type="button" variant="outline" onClick={handleSystemBackup} className="gap-2">
+            <DatabaseBackup className="w-4 h-4" /> Fazer backup
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
