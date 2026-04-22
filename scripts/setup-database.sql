@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS public.categories (
   active boolean NOT NULL DEFAULT true,
   is_default boolean NOT NULL DEFAULT false
 );
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT true;
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS is_default boolean NOT NULL DEFAULT false;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 
 -- Tabela de unidades/setores
@@ -33,6 +35,8 @@ CREATE TABLE IF NOT EXISTS public.units (
   active boolean NOT NULL DEFAULT true,
   is_default boolean NOT NULL DEFAULT false
 );
+ALTER TABLE public.units ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT true;
+ALTER TABLE public.units ADD COLUMN IF NOT EXISTS is_default boolean NOT NULL DEFAULT false;
 ALTER TABLE public.units ENABLE ROW LEVEL SECURITY;
 
 -- Tabela de documentos
