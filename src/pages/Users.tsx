@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { fetchActiveOptions } from "@/lib/adminLookups";
 
 interface UserProfile {
   id: string;
@@ -77,8 +78,12 @@ export default function Users() {
   };
 
   const fetchUnits = async () => {
-    const { data } = await supabase.from("units").select("id, name").eq("active", true).order("name");
-    if (data) setUnits(data);
+    try {
+      const data = await fetchActiveOptions("units");
+      setUnits(data);
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message || "Não foi possível carregar unidades.", variant: "destructive" });
+    }
   };
 
   useEffect(() => {
