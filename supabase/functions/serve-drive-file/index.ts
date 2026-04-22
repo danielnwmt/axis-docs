@@ -23,6 +23,19 @@ interface ServiceAccount {
   token_uri: string;
 }
 
+function buildContentDisposition(action: string, fileName: string) {
+  if (action !== "download") return "inline";
+
+  const asciiFallback = fileName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E]/g, "_")
+    .replace(/"/g, "'");
+
+  const encodedFileName = encodeURIComponent(fileName);
+  return `attachment; filename="${asciiFallback || "arquivo"}"; filename*=UTF-8''${encodedFileName}`;
+}
+
 async function getAccessToken(sa: ServiceAccount): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const header = toBase64UrlFromString(JSON.stringify({ alg: "RS256", typ: "JWT" }));
@@ -166,9 +179,7 @@ Deno.serve(async (req) => {
     );
     const fileMeta = metaRes2.ok ? await metaRes2.json() : { name: "arquivo" };
 
-    const disposition = action === "download"
-      ? `attachment; filename="${fileMeta.name}"`
-      : "inline";
+    const disposition = buildContentDisposition(action, fileMeta.name || "arquivo");
 
     return new Response(fileBody, {
       headers: {
