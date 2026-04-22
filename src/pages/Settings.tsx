@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchManagedList } from "@/lib/adminLookups";
 
 type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | null;
 
@@ -67,8 +68,12 @@ function ListManager({ itemLabel, tableName }: { itemLabel: string; tableName: "
   const [showInactive, setShowInactive] = useState(false);
 
   const fetchItems = async () => {
-    const { data } = await supabase.from(tableName).select("id, name, active, is_default").order("name");
-    if (data) setItems(data as { id: string; name: string; active: boolean; is_default: boolean }[]);
+    try {
+      const data = await fetchManagedList(tableName);
+      setItems(data);
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message || `Não foi possível carregar ${itemLabel.toLowerCase()}.`, variant: "destructive" });
+    }
     setLoading(false);
   };
 
