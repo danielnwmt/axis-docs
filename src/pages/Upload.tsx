@@ -24,6 +24,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { logAudit } from "@/lib/auditLog";
 import { PdfPreview } from "@/components/documents/PdfPreview";
+import { fetchActiveNames } from "@/lib/adminLookups";
 
 export default function Upload() {
   const [files, setFiles] = useState<File[]>([]);
@@ -54,15 +55,19 @@ export default function Upload() {
 
   useEffect(() => {
     const loadLists = async () => {
-      const [catRes, unitRes] = await Promise.all([
-        supabase.from("categories").select("name").eq("active", true).order("name"),
-        supabase.from("units").select("name").eq("active", true).order("name"),
-      ]);
-      if (catRes.data) setCategorias(catRes.data.map(c => c.name));
-      if (unitRes.data) setUnidades(unitRes.data.map(u => u.name));
+      try {
+        const [categoryNames, unitNames] = await Promise.all([
+          fetchActiveNames("categories"),
+          fetchActiveNames("units"),
+        ]);
+        setCategorias(categoryNames);
+        setUnidades(unitNames);
+      } catch (error: any) {
+        toast({ title: "Erro", description: error.message || "Não foi possível carregar listas.", variant: "destructive" });
+      }
     };
     loadLists();
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (!editId) return;
