@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { logAudit } from "@/lib/auditLog";
 import { PdfPreview } from "@/components/documents/PdfPreview";
+import { fetchDriveFileBlob } from "@/lib/driveFile";
 import {
   Dialog,
   DialogContent,
@@ -84,13 +85,7 @@ export default function Documents() {
       return;
     }
     try {
-      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
-        body: { driveFileId: doc.drive_file_id, action: "view" },
-        headers: { Accept: doc.file_type || "application/octet-stream" },
-      });
-      if (error) throw error;
-
-      const blob = data instanceof Blob ? data : new Blob([data], { type: doc.file_type || "application/octet-stream" });
+      const blob = await fetchDriveFileBlob(doc.drive_file_id, "view", doc.file_type);
       const blobUrl = URL.createObjectURL(blob);
 
       setPreviewType(doc.file_type || "application/octet-stream");
@@ -111,12 +106,7 @@ export default function Documents() {
       return;
     }
     try {
-      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
-        body: { driveFileId: doc.drive_file_id, action: "download" },
-        headers: { Accept: "application/octet-stream" },
-      });
-      if (error) throw error;
-      const blob = data instanceof Blob ? data : new Blob([data]);
+      const blob = await fetchDriveFileBlob(doc.drive_file_id, "download", doc.file_type);
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = blobUrl;
@@ -186,7 +176,7 @@ export default function Documents() {
       <div className="text-center py-12 space-y-4">
         <FileText className="w-16 h-16 text-muted-foreground mx-auto" />
         <p className="text-muted-foreground">Pré-visualização não disponível para este tipo de arquivo.</p>
-        <a href={previewUrl} target="_blank" rel="noopener noreferrer">
+        <a href={previewUrl} download={previewTitle}>
           <Button className="gap-2"><Download className="w-4 h-4" /> Baixar arquivo</Button>
         </a>
       </div>
