@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS public.categories (
   active boolean NOT NULL DEFAULT true,
   is_default boolean NOT NULL DEFAULT false
 );
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT true;
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS is_default boolean NOT NULL DEFAULT false;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 
 -- Tabela de unidades/setores
@@ -33,6 +35,8 @@ CREATE TABLE IF NOT EXISTS public.units (
   active boolean NOT NULL DEFAULT true,
   is_default boolean NOT NULL DEFAULT false
 );
+ALTER TABLE public.units ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT true;
+ALTER TABLE public.units ADD COLUMN IF NOT EXISTS is_default boolean NOT NULL DEFAULT false;
 ALTER TABLE public.units ENABLE ROW LEVEL SECURITY;
 
 -- Tabela de documentos
@@ -200,20 +204,22 @@ CREATE POLICY "Authenticated can read settings" ON storage.objects
 -- DADOS PADRÃO (Categorias e Unidades)
 -- ============================================
 
-INSERT INTO public.categories (name, is_default) VALUES
-  ('Processo Administrativo', true), ('Ofício', true), ('Contrato', true),
-  ('Convênio', true), ('Decreto', true), ('Portaria', true),
-  ('Memorando', true), ('Ata', true), ('Relatório', true),
-  ('Nota Fiscal', true), ('Parecer', true), ('Certidão', true),
-  ('Alvará', true), ('Licença', true), ('Requerimento', true),
-  ('Despacho', true), ('Edital', true), ('Lei', true),
-  ('Resolução', true), ('Circular', true);
+INSERT INTO public.categories (name, is_default, active)
+SELECT v.name, true, true
+FROM (VALUES
+  ('Processo Administrativo'), ('Ofício'), ('Contrato'), ('Convênio'), ('Decreto'), ('Portaria'),
+  ('Memorando'), ('Ata'), ('Relatório'), ('Nota Fiscal'), ('Parecer'), ('Certidão'),
+  ('Alvará'), ('Licença'), ('Requerimento'), ('Despacho'), ('Edital'), ('Lei'),
+  ('Resolução'), ('Circular')
+) AS v(name)
+WHERE NOT EXISTS (SELECT 1 FROM public.categories c WHERE lower(c.name) = lower(v.name));
 
-INSERT INTO public.units (name, is_default) VALUES
-  ('Gabinete', true), ('Administração', true), ('Saúde', true),
-  ('Educação', true), ('Finanças', true), ('Obras', true),
-  ('Jurídico', true), ('Recursos Humanos', true), ('Planejamento', true),
-  ('Meio Ambiente', true), ('Assistência Social', true), ('Cultura', true),
-  ('Esportes', true), ('Tecnologia da Informação', true), ('Comunicação', true),
-  ('Transporte', true), ('Licitações', true), ('Controle Interno', true),
-  ('Tributos', true), ('Agricultura', true);
+INSERT INTO public.units (name, is_default, active)
+SELECT v.name, true, true
+FROM (VALUES
+  ('Gabinete'), ('Administração'), ('Saúde'), ('Educação'), ('Finanças'), ('Obras'),
+  ('Jurídico'), ('Recursos Humanos'), ('Planejamento'), ('Meio Ambiente'), ('Assistência Social'),
+  ('Cultura'), ('Esportes'), ('Tecnologia da Informação'), ('Comunicação'), ('Transporte'),
+  ('Licitações'), ('Controle Interno'), ('Tributos'), ('Agricultura')
+) AS v(name)
+WHERE NOT EXISTS (SELECT 1 FROM public.units u WHERE lower(u.name) = lower(v.name));
