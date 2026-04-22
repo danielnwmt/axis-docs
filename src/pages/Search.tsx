@@ -7,6 +7,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PdfPreview } from "@/components/documents/PdfPreview";
+import { fetchDriveFileBlob } from "@/lib/driveFile";
 
 interface SearchResult {
   id: string;
@@ -81,13 +82,7 @@ export default function Search() {
   const handleView = async (result: SearchResult) => {
     if (!result.drive_file_id) return;
     try {
-      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
-        body: { driveFileId: result.drive_file_id, action: "view" },
-        headers: { Accept: result.file_type || "application/octet-stream" },
-      });
-      if (error) throw error;
-
-      const blob = data instanceof Blob ? data : new Blob([data], { type: result.file_type || "application/octet-stream" });
+      const blob = await fetchDriveFileBlob(result.drive_file_id, "view", result.file_type);
       const blobUrl = URL.createObjectURL(blob);
 
       setPreviewType(result.file_type || "application/octet-stream");
@@ -121,12 +116,7 @@ export default function Search() {
   const handleDownload = async (driveFileId: string, fileName: string) => {
     if (!driveFileId) return;
     try {
-      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
-        body: { driveFileId, action: "download" },
-        headers: { Accept: "application/octet-stream" },
-      });
-      if (error) throw error;
-      const blob = data instanceof Blob ? data : new Blob([data]);
+      const blob = await fetchDriveFileBlob(driveFileId, "download");
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = blobUrl;

@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PdfPreview } from "@/components/documents/PdfPreview";
 import { Button } from "@/components/ui/button";
+import { fetchDriveFileBlob } from "@/lib/driveFile";
 
 interface SearchResult {
   id: string;
@@ -80,11 +81,7 @@ export function AppHeader() {
   const handleDownload = async (driveFileId: string, fileName: string) => {
     if (!driveFileId) return;
     try {
-      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
-        body: { driveFileId, action: "download" },
-      });
-      if (error) throw error;
-      const blob = new Blob([data]);
+      const blob = await fetchDriveFileBlob(driveFileId, "download");
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = blobUrl;
@@ -106,12 +103,7 @@ export function AppHeader() {
   const handleView = async (result: SearchResult) => {
     if (!result.drive_file_id) return;
     try {
-      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
-        body: { driveFileId: result.drive_file_id, action: "view" },
-        headers: { Accept: result.file_type || "application/octet-stream" },
-      });
-      if (error) throw error;
-      const blob = data instanceof Blob ? data : new Blob([data], { type: result.file_type || "application/octet-stream" });
+      const blob = await fetchDriveFileBlob(result.drive_file_id, "view", result.file_type);
       const blobUrl = URL.createObjectURL(blob);
       setShowDropdown(false);
       setPreviewType(result.file_type || "application/octet-stream");
