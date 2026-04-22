@@ -4,6 +4,9 @@ import { Input } from "@/components/ui/input";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSearchParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PdfPreview } from "@/components/documents/PdfPreview";
 
 interface SearchResult {
   id: string;
@@ -12,6 +15,7 @@ interface SearchResult {
   unit: string;
   file_name: string;
   file_path: string;
+  file_type: string | null;
   keywords: string;
   created_at: string;
   drive_file_id: string | null;
@@ -25,6 +29,9 @@ export default function Search() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewType, setPreviewType] = useState("");
+  const [previewTitle, setPreviewTitle] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   const doSearch = useCallback(async (term: string) => {
@@ -39,7 +46,7 @@ export default function Search() {
     const q = term.trim();
     const { data, error } = await supabase
       .from("documents")
-      .select("id, title, category, unit, file_name, file_path, keywords, created_at, drive_file_id, drive_link")
+      .select("id, title, category, unit, file_name, file_path, file_type, keywords, created_at, drive_file_id, drive_link")
       .or(`title.ilike."%${q}%",category.ilike."%${q}%",unit.ilike."%${q}%",keywords.ilike."%${q}%",file_name.ilike."%${q}%",subject.ilike."%${q}%",ocr_text.ilike."%${q}%"`)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -64,20 +71,51 @@ export default function Search() {
     if (initialQ) doSearch(initialQ);
   }, []);
 
-  const handleView = async (driveFileId: string, driveLink?: string) => {
-    const win = window.open("about:blank", "_blank");
-    if (driveLink) {
-      if (win) win.location.href = driveLink;
-      return;
-    }
-    if (!driveFileId) { win?.close(); return; }
+  const closePreview = () => {
+    setPreviewUrl((currentUrl) => {
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      return null;
+    });
+  };
+
+  const handleView = async (result: SearchResult) => {
+    if (!result.drive_file_id) return;
     try {
-      const { data } = await supabase.functions.invoke("serve-drive-file", {
-        body: { driveFileId, action: "metadata" },
+      const { data, error } = await supabase.functions.invoke("serve-drive-file", {
+        body: { driveFileId: result.drive_file_id, action: "view" },
+        headers: { Accept: result.file_type || "application/octet-stream" },
       });
-      if (data?.webViewLink && win) win.location.href = data.webViewLink;
-      else win?.close();
-    } catch { win?.close(); }
+      if (error) throw error;
+
+      const blob = data instanceof Blob ? data : new Blob([data], { type: result.file_type || "application/octet-stream" });
+      const blobUrl = URL.createObjectURL(blob);
+
+      setPreviewType(result.file_type || "application/octet-stream");
+      setPreviewTitle(result.title);
+      setPreviewUrl((currentUrl) => {
+        if (currentUrl) URL.revokeObjectURL(currentUrl);
+        return blobUrl;
+      });
+    } catch {}
+  };
+
+  const renderPreview = () => {
+    if (!previewUrl) return null;
+    if (previewType.startsWith("image/")) {
+      return <img src={previewUrl} alt={previewTitle} className="w-full max-h-[70vh] object-contain rounded-lg" />;
+    }
+    if (previewType.includes("pdf")) {
+      return <PdfPreview fileUrl={previewUrl} title={previewTitle} />;
+    }
+    return (
+      <div className="text-center py-12 space-y-4">
+        <FileText className="w-16 h-16 text-muted-foreground mx-auto" />
+        <p className="text-muted-foreground">Pré-visualização não disponível para este tipo de arquivo.</p>
+        <a href={previewUrl} download={previewTitle}>
+          <Button className="gap-2"><Download className="w-4 h-4" /> Baixar arquivo</Button>
+        </a>
+      </div>
+    );
   };
 
   const handleDownload = async (driveFileId: string, fileName: string) => {
@@ -149,7 +187,7 @@ export default function Search() {
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
-                    onClick={() => handleView(result.drive_file_id || "", result.drive_link || undefined)}
+                    onClick={() => handleView(result)}
                     className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                     title="Visualizar"
                   >
@@ -168,6 +206,15 @@ export default function Search() {
           ))}
         </div>
       )}
+
+      <Dialog open={!!previewUrl} onOpenChange={(open) => { if (!open) closePreview(); }}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>{previewTitle}</DialogTitle>
+          </DialogHeader>
+          {renderPreview()}
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
