@@ -1547,6 +1547,7 @@ clean_previous() {
   # Para serviços anteriores
   systemctl stop axisdocs-auth 2>/dev/null || true
   systemctl stop axisdocs-storage 2>/dev/null || true
+  systemctl stop axisdocs-functions 2>/dev/null || true
   systemctl stop postgrest 2>/dev/null || true
 
   if [ -d "$APP_DIR" ]; then
