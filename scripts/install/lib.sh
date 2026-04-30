@@ -1198,6 +1198,341 @@ EOF_STOR
   success "Servidor de armazenamento rodando na porta 5555"
 }
 
+install_local_functions() {
+  log "Instalando servidor de funções locais (Drive / assinatura)"
+
+  mkdir -p /opt/axisdocs-functions
+
+  # Garante dependências do auth-server reaproveitáveis (pg, crypto nativo)
+  if [ ! -d /opt/axisdocs-auth/node_modules/pg ]; then
+    cd /opt/axisdocs-auth && npm install pg --no-fund --no-audit >/dev/null 2>&1 || true
+  fi
+  ln -sfn /opt/axisdocs-auth/node_modules /opt/axisdocs-functions/node_modules
+
+  cat > /opt/axisdocs-functions/server.js <<'FUNCSERVER'
+const http = require("http");
+const https = require("https");
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+const { URL } = require("url");
+const { Client } = require("pg");
+
+const PORT = 5556;
+const STORAGE_DIR = "/var/lib/axisdocs/storage";
+const JWT_SECRET = process.env.JWT_SECRET;
+const DATABASE_URL = process.env.DATABASE_URL;
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "*",
+  "Access-Control-Allow-Methods": "*",
+  "Access-Control-Expose-Headers": "*",
+};
+
+function json(res, status, data) {
+  res.writeHead(status, { ...CORS, "Content-Type": "application/json" });
+  res.end(JSON.stringify(data));
+}
+
+function verifyJwt(token) {
+  try {
+    const [header, payload, sig] = token.split(".");
+    const expected = crypto.createHmac("sha256", JWT_SECRET).update(header + "." + payload).digest("base64url");
+    if (sig !== expected) return null;
+    return JSON.parse(Buffer.from(payload, "base64url").toString());
+  } catch { return null; }
+}
+
+function getAuth(req) {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return null;
+  return verifyJwt(token);
+}
+
+function readBuffer(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+async function readJson(req) {
+  const buf = await readBuffer(req);
+  if (!buf.length) return {};
+  try { return JSON.parse(buf.toString("utf8")); } catch { return {}; }
+}
+
+function loadDriveConfig() {
+  const file = path.join(STORAGE_DIR, "settings", "google-drive-config.json");
+  if (!fs.existsSync(file)) return null;
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
+}
+
+function extractFolderId(input) {
+  if (!input) return "";
+  const m = String(input).match(/folders\/([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : String(input).trim();
+}
+
+function b64url(buf) {
+  return Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function getGoogleAccessToken(sa) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = b64url(JSON.stringify({
+    iss: sa.client_email,
+    scope: "https://www.googleapis.com/auth/drive",
+    aud: sa.token_uri,
+    iat: now,
+    exp: now + 3600,
+  }));
+  const signer = crypto.createSign("RSA-SHA256");
+  signer.update(`${header}.${payload}`);
+  const signature = signer.sign(sa.private_key);
+  const jwt = `${header}.${payload}.${b64url(signature)}`;
+
+  const body = `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`;
+  const res = await httpRequest(sa.token_uri, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (res.status >= 300) throw new Error(`Token error: ${res.body.toString()}`);
+  return JSON.parse(res.body.toString()).access_token;
+}
+
+function httpRequest(urlStr, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(urlStr);
+    const lib = u.protocol === "https:" ? https : http;
+    const req = lib.request({
+      method: opts.method || "GET",
+      hostname: u.hostname,
+      port: u.port || (u.protocol === "https:" ? 443 : 80),
+      path: u.pathname + u.search,
+      headers: opts.headers || {},
+    }, (resp) => {
+      const chunks = [];
+      resp.on("data", (c) => chunks.push(c));
+      resp.on("end", () => resolve({
+        status: resp.statusCode,
+        headers: resp.headers,
+        body: Buffer.concat(chunks),
+      }));
+    });
+    req.on("error", reject);
+    if (opts.body) req.write(opts.body);
+    req.end();
+  });
+}
+
+async function findOrCreateFolder(token, name, parentId) {
+  const q = encodeURIComponent(`name='${name}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const r = await httpRequest(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (r.status >= 300) throw new Error(`Drive list error: ${r.body.toString()}`);
+  const data = JSON.parse(r.body.toString());
+  if (data.files && data.files[0]) return data.files[0].id;
+
+  const c = await httpRequest("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, mimeType: "application/vnd.google-apps.folder", parents: [parentId] }),
+  });
+  if (c.status >= 300) throw new Error(`Drive create folder error: ${c.body.toString()}`);
+  return JSON.parse(c.body.toString()).id;
+}
+
+// Parser simples de multipart/form-data para extrair file e fields
+function parseMultipart(buffer, boundary) {
+  const result = { fields: {}, file: null };
+  const boundaryBuf = Buffer.from(`--${boundary}`);
+  let start = 0;
+  while (true) {
+    const idx = buffer.indexOf(boundaryBuf, start);
+    if (idx < 0) break;
+    const next = buffer.indexOf(boundaryBuf, idx + boundaryBuf.length);
+    if (next < 0) break;
+    const part = buffer.slice(idx + boundaryBuf.length, next);
+    // skip leading \r\n
+    let p = part;
+    if (p[0] === 0x0d && p[1] === 0x0a) p = p.slice(2);
+    const headerEnd = p.indexOf(Buffer.from("\r\n\r\n"));
+    if (headerEnd < 0) { start = next; continue; }
+    const headers = p.slice(0, headerEnd).toString("utf8");
+    let body = p.slice(headerEnd + 4);
+    // remove trailing \r\n
+    if (body.length >= 2 && body[body.length-2] === 0x0d && body[body.length-1] === 0x0a) {
+      body = body.slice(0, body.length - 2);
+    }
+    const nameMatch = headers.match(/name="([^"]+)"/);
+    const filenameMatch = headers.match(/filename="([^"]*)"/);
+    const ctMatch = headers.match(/Content-Type:\s*([^\r\n]+)/i);
+    if (!nameMatch) { start = next; continue; }
+    const name = nameMatch[1];
+    if (filenameMatch) {
+      result.file = {
+        fieldName: name,
+        filename: filenameMatch[1],
+        contentType: ctMatch ? ctMatch[1].trim() : "application/octet-stream",
+        data: body,
+      };
+    } else {
+      result.fields[name] = body.toString("utf8");
+    }
+    start = next;
+  }
+  return result;
+}
+
+// ============ Endpoints ============
+
+async function uploadToDrive(req, res, claims) {
+  const ct = req.headers["content-type"] || "";
+  const boundaryMatch = ct.match(/boundary=([^;]+)/);
+  if (!boundaryMatch) return json(res, 400, { error: "Content-Type multipart/form-data esperado" });
+  const buf = await readBuffer(req);
+  const parsed = parseMultipart(buf, boundaryMatch[1].trim());
+  if (!parsed.file) return json(res, 400, { error: "Arquivo é obrigatório" });
+
+  const fileName = parsed.fields.fileName || parsed.file.filename || "arquivo";
+  const unitName = parsed.fields.unitName || "";
+  const mimeType = parsed.file.contentType || "application/octet-stream";
+
+  const config = loadDriveConfig();
+  if (!config) return json(res, 400, { error: "Google Drive não configurado. Configure em Configurações." });
+  if (!config.serviceAccount?.client_email || !config.serviceAccount?.private_key) {
+    return json(res, 400, { error: "Configuração do Google Drive incompleta." });
+  }
+  const rootFolderId = extractFolderId(config.rootFolderId);
+  if (!rootFolderId) return json(res, 400, { error: "ID da pasta raiz do Google Drive não configurado." });
+
+  const token = await getGoogleAccessToken(config.serviceAccount);
+  let target = rootFolderId;
+  if (unitName) target = await findOrCreateFolder(token, unitName, rootFolderId);
+
+  const boundary = `boundary${Date.now()}`;
+  const metadata = JSON.stringify({ name: fileName, parents: [target] });
+  const meta = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`);
+  const med = Buffer.from(`--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`);
+  const end = Buffer.from(`\r\n--${boundary}--`);
+  const body = Buffer.concat([meta, med, parsed.file.data, end]);
+
+  const up = await httpRequest("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink&supportsAllDrives=true&enforceSingleParent=true", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": `multipart/related; boundary=${boundary}`,
+      "Content-Length": body.length,
+    },
+    body,
+  });
+  if (up.status >= 300) {
+    console.error("[upload-to-drive] error", up.status, up.body.toString().slice(0, 500));
+    return json(res, 500, { error: `Google Drive upload failed [${up.status}]: ${up.body.toString()}` });
+  }
+  const driveFile = JSON.parse(up.body.toString());
+  return json(res, 200, {
+    success: true,
+    driveFileId: driveFile.id,
+    driveFileName: driveFile.name,
+    driveLink: driveFile.webViewLink,
+  });
+}
+
+async function serveDriveFile(req, res, claims) {
+  const body = await readJson(req);
+  const driveFileId = body.driveFileId;
+  if (!driveFileId) return json(res, 400, { error: "driveFileId é obrigatório" });
+  const config = loadDriveConfig();
+  if (!config?.serviceAccount?.client_email) return json(res, 400, { error: "Google Drive não configurado." });
+  const token = await getGoogleAccessToken(config.serviceAccount);
+  const r = await httpRequest(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media&supportsAllDrives=true`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (r.status >= 300) return json(res, r.status, { error: r.body.toString() });
+  res.writeHead(200, {
+    ...CORS,
+    "Content-Type": r.headers["content-type"] || "application/octet-stream",
+    "Content-Length": r.body.length,
+  });
+  res.end(r.body);
+}
+
+async function deleteFromDrive(req, res, claims) {
+  const body = await readJson(req);
+  const driveFileId = body.driveFileId;
+  if (!driveFileId) return json(res, 400, { error: "driveFileId é obrigatório" });
+  const config = loadDriveConfig();
+  if (!config?.serviceAccount?.client_email) return json(res, 400, { error: "Google Drive não configurado." });
+  const token = await getGoogleAccessToken(config.serviceAccount);
+  const r = await httpRequest(`https://www.googleapis.com/drive/v3/files/${driveFileId}?supportsAllDrives=true`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (r.status >= 300 && r.status !== 404) {
+    return json(res, 500, { error: `Falha ao excluir do Drive: ${r.body.toString()}` });
+  }
+  return json(res, 200, { success: true });
+}
+
+async function handle(req, res) {
+  if (req.method === "OPTIONS") { res.writeHead(204, CORS); return res.end(); }
+  const url = new URL(req.url, "http://localhost");
+  const fnPath = url.pathname.replace(/^\/functions\/v1\//, "");
+
+  // Todas requerem JWT
+  const claims = getAuth(req);
+  if (!claims) return json(res, 401, { error: "Não autorizado" });
+
+  try {
+    if (fnPath === "upload-to-drive" && req.method === "POST") return await uploadToDrive(req, res, claims);
+    if (fnPath === "serve-drive-file" && req.method === "POST") return await serveDriveFile(req, res, claims);
+    if (fnPath === "delete-from-drive" && req.method === "POST") return await deleteFromDrive(req, res, claims);
+    return json(res, 404, { error: `Função '${fnPath}' não disponível na instalação local` });
+  } catch (e) {
+    console.error("[FUNCTION ERROR]", fnPath, e);
+    return json(res, 500, { error: e.message || "Erro interno" });
+  }
+}
+
+const server = http.createServer((req, res) => {
+  handle(req, res).catch((e) => { console.error(e); json(res, 500, { error: "Internal error" }); });
+});
+server.listen(PORT, "127.0.0.1", () => console.log(`Functions server running on port ${PORT}`));
+FUNCSERVER
+
+  cat > /etc/systemd/system/axisdocs-functions.service <<EOF_FUNC
+[Unit]
+Description=AxisDocs Local Functions Server
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/axisdocs-functions/server.js
+Restart=always
+RestartSec=5
+Environment=JWT_SECRET=$JWT_SECRET
+Environment=DATABASE_URL=postgres://$PG_USER:$PG_PASS@localhost:5432/$PG_DB
+WorkingDirectory=/opt/axisdocs-functions
+
+[Install]
+WantedBy=multi-user.target
+EOF_FUNC
+
+  systemctl daemon-reload
+  systemctl enable axisdocs-functions
+  systemctl restart axisdocs-functions
+
+  success "Servidor de funções locais rodando na porta 5556"
+}
+
 install_ssl_packages() {
   if [ -z "$APP_DOMAIN" ]; then
     return
