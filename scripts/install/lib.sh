@@ -836,6 +836,101 @@ async function handleRequest(req, res) {
     });
   }
 
+  // ============= ADMIN ENDPOINTS =============
+  // POST /auth/v1/admin/users?action=create|toggle|delete|reset-password
+  if (req.method === "POST" && path === "/auth/v1/admin/users") {
+    const token = getToken(req);
+    if (!token) return json(res, 401, { error: "Não autorizado" });
+    const claims = verifyJwt(token);
+    if (!claims) return json(res, 401, { error: "Token inválido" });
+
+    // Verifica se quem chama é Administrador ativo
+    const adminCheck = await pool.query(
+      "SELECT role, active FROM public.profiles WHERE id = $1",
+      [claims.sub]
+    );
+    if (adminCheck.rows.length === 0 || adminCheck.rows[0].role !== "Administrador" || !adminCheck.rows[0].active) {
+      return json(res, 403, { error: "Apenas administradores podem executar esta ação" });
+    }
+
+    const action = parsed.query.action;
+    const body = await readBody(req);
+
+    if (action === "create") {
+      const { email, password, role, unit } = body;
+      if (!email || !password) return json(res, 400, { error: "E-mail e senha são obrigatórios" });
+
+      const existing = await pool.query("SELECT id FROM auth.users WHERE email = $1", [email]);
+      if (existing.rows.length > 0) return json(res, 400, { error: "Usuário já cadastrado" });
+
+      const encrypted = hashPassword(password);
+      const result = await pool.query(
+        "INSERT INTO auth.users (email, encrypted_password, email_confirmed_at) VALUES ($1, $2, now()) RETURNING *",
+        [email, encrypted]
+      );
+      const newUser = result.rows[0];
+
+      await pool.query(
+        "INSERT INTO public.profiles (id, email, role, unit, active, must_change_password) VALUES ($1, $2, $3, $4, true, true) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = EXCLUDED.role, unit = EXCLUDED.unit, active = true, must_change_password = true",
+        [newUser.id, email, role || "Usuário", unit || ""]
+      );
+
+      return json(res, 200, { user: { id: newUser.id, email: newUser.email } });
+    }
+
+    if (action === "toggle") {
+      const { userId, active } = body;
+      if (!userId) return json(res, 400, { error: "ID do usuário é obrigatório" });
+      await pool.query("UPDATE public.profiles SET active = $1 WHERE id = $2", [!!active, userId]);
+      return json(res, 200, { success: true });
+    }
+
+    if (action === "delete") {
+      const { userId } = body;
+      if (!userId) return json(res, 400, { error: "ID do usuário é obrigatório" });
+      await pool.query("DELETE FROM auth.refresh_tokens WHERE user_id = $1", [userId]);
+      await pool.query("DELETE FROM public.profiles WHERE id = $1", [userId]);
+      await pool.query("DELETE FROM auth.users WHERE id = $1", [userId]);
+      return json(res, 200, { success: true });
+    }
+
+    if (action === "reset-password") {
+      const { userId, newPassword } = body;
+      if (!userId || !newPassword) return json(res, 400, { error: "ID do usuário e nova senha são obrigatórios" });
+      const encrypted = hashPassword(newPassword);
+      await pool.query(
+        "UPDATE auth.users SET encrypted_password = $1, updated_at = now() WHERE id = $2",
+        [encrypted, userId]
+      );
+      await pool.query(
+        "UPDATE public.profiles SET must_change_password = true WHERE id = $1",
+        [userId]
+      );
+      return json(res, 200, { success: true });
+    }
+
+    return json(res, 400, { error: "Ação inválida" });
+  }
+
+  // GET /auth/v1/admin/users - lista todos os usuários (apenas admin)
+  if (req.method === "GET" && path === "/auth/v1/admin/users") {
+    const token = getToken(req);
+    if (!token) return json(res, 401, { error: "Não autorizado" });
+    const claims = verifyJwt(token);
+    if (!claims) return json(res, 401, { error: "Token inválido" });
+
+    const adminCheck = await pool.query(
+      "SELECT role, active FROM public.profiles WHERE id = $1",
+      [claims.sub]
+    );
+    if (adminCheck.rows.length === 0 || adminCheck.rows[0].role !== "Administrador" || !adminCheck.rows[0].active) {
+      return json(res, 403, { error: "Apenas administradores podem listar usuários" });
+    }
+
+    const result = await pool.query("SELECT id, email, created_at, email_confirmed_at FROM auth.users ORDER BY created_at DESC");
+    return json(res, 200, { users: result.rows });
+  }
+
   json(res, 404, { error: "Not found" });
 }
 
