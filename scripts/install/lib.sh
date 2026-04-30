@@ -1677,6 +1677,18 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
+    # Local Functions API (upload-to-drive, serve-drive-file, delete-from-drive)
+    location /functions/v1/ {
+        proxy_pass http://127.0.0.1:5556/functions/v1/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_request_buffering off;
+        proxy_read_timeout 300s;
+        client_max_body_size 100M;
+    }
+
     # Frontend SPA
     location / {
         try_files \$uri \$uri/ /index.html;
