@@ -1923,6 +1923,7 @@ main_install() {
   create_admin_user
   install_auth_server
   install_storage_server
+  install_local_functions
   install_ssl_packages
   prepare_app_files
   write_env_file
