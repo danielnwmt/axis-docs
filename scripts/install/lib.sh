@@ -517,6 +517,10 @@ APPSQL
 
   # Permissões do owner
   sudo -u postgres psql -d "$PG_DB" -c "GRANT $PG_USER TO authenticator;" 2>/dev/null || true
+  # CRÍTICO: PostgREST conecta como $PG_USER e precisa poder fazer SET ROLE para anon/authenticated/service_role
+  sudo -u postgres psql -d "$PG_DB" -c "GRANT anon TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "GRANT authenticated TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "GRANT service_role TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "GRANT USAGE ON SCHEMA auth TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL TABLES IN SCHEMA auth TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA auth TO $PG_USER;" 2>/dev/null || true
