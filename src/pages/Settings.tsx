@@ -512,11 +512,107 @@ function AssinaturaSection() {
   );
 }
 
+interface BackupSettingsRow {
+  id: string;
+  retention_days: number;
+  auto_cleanup: boolean;
+  drive_folder_id: string | null;
+}
+interface BackupFileRow {
+  id: string;
+  file_name: string;
+  drive_link: string | null;
+  file_size: number;
+  retention_days: number;
+  expires_at: string;
+  deleted_at: string | null;
+  created_at: string;
+}
+
 function BackupSection() {
   const [exporting, setExporting] = useState(false);
+  const [exportingDrive, setExportingDrive] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
   const [lastStats, setLastStats] = useState<Record<string, number> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [settings, setSettings] = useState<BackupSettingsRow | null>(null);
+  const [retentionInput, setRetentionInput] = useState<number>(5);
+  const [autoCleanup, setAutoCleanup] = useState<boolean>(true);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [files, setFiles] = useState<BackupFileRow[]>([]);
+
+  const loadSettings = async () => {
+    const { data } = await (supabase as any).from("backup_settings").select("*").limit(1).maybeSingle();
+    if (data) {
+      setSettings(data);
+      setRetentionInput(data.retention_days);
+      setAutoCleanup(data.auto_cleanup);
+    }
+  };
+  const loadFiles = async () => {
+    const { data } = await (supabase as any).from("backup_files").select("*").order("created_at", { ascending: false }).limit(20);
+    setFiles((data as BackupFileRow[]) || []);
+  };
+  useEffect(() => { loadSettings(); loadFiles(); }, []);
+
+  const handleSaveSettings = async () => {
+    if (!settings) return;
+    setSavingSettings(true);
+    const days = Math.max(1, Math.min(365, Number(retentionInput) || 5));
+    const { error } = await (supabase as any).from("backup_settings").update({
+      retention_days: days, auto_cleanup: autoCleanup, updated_at: new Date().toISOString(),
+    }).eq("id", settings.id);
+    setSavingSettings(false);
+    if (error) {
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Rotina de backup salva", description: `Retenção: ${days} dias.` });
+      loadSettings();
+    }
+  };
+
+  const handleExportDrive = async () => {
+    setExportingDrive(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("backup-restore?action=export-to-drive", { method: "POST" });
+      if (error) throw error;
+      toast({ title: "Backup enviado ao Google Drive", description: `Expira em ${(data as any).file?.retention_days} dias.` });
+      loadFiles();
+    } catch (err: unknown) {
+      toast({ title: "Erro ao enviar para o Drive", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setExportingDrive(false);
+    }
+  };
+
+  const handleCleanupNow = async () => {
+    setCleaning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("backup-restore?action=cleanup-now", { method: "POST" });
+      if (error) throw error;
+      toast({ title: "Limpeza concluída", description: `${(data as any).deleted || 0} arquivo(s) removido(s).` });
+      loadFiles();
+    } catch (err: unknown) {
+      toast({ title: "Erro na limpeza", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setCleaning(false);
+    }
+  };
+
+  const handleDeleteBackup = async (id: string) => {
+    if (!confirm("Excluir este backup do Google Drive?")) return;
+    try {
+      const { error } = await supabase.functions.invoke("backup-restore?action=delete-drive-backup", {
+        method: "POST", body: { id },
+      });
+      if (error) throw error;
+      toast({ title: "Backup excluído" });
+      loadFiles();
+    } catch (err: unknown) {
+      toast({ title: "Erro ao excluir", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
+    }
+  };
 
   const handleExport = async () => {
     setExporting(true);
@@ -568,30 +664,102 @@ function BackupSection() {
   };
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-6 max-w-3xl">
       <div className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 border border-border">
         <DatabaseBackup className="w-5 h-5 text-primary mt-0.5 shrink-0" />
         <div className="text-sm text-muted-foreground">
-          <p>O backup gera um arquivo <strong>.json</strong> contendo:</p>
-          <ul className="list-disc list-inside mt-1 space-y-0.5">
-            <li>Usuários cadastrados (perfis e e-mails)</li>
-            <li>Logs de auditoria do sistema</li>
-            <li>Metadados dos documentos (incluindo ID e link do Google Drive)</li>
-            <li>Categorias e Unidades</li>
-          </ul>
+          <p>O backup gera um arquivo <strong>.json</strong> contendo perfis, auditoria, metadados de documentos, categorias e unidades.</p>
           <p className="mt-2 text-xs">⚠️ Os arquivos físicos no Google Drive não são incluídos — apenas as referências (IDs).</p>
         </div>
       </div>
 
-      <div className="space-y-3">
-        <Label>Exportar Backup</Label>
-        <Button onClick={handleExport} disabled={exporting} className="gap-2">
-          <Download className="w-4 h-4" /> {exporting ? "Gerando..." : "Baixar Backup (.json)"}
+      {/* Rotina automática */}
+      <div className="space-y-3 p-4 rounded-lg border border-border bg-card">
+        <div className="flex items-center gap-2">
+          <RefreshCw className="w-4 h-4 text-primary" />
+          <Label className="text-base font-semibold">Rotina de Backup no Google Drive</Label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Cada backup enviado ao Google Drive é mantido pelo período abaixo. Após esse prazo, o sistema acessa o Drive e remove o arquivo automaticamente (verificação diária às 03:00).
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <div className="space-y-1">
+            <Label htmlFor="retention">Retenção (dias)</Label>
+            <Input id="retention" type="number" min={1} max={365}
+              value={retentionInput}
+              onChange={(e) => setRetentionInput(Number(e.target.value))} />
+          </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={autoCleanup} onChange={(e) => setAutoCleanup(e.target.checked)} className="h-4 w-4" />
+            Limpeza automática ativa
+          </label>
+          <Button onClick={handleSaveSettings} disabled={savingSettings} className="gap-2">
+            <Save className="w-4 h-4" /> {savingSettings ? "Salvando..." : "Salvar rotina"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Ações de backup */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Button onClick={handleExportDrive} disabled={exportingDrive} className="gap-2">
+          <HardDrive className="w-4 h-4" /> {exportingDrive ? "Enviando..." : "Fazer backup no Google Drive"}
+        </Button>
+        <Button variant="outline" onClick={handleExport} disabled={exporting} className="gap-2">
+          <Download className="w-4 h-4" /> {exporting ? "Gerando..." : "Baixar backup (.json)"}
         </Button>
       </div>
 
+      {/* Lista de backups no Drive */}
+      <div className="space-y-2 pt-4 border-t border-border">
+        <div className="flex items-center justify-between">
+          <Label className="text-base font-semibold">Backups no Google Drive</Label>
+          <Button size="sm" variant="ghost" onClick={handleCleanupNow} disabled={cleaning} className="gap-2">
+            <Trash2 className="w-4 h-4" /> {cleaning ? "Limpando..." : "Limpar expirados agora"}
+          </Button>
+        </div>
+        {files.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center border border-dashed border-border rounded-lg">
+            Nenhum backup enviado ao Drive ainda.
+          </p>
+        ) : (
+          <div className="border border-border rounded-lg divide-y divide-border overflow-hidden">
+            {files.map((f) => {
+              const expired = !f.deleted_at && new Date(f.expires_at) <= new Date();
+              return (
+                <div key={f.id} className="flex items-center justify-between gap-3 p-3 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium truncate">{f.file_name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(f.created_at).toLocaleString("pt-BR")} · {(f.file_size / 1024).toFixed(1)} KB · retenção {f.retention_days}d
+                    </div>
+                    <div className={`text-xs ${f.deleted_at ? "text-muted-foreground" : expired ? "text-destructive" : "text-primary"}`}>
+                      {f.deleted_at
+                        ? `Removido em ${new Date(f.deleted_at).toLocaleString("pt-BR")}`
+                        : `Expira em ${new Date(f.expires_at).toLocaleString("pt-BR")}${expired ? " (aguardando limpeza)" : ""}`}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {f.drive_link && !f.deleted_at && (
+                      <a href={f.drive_link} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">
+                        Abrir no Drive
+                      </a>
+                    )}
+                    {!f.deleted_at && (
+                      <Button size="sm" variant="ghost" onClick={() => handleDeleteBackup(f.id)} className="h-7 w-7 p-0">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Restaurar */}
       <div className="space-y-3 pt-4 border-t border-border">
-        <Label>Restaurar Backup</Label>
+        <Label className="text-base font-semibold">Restaurar Backup</Label>
         <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={handleImport} />
         <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={importing} className="gap-2">
           <Upload className="w-4 h-4" /> {importing ? "Restaurando..." : "Selecionar arquivo .json"}

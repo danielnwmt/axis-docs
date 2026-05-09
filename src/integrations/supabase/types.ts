@@ -47,6 +47,72 @@ export type Database = {
         }
         Relationships: []
       }
+      backup_files: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          drive_file_id: string
+          drive_link: string | null
+          expires_at: string
+          file_name: string
+          file_size: number | null
+          id: string
+          retention_days: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          drive_file_id: string
+          drive_link?: string | null
+          expires_at: string
+          file_name: string
+          file_size?: number | null
+          id?: string
+          retention_days?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          drive_file_id?: string
+          drive_link?: string | null
+          expires_at?: string
+          file_name?: string
+          file_size?: number | null
+          id?: string
+          retention_days?: number
+        }
+        Relationships: []
+      }
+      backup_settings: {
+        Row: {
+          auto_cleanup: boolean
+          drive_folder_id: string | null
+          id: string
+          retention_days: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          auto_cleanup?: boolean
+          drive_folder_id?: string | null
+          id?: string
+          retention_days?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          auto_cleanup?: boolean
+          drive_folder_id?: string | null
+          id?: string
+          retention_days?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           active: boolean
