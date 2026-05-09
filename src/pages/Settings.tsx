@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, Upload, HardDrive, CheckCircle, AlertCircle, RefreshCw, DatabaseBackup } from "lucide-react";
+import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, Upload, HardDrive, CheckCircle, AlertCircle, RefreshCw, DatabaseBackup, FileSignature, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +8,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchManagedList } from "@/lib/adminLookups";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | null;
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
@@ -16,6 +16,7 @@ const sectionCards = [
   { id: "unidades" as Section, icon: FolderTree, title: "Unidades/Setores", description: "Gerenciar a estrutura organizacional" },
   { id: "parametros" as Section, icon: Sliders, title: "Parâmetros do Sistema", description: "Configurações gerais da plataforma" },
   { id: "googledrive" as Section, icon: HardDrive, title: "Google Drive", description: "Configurar integração com Google Drive via API" },
+  { id: "assinatura" as Section, icon: FileSignature, title: "Assinatura Digital", description: "Configurar API ZapSign (ICP-Brasil A1/A3)" },
 ];
 
 function OrgaoSection() {
@@ -409,6 +410,107 @@ function GoogleDriveSection() {
 
 
 
+function AssinaturaSection() {
+  const [apiKey, setApiKey] = useState("");
+  const [environment, setEnvironment] = useState<"production" | "sandbox">("production");
+  const [show, setShow] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data } = await supabase.storage.from("settings").download("zapsign-config.json");
+        if (data) {
+          const cfg = JSON.parse(await data.text());
+          setApiKey(cfg.apiKey || "");
+          setEnvironment(cfg.environment || "production");
+          setStatus("saved");
+        }
+      } catch {
+        // no config
+      }
+    };
+    load();
+  }, []);
+
+  const handleSave = async () => {
+    if (!apiKey.trim()) {
+      toast({ title: "Erro", description: "Informe o token da API ZapSign.", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const cfg = { apiKey: apiKey.trim(), environment };
+      const blob = new Blob([JSON.stringify(cfg)], { type: "application/json" });
+      await supabase.storage.from("settings").remove(["zapsign-config.json"]);
+      const { error } = await supabase.storage.from("settings").upload("zapsign-config.json", blob, { upsert: true });
+      if (error) throw error;
+      setStatus("saved");
+      toast({ title: "Configuração da Assinatura Digital salva!" });
+    } catch (err: unknown) {
+      setStatus("error");
+      toast({ title: "Erro ao salvar", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <div className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 border border-border">
+        <FileSignature className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+        <div className="text-sm text-muted-foreground">
+          <p>Configure a integração com <strong>ZapSign</strong> para assinatura digital ICP-Brasil (A1/A3) em PDFs.</p>
+          <p className="mt-1">Obtenha seu token em: <a href="https://app.zapsign.com.br/conta/api" target="_blank" rel="noreferrer" className="text-primary underline">app.zapsign.com.br/conta/api</a></p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Ambiente</Label>
+        <select
+          value={environment}
+          onChange={(e) => { setEnvironment(e.target.value as "production" | "sandbox"); setStatus("idle"); }}
+          className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+        >
+          <option value="production">Produção</option>
+          <option value="sandbox">Sandbox (Testes)</option>
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Token da API ZapSign</Label>
+        <div className="flex gap-2">
+          <Input
+            type={show ? "text" : "password"}
+            placeholder="Cole aqui o token da API"
+            value={apiKey}
+            onChange={(e) => { setApiKey(e.target.value); setStatus("idle"); }}
+          />
+          <Button type="button" variant="outline" size="icon" onClick={() => setShow(!show)}>
+            {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </Button>
+        </div>
+      </div>
+
+      {status === "saved" && (
+        <div className="flex items-center gap-2 text-sm text-primary">
+          <CheckCircle className="w-4 h-4" /> Configuração salva e ativa
+        </div>
+      )}
+      {status === "error" && (
+        <div className="flex items-center gap-2 text-sm text-destructive">
+          <AlertCircle className="w-4 h-4" /> Erro na configuração
+        </div>
+      )}
+
+      <Button onClick={handleSave} disabled={saving} className="gap-2">
+        <Save className="w-4 h-4" /> {saving ? "Salvando..." : "Salvar Configuração"}
+      </Button>
+    </div>
+  );
+}
+
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<Section>(null);
 
@@ -419,6 +521,7 @@ export default function Settings() {
       case "unidades": return <ListManager itemLabel="Unidade/Setor" tableName="units" />;
       case "parametros": return <ParametrosSection />;
       case "googledrive": return <GoogleDriveSection />;
+      case "assinatura": return <AssinaturaSection />;
       default: return null;
     }
   };
