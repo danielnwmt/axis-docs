@@ -39,12 +39,22 @@ export default function Scanner() {
   const loadFromStorage = async (filePath: string) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.storage
-        .from("documents")
-        .download(filePath);
-      if (error) throw error;
+      const fileName = searchParams.get("fileName") || "document.pdf";
+      let blob: Blob;
 
-      const file = new File([data], searchParams.get("fileName") || "document.pdf", { type: data.type });
+      if (filePath.startsWith("drive://")) {
+        const driveFileId = filePath.replace("drive://", "");
+        const { fetchDriveFileBlob } = await import("@/lib/driveFile");
+        blob = await fetchDriveFileBlob(driveFileId, "view", "application/pdf");
+      } else {
+        const { data, error } = await supabase.storage
+          .from("documents")
+          .download(filePath);
+        if (error) throw error;
+        blob = data;
+      }
+
+      const file = new File([blob], fileName, { type: blob.type || "application/pdf" });
       await handleFile(file);
     } catch (err: any) {
       toast({ title: "Erro", description: "Não foi possível carregar o arquivo.", variant: "destructive" });
