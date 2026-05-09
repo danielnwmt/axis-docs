@@ -1751,6 +1751,7 @@ SERVICE_KEY=$SERVICE_KEY
 PG_USER=$PG_USER
 PG_PASS=$PG_PASS
 PG_DB=$PG_DB
+APP_DOMAIN=$APP_DOMAIN
 EOF_CRED
   chmod 600 /etc/axisdocs/credentials
   success "Credenciais salvas em /etc/axisdocs/credentials"
