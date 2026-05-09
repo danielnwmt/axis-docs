@@ -14,9 +14,22 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const zapSignApiKey = Deno.env.get("ZAPSIGN_API_KEY");
+    let zapSignApiKey: string | undefined = Deno.env.get("ZAPSIGN_API_KEY") || undefined;
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    // Fallback: load API key from settings bucket if env var is not set
+    if (!zapSignApiKey) {
+      try {
+        const { data: cfgFile } = await supabase.storage.from("settings").download("zapsign-config.json");
+        if (cfgFile) {
+          const cfg = JSON.parse(await cfgFile.text());
+          if (cfg?.apiKey) zapSignApiKey = cfg.apiKey as string;
+        }
+      } catch {
+        // no config file
+      }
+    }
 
     // Validate JWT from request
     const authHeader = req.headers.get("authorization");
