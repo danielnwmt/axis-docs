@@ -8,7 +8,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchManagedList } from "@/lib/adminLookups";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | null;
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
@@ -16,6 +16,7 @@ const sectionCards = [
   { id: "unidades" as Section, icon: FolderTree, title: "Unidades/Setores", description: "Gerenciar a estrutura organizacional" },
   { id: "parametros" as Section, icon: Sliders, title: "Parâmetros do Sistema", description: "Configurações gerais da plataforma" },
   { id: "googledrive" as Section, icon: HardDrive, title: "Google Drive", description: "Configurar integração com Google Drive via API" },
+  { id: "assinatura" as Section, icon: FileSignature, title: "Assinatura Digital", description: "Configurar API ZapSign (ICP-Brasil A1/A3)" },
 ];
 
 function OrgaoSection() {
