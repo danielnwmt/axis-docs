@@ -512,11 +512,107 @@ function AssinaturaSection() {
   );
 }
 
+interface BackupSettingsRow {
+  id: string;
+  retention_days: number;
+  auto_cleanup: boolean;
+  drive_folder_id: string | null;
+}
+interface BackupFileRow {
+  id: string;
+  file_name: string;
+  drive_link: string | null;
+  file_size: number;
+  retention_days: number;
+  expires_at: string;
+  deleted_at: string | null;
+  created_at: string;
+}
+
 function BackupSection() {
   const [exporting, setExporting] = useState(false);
+  const [exportingDrive, setExportingDrive] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
   const [lastStats, setLastStats] = useState<Record<string, number> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [settings, setSettings] = useState<BackupSettingsRow | null>(null);
+  const [retentionInput, setRetentionInput] = useState<number>(5);
+  const [autoCleanup, setAutoCleanup] = useState<boolean>(true);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [files, setFiles] = useState<BackupFileRow[]>([]);
+
+  const loadSettings = async () => {
+    const { data } = await (supabase as any).from("backup_settings").select("*").limit(1).maybeSingle();
+    if (data) {
+      setSettings(data);
+      setRetentionInput(data.retention_days);
+      setAutoCleanup(data.auto_cleanup);
+    }
+  };
+  const loadFiles = async () => {
+    const { data } = await (supabase as any).from("backup_files").select("*").order("created_at", { ascending: false }).limit(20);
+    setFiles((data as BackupFileRow[]) || []);
+  };
+  useEffect(() => { loadSettings(); loadFiles(); }, []);
+
+  const handleSaveSettings = async () => {
+    if (!settings) return;
+    setSavingSettings(true);
+    const days = Math.max(1, Math.min(365, Number(retentionInput) || 5));
+    const { error } = await (supabase as any).from("backup_settings").update({
+      retention_days: days, auto_cleanup: autoCleanup, updated_at: new Date().toISOString(),
+    }).eq("id", settings.id);
+    setSavingSettings(false);
+    if (error) {
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Rotina de backup salva", description: `Retenção: ${days} dias.` });
+      loadSettings();
+    }
+  };
+
+  const handleExportDrive = async () => {
+    setExportingDrive(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("backup-restore?action=export-to-drive", { method: "POST" });
+      if (error) throw error;
+      toast({ title: "Backup enviado ao Google Drive", description: `Expira em ${(data as any).file?.retention_days} dias.` });
+      loadFiles();
+    } catch (err: unknown) {
+      toast({ title: "Erro ao enviar para o Drive", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setExportingDrive(false);
+    }
+  };
+
+  const handleCleanupNow = async () => {
+    setCleaning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("backup-restore?action=cleanup-now", { method: "POST" });
+      if (error) throw error;
+      toast({ title: "Limpeza concluída", description: `${(data as any).deleted || 0} arquivo(s) removido(s).` });
+      loadFiles();
+    } catch (err: unknown) {
+      toast({ title: "Erro na limpeza", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setCleaning(false);
+    }
+  };
+
+  const handleDeleteBackup = async (id: string) => {
+    if (!confirm("Excluir este backup do Google Drive?")) return;
+    try {
+      const { error } = await supabase.functions.invoke("backup-restore?action=delete-drive-backup", {
+        method: "POST", body: { id },
+      });
+      if (error) throw error;
+      toast({ title: "Backup excluído" });
+      loadFiles();
+    } catch (err: unknown) {
+      toast({ title: "Erro ao excluir", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
+    }
+  };
 
   const handleExport = async () => {
     setExporting(true);
