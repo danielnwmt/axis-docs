@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, Upload, HardDrive, CheckCircle, AlertCircle, RefreshCw, DatabaseBackup, FileSignature, Eye, EyeOff } from "lucide-react";
+import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, Upload, HardDrive, CheckCircle, AlertCircle, RefreshCw, DatabaseBackup, FileSignature, Eye, EyeOff, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +8,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchManagedList } from "@/lib/adminLookups";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "backup" | null;
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
@@ -17,6 +17,7 @@ const sectionCards = [
   { id: "parametros" as Section, icon: Sliders, title: "Parâmetros do Sistema", description: "Configurações gerais da plataforma" },
   { id: "googledrive" as Section, icon: HardDrive, title: "Google Drive", description: "Configurar integração com Google Drive via API" },
   { id: "assinatura" as Section, icon: FileSignature, title: "Assinatura Digital", description: "Configurar API ZapSign (ICP-Brasil A1/A3)" },
+  { id: "backup" as Section, icon: DatabaseBackup, title: "Backup & Restauração", description: "Exportar e importar usuários, auditoria e referências de documentos" },
 ];
 
 function OrgaoSection() {
@@ -511,6 +512,103 @@ function AssinaturaSection() {
   );
 }
 
+function BackupSection() {
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [lastStats, setLastStats] = useState<Record<string, number> | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("backup-restore?action=export", {
+        method: "POST",
+      });
+      if (error) throw error;
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      a.href = url;
+      a.download = `axisdocs-backup-${ts}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Backup gerado", description: `${data.profiles?.length || 0} usuários, ${data.documents?.length || 0} documentos, ${data.audit_logs?.length || 0} auditorias.` });
+    } catch (err: unknown) {
+      toast({ title: "Erro ao exportar", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!confirm("Restaurar o backup pode sobrescrever dados existentes. Continuar?")) {
+      e.target.value = "";
+      return;
+    }
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const backup = JSON.parse(text);
+      const { data, error } = await supabase.functions.invoke("backup-restore?action=import", {
+        method: "POST",
+        body: { backup },
+      });
+      if (error) throw error;
+      setLastStats(data.stats);
+      toast({ title: "Backup restaurado com sucesso!" });
+    } catch (err: unknown) {
+      toast({ title: "Erro ao restaurar", description: err instanceof Error ? err.message : "Arquivo inválido", variant: "destructive" });
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <div className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 border border-border">
+        <DatabaseBackup className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+        <div className="text-sm text-muted-foreground">
+          <p>O backup gera um arquivo <strong>.json</strong> contendo:</p>
+          <ul className="list-disc list-inside mt-1 space-y-0.5">
+            <li>Usuários cadastrados (perfis e e-mails)</li>
+            <li>Logs de auditoria do sistema</li>
+            <li>Metadados dos documentos (incluindo ID e link do Google Drive)</li>
+            <li>Categorias e Unidades</li>
+          </ul>
+          <p className="mt-2 text-xs">⚠️ Os arquivos físicos no Google Drive não são incluídos — apenas as referências (IDs).</p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <Label>Exportar Backup</Label>
+        <Button onClick={handleExport} disabled={exporting} className="gap-2">
+          <Download className="w-4 h-4" /> {exporting ? "Gerando..." : "Baixar Backup (.json)"}
+        </Button>
+      </div>
+
+      <div className="space-y-3 pt-4 border-t border-border">
+        <Label>Restaurar Backup</Label>
+        <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={handleImport} />
+        <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={importing} className="gap-2">
+          <Upload className="w-4 h-4" /> {importing ? "Restaurando..." : "Selecionar arquivo .json"}
+        </Button>
+        {lastStats && (
+          <div className="text-sm text-muted-foreground p-3 rounded-lg bg-secondary/50 border border-border">
+            <div className="flex items-center gap-2 text-primary mb-1"><CheckCircle className="w-4 h-4" /> Restauração concluída</div>
+            <ul className="text-xs space-y-0.5">
+              {Object.entries(lastStats).map(([k, v]) => (<li key={k}>{k}: {v}</li>))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<Section>(null);
 
@@ -522,6 +620,7 @@ export default function Settings() {
       case "parametros": return <ParametrosSection />;
       case "googledrive": return <GoogleDriveSection />;
       case "assinatura": return <AssinaturaSection />;
+      case "backup": return <BackupSection />;
       default: return null;
     }
   };
