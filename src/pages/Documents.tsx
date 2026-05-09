@@ -43,6 +43,7 @@ export default function Documents() {
       const { data, error } = await supabase
         .from("documents")
         .select("*")
+        .neq("category", "Assinatura Digital")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
