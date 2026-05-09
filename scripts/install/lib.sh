@@ -1751,6 +1751,7 @@ SERVICE_KEY=$SERVICE_KEY
 PG_USER=$PG_USER
 PG_PASS=$PG_PASS
 PG_DB=$PG_DB
+APP_DOMAIN=$APP_DOMAIN
 EOF_CRED
   chmod 600 /etc/axisdocs/credentials
   success "Credenciais salvas em /etc/axisdocs/credentials"
@@ -1762,19 +1763,58 @@ cat > "$APP_DIR/update.sh" <<'EOF_UPDATE'
 set -euo pipefail
 
 APP_DIR="/opt/axisdocs"
+CRED_FILE="/etc/axisdocs/credentials"
 
 if [ "$EUID" -ne 0 ]; then
   echo "❌ Execute como root: sudo bash update.sh"
   exit 1
 fi
 
+if [ ! -f "$CRED_FILE" ]; then
+  echo "❌ Arquivo de credenciais não encontrado: $CRED_FILE"
+  echo "   Rode o install.sh completo primeiro."
+  exit 1
+fi
+
+# Recupera credenciais locais (gravadas pelo install.sh)
+# shellcheck disable=SC1090
+source "$CRED_FILE"
+
+# Determina a URL da API local (mesma origem servida pelo Nginx)
+if [ -n "${APP_DOMAIN:-}" ]; then
+  if [ -d /etc/letsencrypt/live/"$APP_DOMAIN" ]; then
+    API_BASE="https://$APP_DOMAIN"
+  else
+    API_BASE="http://$APP_DOMAIN"
+  fi
+else
+  API_BASE="http://$(hostname -I | awk '{print $1}')"
+fi
+
+echo "➡️  Sobrescrevendo .env para apontar para o banco LOCAL ($API_BASE)"
+cat > "$APP_DIR/.env" <<EOF_ENV
+VITE_SUPABASE_URL=${API_BASE}
+VITE_SUPABASE_PUBLISHABLE_KEY=${ANON_KEY}
+VITE_SUPABASE_PROJECT_ID=local
+EOF_ENV
+chmod 600 "$APP_DIR/.env"
+
 echo "➡️  Reconstruindo AxisDocs..."
 cd "$APP_DIR"
 npm install --no-fund --no-audit
 npm run build
+
+# Confirma que nenhuma URL da Lovable Cloud sobrou no build
+if grep -rq "supabase.co" "$APP_DIR/dist/" 2>/dev/null; then
+  echo "⚠️  AVISO: ainda há referências a supabase.co em dist/. Verifique o .env."
+  grep -rl "supabase.co" "$APP_DIR/dist/" | head
+else
+  echo "✅ Build limpo — sem referências à Lovable Cloud."
+fi
+
 nginx -t
 systemctl reload nginx
-echo "✅ Rebuild concluído!"
+echo "✅ Rebuild concluído! Banco 100% local."
 EOF_UPDATE
 
   chmod +x "$APP_DIR/update.sh"
