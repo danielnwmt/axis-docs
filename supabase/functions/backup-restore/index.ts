@@ -106,19 +106,46 @@ async function loadDriveConfig(admin: any): Promise<DriveConfig> {
 }
 
 async function buildBackupJson(admin: any) {
-  const [{ data: profiles }, { data: auditLogs }, { data: documents }, { data: categories }, { data: units }] = await Promise.all([
+  const [
+    { data: profiles },
+    { data: auditLogs },
+    { data: documents },
+    { data: categories },
+    { data: units },
+    { data: backupSettings },
+    { data: backupFiles },
+    { data: licenseConfig },
+  ] = await Promise.all([
     admin.from("profiles").select("*"),
     admin.from("audit_logs").select("*"),
     admin.from("documents").select("id,user_id,title,category,unit,subject,keywords,notes,file_name,file_path,file_type,file_size,drive_file_id,drive_link,ocr_status,ocr_text,sign_status,created_at,updated_at"),
     admin.from("categories").select("*"),
     admin.from("units").select("*"),
+    admin.from("backup_settings").select("*"),
+    admin.from("backup_files").select("*"),
+    admin.from("license_config").select("*"),
   ]);
   const { data: authList } = await admin.auth.admin.listUsers({ perPage: 1000 });
   const authUsers = (authList?.users || []).map((u: any) => ({
     id: u.id, email: u.email, email_confirmed_at: u.email_confirmed_at, created_at: u.created_at,
   }));
+
+  // Settings stored in storage bucket (Drive config, signature config, etc) — metadata only
+  let settingsFiles: { name: string; content: string }[] = [];
+  try {
+    const { data: list } = await admin.storage.from("settings").list("", { limit: 100 });
+    if (list) {
+      for (const f of list) {
+        try {
+          const { data: blob } = await admin.storage.from("settings").download(f.name);
+          if (blob) settingsFiles.push({ name: f.name, content: await blob.text() });
+        } catch (_) { /* ignore */ }
+      }
+    }
+  } catch (_) { /* bucket may not exist */ }
+
   return {
-    version: 1,
+    version: 2,
     generated_at: new Date().toISOString(),
     profiles: profiles || [],
     auth_users: authUsers,
@@ -126,6 +153,10 @@ async function buildBackupJson(admin: any) {
     documents: documents || [],
     categories: categories || [],
     units: units || [],
+    backup_settings: backupSettings || [],
+    backup_files: backupFiles || [],
+    license_config: licenseConfig || [],
+    settings_files: settingsFiles,
   };
 }
 
@@ -209,7 +240,7 @@ Deno.serve(async (req) => {
       const body = await req.json();
       const backup = body?.backup;
       if (!backup || typeof backup !== "object") return json({ error: "Backup inválido" }, 400);
-      const stats = { profiles: 0, audit_logs: 0, documents: 0, categories: 0, units: 0 };
+      const stats = { profiles: 0, audit_logs: 0, documents: 0, categories: 0, units: 0, backup_settings: 0, backup_files: 0, license_config: 0, settings_files: 0 };
       const upsertAll = async (rows: any[], table: string, key: keyof typeof stats) => {
         if (Array.isArray(rows)) for (const r of rows) { await admin.from(table).upsert(r, { onConflict: "id" }); stats[key]++; }
       };
@@ -218,6 +249,19 @@ Deno.serve(async (req) => {
       await upsertAll(backup.profiles, "profiles", "profiles");
       await upsertAll(backup.documents, "documents", "documents");
       await upsertAll(backup.audit_logs, "audit_logs", "audit_logs");
+      await upsertAll(backup.backup_settings, "backup_settings", "backup_settings");
+      await upsertAll(backup.backup_files, "backup_files", "backup_files");
+      await upsertAll(backup.license_config, "license_config", "license_config");
+      // Restore settings storage files (Drive config, signature config, etc.)
+      if (Array.isArray(backup.settings_files)) {
+        for (const f of backup.settings_files) {
+          try {
+            const bytes = new TextEncoder().encode(f.content);
+            await admin.storage.from("settings").upload(f.name, bytes, { upsert: true, contentType: "application/json" });
+            stats.settings_files++;
+          } catch (_) { /* ignore */ }
+        }
+      }
       await admin.from("audit_logs").insert({
         user_id: userData.user.id, user_email: userData.user.email || "",
         action: "Backup restaurado", action_type: "restore", target: "sistema",
