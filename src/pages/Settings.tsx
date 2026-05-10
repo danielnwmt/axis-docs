@@ -692,23 +692,42 @@ function BackupSection() {
           <Label className="text-base font-semibold">Rotina de Backup no Google Drive</Label>
         </div>
         <p className="text-xs text-muted-foreground">
-          Cada backup enviado ao Google Drive é mantido pelo período abaixo. Após esse prazo, o sistema acessa o Drive e remove o arquivo automaticamente (verificação diária às 03:00).
+          Defina o horário em que o backup automático será enviado ao Google Drive todos os dias. Cada arquivo é mantido pelo período de retenção e removido automaticamente após esse prazo (verificação diária às 03:00, horário de Brasília).
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="schedule-time">Horário do backup diário</Label>
+            <Input id="schedule-time" type="time"
+              value={scheduleTime}
+              onChange={(e) => setScheduleTime(e.target.value)} />
+            <p className="text-[11px] text-muted-foreground">Fuso: Brasília (UTC−3). Verificação a cada hora.</p>
+          </div>
           <div className="space-y-1">
             <Label htmlFor="retention">Retenção (dias)</Label>
             <Input id="retention" type="number" min={1} max={365}
               value={retentionInput}
               onChange={(e) => setRetentionInput(Number(e.target.value))} />
+            <p className="text-[11px] text-muted-foreground">Após esse prazo o backup é apagado do Drive.</p>
           </div>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={scheduleEnabled} onChange={(e) => setScheduleEnabled(e.target.checked)} className="h-4 w-4" />
+            Backup automático agendado ativo
+          </label>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={autoCleanup} onChange={(e) => setAutoCleanup(e.target.checked)} className="h-4 w-4" />
-            Limpeza automática ativa
+            Limpeza automática de expirados ativa
           </label>
-          <Button onClick={handleSaveSettings} disabled={savingSettings} className="gap-2">
+          <Button onClick={handleSaveSettings} disabled={savingSettings} className="gap-2 sm:ml-auto">
             <Save className="w-4 h-4" /> {savingSettings ? "Salvando..." : "Salvar rotina"}
           </Button>
         </div>
+        {settings?.last_scheduled_run && (
+          <p className="text-xs text-muted-foreground pt-1">
+            Último backup automático: <strong>{new Date(settings.last_scheduled_run).toLocaleDateString("pt-BR")}</strong>
+          </p>
+        )}
       </div>
 
       {/* Ações de backup */}
