@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, Upload, HardDrive, CheckCircle, AlertCircle, RefreshCw, DatabaseBackup, FileSignature, Eye, EyeOff, Download } from "lucide-react";
+import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, Upload, HardDrive, CheckCircle, AlertCircle, RefreshCw, DatabaseBackup, FileSignature, Eye, EyeOff, Download, KeyRound, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchManagedList } from "@/lib/adminLookups";
+import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, type LicenseInfo } from "@/lib/license";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "backup" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "backup" | "licenca" | null;
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
@@ -18,6 +19,7 @@ const sectionCards = [
   { id: "googledrive" as Section, icon: HardDrive, title: "Google Drive", description: "Configurar integração com Google Drive via API" },
   { id: "assinatura" as Section, icon: FileSignature, title: "Assinatura Digital", description: "Configurar API ZapSign (ICP-Brasil A1/A3)" },
   { id: "backup" as Section, icon: DatabaseBackup, title: "Backup & Restauração", description: "Exportar e importar usuários, auditoria e referências de documentos" },
+  { id: "licenca" as Section, icon: KeyRound, title: "Licença", description: "Ativar e consultar o status da licença do AxisDocs" },
 ];
 
 function OrgaoSection() {
@@ -820,6 +822,7 @@ export default function Settings() {
       case "googledrive": return <GoogleDriveSection />;
       case "assinatura": return <AssinaturaSection />;
       case "backup": return <BackupSection />;
+      case "licenca": return <LicencaSection />;
       default: return null;
     }
   };
