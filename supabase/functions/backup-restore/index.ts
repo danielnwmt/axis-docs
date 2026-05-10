@@ -142,6 +142,11 @@ Deno.serve(async (req) => {
       return await runCleanup(admin);
     }
 
+    // Internal scheduled backup: cron checks every hour if it's time to run
+    if (req.method === "POST" && action === "scheduled-run") {
+      return await runScheduledBackup(admin);
+    }
+
     // All other actions require admin user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Não autorizado" }, 401);
