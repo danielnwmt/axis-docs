@@ -142,6 +142,11 @@ Deno.serve(async (req) => {
       return await runCleanup(admin);
     }
 
+    // Internal scheduled backup: cron checks every hour if it's time to run
+    if (req.method === "POST" && action === "scheduled-run") {
+      return await runScheduledBackup(admin);
+    }
+
     // All other actions require admin user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Não autorizado" }, 401);
@@ -281,6 +286,68 @@ async function runCleanup(admin: any, userId?: string, userEmail?: string) {
     details: `${deleted} arquivo(s) expirado(s) removido(s) do Google Drive.`,
   });
   return json({ success: true, deleted });
+}
+
+async function performDriveBackup(admin: any, settings: any, createdBy: string) {
+  const retentionDays = Math.max(1, Number(settings?.retention_days || 5));
+  const cfg = await loadDriveConfig(admin);
+  const token = await getDriveToken(cfg.serviceAccount);
+  const rootId = extractFolderId(cfg.rootFolderId);
+  const backupsFolderId = settings?.drive_folder_id || await ensureFolder(token, "Backups", rootId);
+  if (!settings?.drive_folder_id && settings?.id) {
+    await admin.from("backup_settings").update({ drive_folder_id: backupsFolderId, updated_at: new Date().toISOString() }).eq("id", settings.id);
+  }
+  const backup = await buildBackupJson(admin);
+  const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const fileName = `axisdocs-backup-${ts}.json`;
+  const jsonStr = JSON.stringify(backup, null, 2);
+  const driveFile = await uploadJsonToDrive(token, backupsFolderId, fileName, jsonStr);
+  const expiresAt = new Date(Date.now() + retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  const { data: row } = await admin.from("backup_files").insert({
+    drive_file_id: driveFile.id,
+    drive_link: driveFile.webViewLink,
+    file_name: driveFile.name,
+    file_size: Number(driveFile.size || jsonStr.length),
+    retention_days: retentionDays,
+    expires_at: expiresAt,
+    created_by: createdBy,
+  }).select().single();
+  return { row, fileName, retentionDays, expiresAt };
+}
+
+async function runScheduledBackup(admin: any) {
+  const { data: settings } = await admin.from("backup_settings").select("*").limit(1).maybeSingle();
+  if (!settings || !settings.schedule_enabled) {
+    return json({ success: true, skipped: "schedule_disabled" });
+  }
+  const nowUtc = new Date();
+  const sp = new Date(nowUtc.getTime() - 3 * 60 * 60 * 1000);
+  const today = sp.toISOString().slice(0, 10);
+  const currentHour = sp.getUTCHours();
+  const [schedHourStr] = String(settings.schedule_time || "02:00:00").split(":");
+  const schedHour = Number(schedHourStr);
+  if (currentHour !== schedHour) {
+    return json({ success: true, skipped: `not_time (now=${currentHour}h, scheduled=${schedHour}h)` });
+  }
+  if (settings.last_scheduled_run === today) {
+    return json({ success: true, skipped: "already_ran_today" });
+  }
+  try {
+    const result = await performDriveBackup(admin, settings, "00000000-0000-0000-0000-000000000000");
+    await admin.from("backup_settings").update({ last_scheduled_run: today, updated_at: new Date().toISOString() }).eq("id", settings.id);
+    await admin.from("audit_logs").insert({
+      user_id: "00000000-0000-0000-0000-000000000000",
+      user_email: "system@cron",
+      action: "Backup automático agendado",
+      action_type: "backup",
+      target: result.fileName,
+      details: `Horário ${settings.schedule_time}. Retenção: ${result.retentionDays} dias.`,
+    });
+    return json({ success: true, file: result.row });
+  } catch (e) {
+    console.error("Scheduled backup failed:", e);
+    return json({ success: false, error: (e as Error).message }, 200);
+  }
 }
 
 function json(obj: unknown, status = 200) {

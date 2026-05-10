@@ -517,6 +517,9 @@ interface BackupSettingsRow {
   retention_days: number;
   auto_cleanup: boolean;
   drive_folder_id: string | null;
+  schedule_time: string;
+  schedule_enabled: boolean;
+  last_scheduled_run: string | null;
 }
 interface BackupFileRow {
   id: string;
@@ -541,6 +544,8 @@ function BackupSection() {
   const [autoCleanup, setAutoCleanup] = useState<boolean>(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const [files, setFiles] = useState<BackupFileRow[]>([]);
+  const [scheduleTime, setScheduleTime] = useState<string>("02:00");
+  const [scheduleEnabled, setScheduleEnabled] = useState<boolean>(false);
 
   const loadSettings = async () => {
     const { data } = await (supabase as any).from("backup_settings").select("*").limit(1).maybeSingle();
@@ -548,6 +553,8 @@ function BackupSection() {
       setSettings(data);
       setRetentionInput(data.retention_days);
       setAutoCleanup(data.auto_cleanup);
+      setScheduleTime(String(data.schedule_time || "02:00:00").slice(0, 5));
+      setScheduleEnabled(!!data.schedule_enabled);
     }
   };
   const loadFiles = async () => {
@@ -560,14 +567,19 @@ function BackupSection() {
     if (!settings) return;
     setSavingSettings(true);
     const days = Math.max(1, Math.min(365, Number(retentionInput) || 5));
+    const timeValue = /^\d{2}:\d{2}$/.test(scheduleTime) ? `${scheduleTime}:00` : "02:00:00";
     const { error } = await (supabase as any).from("backup_settings").update({
-      retention_days: days, auto_cleanup: autoCleanup, updated_at: new Date().toISOString(),
+      retention_days: days,
+      auto_cleanup: autoCleanup,
+      schedule_time: timeValue,
+      schedule_enabled: scheduleEnabled,
+      updated_at: new Date().toISOString(),
     }).eq("id", settings.id);
     setSavingSettings(false);
     if (error) {
       toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Rotina de backup salva", description: `Retenção: ${days} dias.` });
+      toast({ title: "Rotina de backup salva", description: scheduleEnabled ? `Backup diário às ${scheduleTime}. Retenção: ${days} dias.` : `Retenção: ${days} dias. Agendamento desativado.` });
       loadSettings();
     }
   };
@@ -680,23 +692,42 @@ function BackupSection() {
           <Label className="text-base font-semibold">Rotina de Backup no Google Drive</Label>
         </div>
         <p className="text-xs text-muted-foreground">
-          Cada backup enviado ao Google Drive é mantido pelo período abaixo. Após esse prazo, o sistema acessa o Drive e remove o arquivo automaticamente (verificação diária às 03:00).
+          Defina o horário em que o backup automático será enviado ao Google Drive todos os dias. Cada arquivo é mantido pelo período de retenção e removido automaticamente após esse prazo (verificação diária às 03:00, horário de Brasília).
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="schedule-time">Horário do backup diário</Label>
+            <Input id="schedule-time" type="time"
+              value={scheduleTime}
+              onChange={(e) => setScheduleTime(e.target.value)} />
+            <p className="text-[11px] text-muted-foreground">Fuso: Brasília (UTC−3). Verificação a cada hora.</p>
+          </div>
           <div className="space-y-1">
             <Label htmlFor="retention">Retenção (dias)</Label>
             <Input id="retention" type="number" min={1} max={365}
               value={retentionInput}
               onChange={(e) => setRetentionInput(Number(e.target.value))} />
+            <p className="text-[11px] text-muted-foreground">Após esse prazo o backup é apagado do Drive.</p>
           </div>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={scheduleEnabled} onChange={(e) => setScheduleEnabled(e.target.checked)} className="h-4 w-4" />
+            Backup automático agendado ativo
+          </label>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={autoCleanup} onChange={(e) => setAutoCleanup(e.target.checked)} className="h-4 w-4" />
-            Limpeza automática ativa
+            Limpeza automática de expirados ativa
           </label>
-          <Button onClick={handleSaveSettings} disabled={savingSettings} className="gap-2">
+          <Button onClick={handleSaveSettings} disabled={savingSettings} className="gap-2 sm:ml-auto">
             <Save className="w-4 h-4" /> {savingSettings ? "Salvando..." : "Salvar rotina"}
           </Button>
         </div>
+        {settings?.last_scheduled_run && (
+          <p className="text-xs text-muted-foreground pt-1">
+            Último backup automático: <strong>{new Date(settings.last_scheduled_run).toLocaleDateString("pt-BR")}</strong>
+          </p>
+        )}
       </div>
 
       {/* Ações de backup */}
