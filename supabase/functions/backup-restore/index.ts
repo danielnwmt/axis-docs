@@ -240,7 +240,7 @@ Deno.serve(async (req) => {
       const body = await req.json();
       const backup = body?.backup;
       if (!backup || typeof backup !== "object") return json({ error: "Backup inválido" }, 400);
-      const stats = { profiles: 0, audit_logs: 0, documents: 0, categories: 0, units: 0 };
+      const stats = { profiles: 0, audit_logs: 0, documents: 0, categories: 0, units: 0, backup_settings: 0, backup_files: 0, license_config: 0, settings_files: 0 };
       const upsertAll = async (rows: any[], table: string, key: keyof typeof stats) => {
         if (Array.isArray(rows)) for (const r of rows) { await admin.from(table).upsert(r, { onConflict: "id" }); stats[key]++; }
       };
@@ -249,6 +249,19 @@ Deno.serve(async (req) => {
       await upsertAll(backup.profiles, "profiles", "profiles");
       await upsertAll(backup.documents, "documents", "documents");
       await upsertAll(backup.audit_logs, "audit_logs", "audit_logs");
+      await upsertAll(backup.backup_settings, "backup_settings", "backup_settings");
+      await upsertAll(backup.backup_files, "backup_files", "backup_files");
+      await upsertAll(backup.license_config, "license_config", "license_config");
+      // Restore settings storage files (Drive config, signature config, etc.)
+      if (Array.isArray(backup.settings_files)) {
+        for (const f of backup.settings_files) {
+          try {
+            const bytes = new TextEncoder().encode(f.content);
+            await admin.storage.from("settings").upload(f.name, bytes, { upsert: true, contentType: "application/json" });
+            stats.settings_files++;
+          } catch (_) { /* ignore */ }
+        }
+      }
       await admin.from("audit_logs").insert({
         user_id: userData.user.id, user_email: userData.user.email || "",
         action: "Backup restaurado", action_type: "restore", target: "sistema",
