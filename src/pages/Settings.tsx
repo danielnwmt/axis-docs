@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, Upload, HardDrive, CheckCircle, AlertCircle, RefreshCw, DatabaseBackup, FileSignature, Eye, EyeOff, Download } from "lucide-react";
+import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, Upload, HardDrive, CheckCircle, AlertCircle, RefreshCw, DatabaseBackup, FileSignature, Eye, EyeOff, Download, KeyRound, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchManagedList } from "@/lib/adminLookups";
+import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, type LicenseInfo } from "@/lib/license";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "backup" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "backup" | "licenca" | null;
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
@@ -18,6 +19,7 @@ const sectionCards = [
   { id: "googledrive" as Section, icon: HardDrive, title: "Google Drive", description: "Configurar integração com Google Drive via API" },
   { id: "assinatura" as Section, icon: FileSignature, title: "Assinatura Digital", description: "Configurar API ZapSign (ICP-Brasil A1/A3)" },
   { id: "backup" as Section, icon: DatabaseBackup, title: "Backup & Restauração", description: "Exportar e importar usuários, auditoria e referências de documentos" },
+  { id: "licenca" as Section, icon: KeyRound, title: "Licença", description: "Ativar e consultar o status da licença do AxisDocs" },
 ];
 
 function OrgaoSection() {
@@ -808,6 +810,161 @@ function BackupSection() {
   );
 }
 
+function LicencaSection() {
+  const [config, setConfig] = useState<LicenseInfo | null>(null);
+  const [serverUrl, setServerUrl] = useState("");
+  const [licenseKey, setLicenseKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const c = await loadLicenseConfig();
+        if (c) {
+          setConfig(c);
+          setServerUrl(c.server_url || "");
+          setLicenseKey(c.license_key || "");
+        }
+      } catch (e: any) {
+        toast({ title: "Erro", description: e.message, variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    if (!serverUrl.trim() || !licenseKey.trim()) {
+      toast({ title: "Preencha URL e chave", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveLicenseConfig(serverUrl.trim(), licenseKey.trim());
+      clearLicenseCache();
+      toast({ title: "Configuração salva. Validando..." });
+      await handleValidate();
+    } catch (e: any) {
+      toast({ title: "Erro ao salvar", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleValidate = async () => {
+    setChecking(true);
+    try {
+      const res = await validateLicense();
+      const c = await loadLicenseConfig();
+      setConfig(c);
+      if (res.status === "active") {
+        toast({ title: "Licença ativa", description: res.customer_name || "Validação concluída." });
+      } else {
+        toast({
+          title: `Status: ${res.status}`,
+          description: res.message || "Verifique a chave e o servidor.",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({ title: "Falha na validação", description: e.message, variant: "destructive" });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  if (loading) return <div className="text-sm text-muted-foreground">Carregando...</div>;
+
+  const status = config?.status || "inactive";
+  const statusColor =
+    status === "active"
+      ? "text-success"
+      : status === "blocked" || status === "expired" || status === "invalid"
+      ? "text-destructive"
+      : "text-muted-foreground";
+  const StatusIcon = status === "active" ? ShieldCheck : ShieldAlert;
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      {/* Status atual */}
+      <div className="bg-muted/30 rounded-lg p-4 border border-border">
+        <div className="flex items-center gap-3 mb-3">
+          <StatusIcon className={`w-6 h-6 ${statusColor}`} />
+          <div>
+            <p className="text-sm text-muted-foreground">Status da licença</p>
+            <p className={`text-lg font-semibold capitalize ${statusColor}`}>{status}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          {config?.customer_name && (
+            <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{config.customer_name}</span></div>
+          )}
+          {config?.expires_at && (
+            <div><span className="text-muted-foreground">Expira em:</span> <span className="font-medium">{new Date(config.expires_at).toLocaleDateString("pt-BR")}</span></div>
+          )}
+          {config?.last_check && (
+            <div><span className="text-muted-foreground">Última verificação:</span> <span className="font-medium">{new Date(config.last_check).toLocaleString("pt-BR")}</span></div>
+          )}
+          {config?.hardware_id && (
+            <div className="truncate"><span className="text-muted-foreground">ID hardware:</span> <span className="font-mono text-xs">{config.hardware_id}</span></div>
+          )}
+        </div>
+        {config?.message && (
+          <p className="mt-3 text-xs text-muted-foreground italic">{config.message}</p>
+        )}
+      </div>
+
+      {/* Configuração */}
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <Label>URL do servidor de licenças</Label>
+          <Input
+            value={serverUrl}
+            onChange={(e) => setServerUrl(e.target.value)}
+            placeholder="https://licencas.suaempresa.com/api/validar"
+          />
+          <p className="text-xs text-muted-foreground">
+            Endpoint POST que recebe <code>{`{ license_key, hardware_id, product }`}</code> e retorna{" "}
+            <code>{`{ status: "active|blocked|expired|invalid", customer_name?, expires_at?, message? }`}</code>.
+          </p>
+        </div>
+        <div className="space-y-1">
+          <Label>Chave de licença</Label>
+          <div className="relative">
+            <Input
+              type={showKey ? "text" : "password"}
+              value={licenseKey}
+              onChange={(e) => setLicenseKey(e.target.value)}
+              placeholder="AXIS-XXXX-XXXX-XXXX"
+              className="pr-10 font-mono"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-2 pt-2">
+          <Button onClick={handleSave} disabled={saving || checking}>
+            <Save className="w-4 h-4 mr-2" />
+            {saving ? "Salvando..." : "Salvar e ativar"}
+          </Button>
+          <Button variant="outline" onClick={handleValidate} disabled={checking || saving || !config?.server_url}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${checking ? "animate-spin" : ""}`} />
+            Verificar status
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<Section>(null);
 
@@ -820,6 +977,7 @@ export default function Settings() {
       case "googledrive": return <GoogleDriveSection />;
       case "assinatura": return <AssinaturaSection />;
       case "backup": return <BackupSection />;
+      case "licenca": return <LicencaSection />;
       default: return null;
     }
   };

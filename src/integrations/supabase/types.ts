@@ -212,6 +212,48 @@ export type Database = {
         }
         Relationships: []
       }
+      license_config: {
+        Row: {
+          customer_name: string | null
+          expires_at: string | null
+          hardware_id: string
+          id: string
+          last_check: string | null
+          license_key: string
+          message: string | null
+          server_url: string
+          status: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          customer_name?: string | null
+          expires_at?: string | null
+          hardware_id?: string
+          id?: string
+          last_check?: string | null
+          license_key?: string
+          message?: string | null
+          server_url?: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          customer_name?: string | null
+          expires_at?: string | null
+          hardware_id?: string
+          id?: string
+          last_check?: string | null
+          license_key?: string
+          message?: string | null
+          server_url?: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           active: boolean
