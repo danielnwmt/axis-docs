@@ -102,47 +102,74 @@ export default function Scanner() {
   const processPdf = async (file: File) => {
     setLoading(true);
     setProgress(0);
+    const startedAt = performance.now();
     try {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const totalPages = pdf.numPages;
-      let allText = "";
+      const pageTexts: string[] = new Array(totalPages).fill("");
+      const ocrQueue: number[] = [];
+      let processed = 0;
 
-      for (let i = 1; i <= totalPages; i++) {
-        setProgress(Math.round(((i - 1) / totalPages) * 50));
-        const page = await pdf.getPage(i);
-
-        // Try text extraction first
-        const content = await page.getTextContent();
-        const pageText = content.items.map((item: any) => item.str).join(" ");
-
-        if (pageText.trim().length > 20) {
-          allText += `--- Página ${i} ---\n${pageText}\n\n`;
-        } else {
-          // Fallback: render to canvas and OCR
-          const viewport = page.getViewport({ scale: 2 });
-          const canvas = document.createElement("canvas");
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          const ctx = canvas.getContext("2d")!;
-          await page.render({ canvasContext: ctx, viewport }).promise;
-          const dataUrl = canvas.toDataURL("image/png");
-
-          if (i === 1) setPreview(dataUrl);
-
-          const result = await Tesseract.recognize(dataUrl, "por", {
-            logger: (m) => {
-              if (m.status === "recognizing text") {
-                setProgress(50 + Math.round((m.progress || 0) * (50 / totalPages)));
-              }
-            },
-          });
-          allText += `--- Página ${i} ---\n${result.data.text}\n\n`;
+      // Phase 1: parallel text extraction (fast, native PDF text)
+      const TEXT_CONCURRENCY = 8;
+      let nextTextIdx = 0;
+      const textWorker = async () => {
+        while (true) {
+          const i = nextTextIdx++;
+          if (i >= totalPages) return;
+          const page = await pdf.getPage(i + 1);
+          const content = await page.getTextContent();
+          const pageText = content.items.map((item: any) => item.str).join(" ");
+          if (pageText.trim().length > 20) {
+            pageTexts[i] = `--- Página ${i + 1} ---\n${pageText}\n\n`;
+          } else {
+            ocrQueue.push(i);
+          }
+          processed++;
+          setProgress(Math.round((processed / totalPages) * 30));
         }
+      };
+      await Promise.all(Array.from({ length: TEXT_CONCURRENCY }, textWorker));
+
+      // Phase 2: parallel OCR for image-only pages using worker pool
+      if (ocrQueue.length > 0) {
+        const POOL_SIZE = Math.min(navigator.hardwareConcurrency || 4, 6, ocrQueue.length);
+        const workers = await Promise.all(
+          Array.from({ length: POOL_SIZE }, () => Tesseract.createWorker("por"))
+        );
+
+        let nextOcrIdx = 0;
+        let ocrDone = 0;
+        const ocrWorker = async (worker: Tesseract.Worker) => {
+          while (true) {
+            const queueIdx = nextOcrIdx++;
+            if (queueIdx >= ocrQueue.length) return;
+            const i = ocrQueue[queueIdx];
+            const page = await pdf.getPage(i + 1);
+            const viewport = page.getViewport({ scale: 1.5 });
+            const canvas = document.createElement("canvas");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext("2d")!;
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            if (i === 0) setPreview(canvas.toDataURL("image/jpeg", 0.7));
+            const result = await worker.recognize(canvas);
+            pageTexts[i] = `--- Página ${i + 1} ---\n${result.data.text}\n\n`;
+            ocrDone++;
+            setProgress(30 + Math.round((ocrDone / ocrQueue.length) * 70));
+          }
+        };
+        await Promise.all(workers.map(ocrWorker));
+        await Promise.all(workers.map((w) => w.terminate()));
       }
 
-      setText(allText.trim());
-      toast({ title: "OCR concluído!", description: `${totalPages} página(s) processada(s).` });
+      setText(pageTexts.join("").trim());
+      const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
+      toast({
+        title: "OCR concluído!",
+        description: `${totalPages} página(s) em ${elapsed}s (${ocrQueue.length} via OCR, ${totalPages - ocrQueue.length} texto nativo).`,
+      });
     } catch (err: any) {
       toast({ title: "Erro ao processar PDF", description: err.message, variant: "destructive" });
     } finally {
