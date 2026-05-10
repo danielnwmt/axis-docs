@@ -517,6 +517,9 @@ interface BackupSettingsRow {
   retention_days: number;
   auto_cleanup: boolean;
   drive_folder_id: string | null;
+  schedule_time: string;
+  schedule_enabled: boolean;
+  last_scheduled_run: string | null;
 }
 interface BackupFileRow {
   id: string;
