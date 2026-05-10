@@ -91,7 +91,10 @@ export type Database = {
           auto_cleanup: boolean
           drive_folder_id: string | null
           id: string
+          last_scheduled_run: string | null
           retention_days: number
+          schedule_enabled: boolean
+          schedule_time: string
           updated_at: string
           updated_by: string | null
         }
@@ -99,7 +102,10 @@ export type Database = {
           auto_cleanup?: boolean
           drive_folder_id?: string | null
           id?: string
+          last_scheduled_run?: string | null
           retention_days?: number
+          schedule_enabled?: boolean
+          schedule_time?: string
           updated_at?: string
           updated_by?: string | null
         }
@@ -107,7 +113,10 @@ export type Database = {
           auto_cleanup?: boolean
           drive_folder_id?: string | null
           id?: string
+          last_scheduled_run?: string | null
           retention_days?: number
+          schedule_enabled?: boolean
+          schedule_time?: string
           updated_at?: string
           updated_by?: string | null
         }
