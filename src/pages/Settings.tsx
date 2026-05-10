@@ -544,6 +544,8 @@ function BackupSection() {
   const [autoCleanup, setAutoCleanup] = useState<boolean>(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const [files, setFiles] = useState<BackupFileRow[]>([]);
+  const [scheduleTime, setScheduleTime] = useState<string>("02:00");
+  const [scheduleEnabled, setScheduleEnabled] = useState<boolean>(false);
 
   const loadSettings = async () => {
     const { data } = await (supabase as any).from("backup_settings").select("*").limit(1).maybeSingle();
@@ -551,6 +553,8 @@ function BackupSection() {
       setSettings(data);
       setRetentionInput(data.retention_days);
       setAutoCleanup(data.auto_cleanup);
+      setScheduleTime(String(data.schedule_time || "02:00:00").slice(0, 5));
+      setScheduleEnabled(!!data.schedule_enabled);
     }
   };
   const loadFiles = async () => {
@@ -563,14 +567,19 @@ function BackupSection() {
     if (!settings) return;
     setSavingSettings(true);
     const days = Math.max(1, Math.min(365, Number(retentionInput) || 5));
+    const timeValue = /^\d{2}:\d{2}$/.test(scheduleTime) ? `${scheduleTime}:00` : "02:00:00";
     const { error } = await (supabase as any).from("backup_settings").update({
-      retention_days: days, auto_cleanup: autoCleanup, updated_at: new Date().toISOString(),
+      retention_days: days,
+      auto_cleanup: autoCleanup,
+      schedule_time: timeValue,
+      schedule_enabled: scheduleEnabled,
+      updated_at: new Date().toISOString(),
     }).eq("id", settings.id);
     setSavingSettings(false);
     if (error) {
       toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Rotina de backup salva", description: `Retenção: ${days} dias.` });
+      toast({ title: "Rotina de backup salva", description: scheduleEnabled ? `Backup diário às ${scheduleTime}. Retenção: ${days} dias.` : `Retenção: ${days} dias. Agendamento desativado.` });
       loadSettings();
     }
   };
