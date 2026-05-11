@@ -22,6 +22,7 @@ export async function unlockTemporary(unlock_code: string): Promise<{ ok: boolea
     return { ok: false, message: msg };
   }
   return data as any;
+}
 
 const CACHE_KEY = "axis_license_cache_v1";
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
