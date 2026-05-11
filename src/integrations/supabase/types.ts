@@ -223,6 +223,7 @@ export type Database = {
           message: string | null
           server_url: string
           status: string
+          temp_unlock_until: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -236,6 +237,7 @@ export type Database = {
           message?: string | null
           server_url?: string
           status?: string
+          temp_unlock_until?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -249,6 +251,7 @@ export type Database = {
           message?: string | null
           server_url?: string
           status?: string
+          temp_unlock_until?: string | null
           updated_at?: string
           updated_by?: string | null
         }

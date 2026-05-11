@@ -1,0 +1,1 @@
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS temp_unlock_until timestamptz;
