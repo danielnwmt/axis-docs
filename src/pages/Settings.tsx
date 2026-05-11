@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchManagedList } from "@/lib/adminLookups";
-import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, type LicenseInfo } from "@/lib/license";
+import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, unlockTemporary, type LicenseInfo } from "@/lib/license";
 
 type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "backup" | "licenca" | null;
 
@@ -818,6 +818,38 @@ function LicencaSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [unlockCode, setUnlockCode] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+
+  const handleUnlock = async () => {
+    if (!unlockCode.trim()) {
+      toast({ title: "Informe o código de desbloqueio", variant: "destructive" });
+      return;
+    }
+    setUnlocking(true);
+    try {
+      const res = await unlockTemporary(unlockCode.trim());
+      if (res.ok) {
+        clearLicenseCache();
+        const c = await loadLicenseConfig();
+        setConfig(c);
+        setUnlockCode("");
+        toast({
+          title: "Sistema desbloqueado",
+          description: res.valid_until
+            ? `Válido até ${new Date(res.valid_until).toLocaleString("pt-BR")}`
+            : "Desbloqueio temporário ativado por 24h.",
+        });
+        await validateLicense();
+      } else {
+        toast({ title: "Código inválido", description: res.message || "Verifique e tente novamente.", variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Falha no desbloqueio", description: e.message, variant: "destructive" });
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -917,7 +949,33 @@ function LicencaSection() {
         )}
       </div>
 
-      {/* Configuração */}
+      {/* Desbloqueio temporário 24h */}
+      <div className="rounded-lg border border-border p-4 space-y-3 bg-card">
+        <div>
+          <h3 className="text-base font-semibold text-foreground">Desbloqueio temporário (24h)</h3>
+          <p className="text-xs text-muted-foreground">
+            Insira o código fornecido pelo suporte para liberar o sistema por 24 horas, mesmo que a licença esteja bloqueada ou o servidor inacessível.
+          </p>
+          {config?.temp_unlock_until && new Date(config.temp_unlock_until).getTime() > Date.now() && (
+            <p className="mt-2 text-xs text-success font-medium">
+              Desbloqueio ativo até {new Date(config.temp_unlock_until).toLocaleString("pt-BR")}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={unlockCode}
+            onChange={(e) => setUnlockCode(e.target.value)}
+            placeholder="Cole aqui o código de desbloqueio"
+            className="font-mono"
+          />
+          <Button onClick={handleUnlock} disabled={unlocking || !unlockCode.trim()}>
+            <KeyRound className="w-4 h-4 mr-2" />
+            {unlocking ? "Liberando..." : "Desbloquear 24h"}
+          </Button>
+        </div>
+      </div>
+
       <div className="space-y-3">
         <div className="space-y-1">
           <Label>URL do servidor de licenças</Label>

@@ -43,6 +43,21 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
+    // Temporary unlock takes precedence (admin entered an unlock code)
+    if (config?.temp_unlock_until && new Date(config.temp_unlock_until).getTime() > Date.now()) {
+      return new Response(
+        JSON.stringify({
+          status: "active",
+          customer_name: config.customer_name || "",
+          expires_at: config.expires_at,
+          message: `Desbloqueio temporário ativo até ${new Date(config.temp_unlock_until).toLocaleString("pt-BR")}`,
+          last_check: config.last_check,
+          temp_unlock_until: config.temp_unlock_until,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     if (!config || !config.server_url || !config.license_key) {
       return new Response(
         JSON.stringify({
