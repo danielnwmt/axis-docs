@@ -818,6 +818,38 @@ function LicencaSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [unlockCode, setUnlockCode] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+
+  const handleUnlock = async () => {
+    if (!unlockCode.trim()) {
+      toast({ title: "Informe o código de desbloqueio", variant: "destructive" });
+      return;
+    }
+    setUnlocking(true);
+    try {
+      const res = await unlockTemporary(unlockCode.trim());
+      if (res.ok) {
+        clearLicenseCache();
+        const c = await loadLicenseConfig();
+        setConfig(c);
+        setUnlockCode("");
+        toast({
+          title: "Sistema desbloqueado",
+          description: res.valid_until
+            ? `Válido até ${new Date(res.valid_until).toLocaleString("pt-BR")}`
+            : "Desbloqueio temporário ativado por 24h.",
+        });
+        await validateLicense();
+      } else {
+        toast({ title: "Código inválido", description: res.message || "Verifique e tente novamente.", variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Falha no desbloqueio", description: e.message, variant: "destructive" });
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   useEffect(() => {
     (async () => {
