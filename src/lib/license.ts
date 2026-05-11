@@ -12,7 +12,16 @@ export interface LicenseInfo {
   license_key?: string | null;
   hardware_id?: string | null;
   id?: string | null;
+  temp_unlock_until?: string | null;
 }
+
+export async function unlockTemporary(unlock_code: string): Promise<{ ok: boolean; valid_until?: string; message?: string }> {
+  const { data, error } = await supabase.functions.invoke("license-temp-unlock", { body: { unlock_code } });
+  if (error) {
+    const msg = (error as any)?.message || "Falha no desbloqueio";
+    return { ok: false, message: msg };
+  }
+  return data as any;
 
 const CACHE_KEY = "axis_license_cache_v1";
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
