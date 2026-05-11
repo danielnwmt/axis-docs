@@ -121,9 +121,25 @@ export default function Scanner() {
           const page = await pdf.getPage(i + 1);
           const content = await page.getTextContent();
           const pageText = content.items.map((item: any) => item.str).join(" ");
-          if (pageText.trim().length > 20) {
+          // Strip signature/watermark boilerplate (e-notariado, ICP-Brasil, ZapSign, etc.)
+          // before deciding if the page has real content or needs OCR.
+          const stripped = pageText
+            .replace(/Esse documento foi assinado[\s\S]*?(?=\s{2,}|$)/gi, " ")
+            .replace(/Para validar[\s\S]*?(validate|assinaturas?)[\s\S]*?(?=\s{2,}|$)/gi, " ")
+            .replace(/https?:\/\/\S+/gi, " ")
+            .replace(/Assinado digitalmente por[\s\S]{0,200}/gi, " ")
+            .replace(/Certificado emitido[\s\S]{0,120}/gi, " ")
+            .replace(/CPF:\s*\d[\d.\-/]+/gi, " ")
+            .replace(/Data:\s*\d{2}\/\d{2}\/\d{4}[^\n]*/gi, " ")
+            .replace(/Código de validação:[^\n]*/gi, " ")
+            .replace(/MANIFESTO DE\s+ASSINATURAS/gi, " ")
+            .replace(/[A-Z0-9]{4,5}-[A-Z0-9]{4,5}-[A-Z0-9]{4,5}-[A-Z0-9]{4,5}/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (stripped.length > 80) {
             pageTexts[i] = `--- Página ${i + 1} ---\n${pageText}\n\n`;
           } else {
+            // Page is image-based (with optional signature watermark) — needs OCR
             ocrQueue.push(i);
           }
           processed++;
