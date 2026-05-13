@@ -60,6 +60,29 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Verify document ownership (or admin) before any privileged action
+    const { data: doc } = await supabase
+      .from("documents")
+      .select("id, user_id, file_path")
+      .eq("id", documentId)
+      .eq("file_path", filePath)
+      .maybeSingle();
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, active")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const isAdmin = profile?.role === "Administrador" && profile?.active === true;
+
+    if (!doc || (doc.user_id !== user.id && !isAdmin)) {
+      return new Response(JSON.stringify({ error: "Não autorizado" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Check if ZapSign API key is configured
     if (!zapSignApiKey) {
       console.log("ZapSign API key not configured. Document saved as pending.");
