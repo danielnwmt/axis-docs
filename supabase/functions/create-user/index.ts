@@ -24,6 +24,28 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Validate JWT and require active Administrador role
+    const { data: callerData, error: callerError } = await supabaseAdmin.auth.getUser(
+      authHeader.replace("Bearer ", "")
+    );
+    if (callerError || !callerData?.user) {
+      return new Response(JSON.stringify({ error: "Token inválido" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: callerProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("role, active")
+      .eq("id", callerData.user.id)
+      .maybeSingle();
+    if (!callerProfile || callerProfile.role !== "Administrador" || !callerProfile.active) {
+      return new Response(JSON.stringify({ error: "Permissão negada" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
 
