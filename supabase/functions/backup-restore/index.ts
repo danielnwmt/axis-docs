@@ -168,13 +168,14 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
 
-    // Internal cleanup action: callable via cron with service role key, no user required
-    if (req.method === "POST" && action === "cleanup") {
-      return await runCleanup(admin);
-    }
-
-    // Internal scheduled backup: cron checks every hour if it's time to run
-    if (req.method === "POST" && action === "scheduled-run") {
+    // Internal cron actions: require shared CRON_SECRET header
+    if (req.method === "POST" && (action === "cleanup" || action === "scheduled-run")) {
+      const cronSecret = req.headers.get("x-cron-secret");
+      const expected = Deno.env.get("CRON_SECRET");
+      if (!expected || cronSecret !== expected) {
+        return json({ error: "Unauthorized" }, 401);
+      }
+      if (action === "cleanup") return await runCleanup(admin);
       return await runScheduledBackup(admin);
     }
 

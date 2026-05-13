@@ -119,6 +119,25 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Ownership check: caller must own a document with this drive_file_id, or be admin
+    const { data: doc } = await supabase
+      .from("documents")
+      .select("user_id")
+      .eq("drive_file_id", driveFileId)
+      .maybeSingle();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, active")
+      .eq("id", user.id)
+      .maybeSingle();
+    const isAdmin = profile?.role === "Administrador" && profile?.active === true;
+    if (!doc || (doc.user_id !== user.id && !isAdmin)) {
+      return new Response(JSON.stringify({ error: "Não autorizado" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Load Google Drive config
     const { data: configData, error: configError } = await supabase.storage
       .from("settings")
