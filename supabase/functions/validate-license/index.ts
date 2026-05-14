@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // call external license server
+    // call external license server (contract: getlicence.lovable.app)
     let serverStatus = "unreachable";
     let serverData: any = {};
     let errorMessage = "";
@@ -81,15 +81,26 @@ Deno.serve(async (req) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           license_key: config.license_key,
-          hardware_id: config.hardware_id || "",
-          product: "axisdocs",
+          hostname: config.hardware_id || "axisdocs",
         }),
         signal: ctrl.signal,
       });
       clearTimeout(timeoutId);
       serverData = await resp.json().catch(() => ({}));
-      serverStatus = String(serverData.status || (resp.ok ? "active" : "blocked")).toLowerCase();
-      if (!["active", "blocked", "expired", "invalid"].includes(serverStatus)) {
+
+      // Map API contract: { ok, status, expires_at, blocked, expired, storage, reason }
+      const apiStatus = String(serverData.status || "").toLowerCase();
+      if (serverData.ok === true || apiStatus === "active") {
+        serverStatus = "active";
+      } else if (serverData.blocked === true || apiStatus === "blocked" || apiStatus === "cancelled") {
+        serverStatus = "blocked";
+      } else if (serverData.expired === true || apiStatus === "expired") {
+        serverStatus = "expired";
+      } else if (apiStatus === "invalid" || resp.status === 404 || resp.status === 400) {
+        serverStatus = "invalid";
+      } else if (apiStatus === "pending") {
+        serverStatus = "inactive";
+      } else {
         serverStatus = resp.ok ? "active" : "blocked";
       }
     } catch (e: any) {
@@ -111,7 +122,7 @@ Deno.serve(async (req) => {
     const updates: Record<string, any> = {
       status: serverStatus,
       last_check: new Date().toISOString(),
-      message: serverData.message || errorMessage || "",
+      message: serverData.reason || serverData.message || errorMessage || "",
       customer_name: serverData.customer_name || serverData.customer || config.customer_name || "",
       expires_at: serverData.expires_at || serverData.expiresAt || config.expires_at,
       updated_at: new Date().toISOString(),
