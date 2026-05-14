@@ -95,20 +95,12 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
             </p>
           </div>
 
-          {isAdmin ? (
-            <AdminLicenseForm onChanged={refresh} />
-          ) : (
-            <p className="text-center text-sm text-muted-foreground">
-              Peça ao administrador para ativar a licença.
-            </p>
-          )}
+          <AdminLicenseForm onChanged={refresh} />
 
           <div className="flex flex-col sm:flex-row gap-2 mt-6">
-            {isAdmin && (
-              <Button variant="outline" className="flex-1" onClick={() => navigate("/settings")}>
-                <SettingsIcon className="w-4 h-4 mr-2" /> Ir para Configurações
-              </Button>
-            )}
+            <Button variant="outline" className="flex-1" onClick={() => navigate("/settings")}>
+              <SettingsIcon className="w-4 h-4 mr-2" /> Ir para Configurações
+            </Button>
             <Button variant="outline" className="flex-1" disabled={checking} onClick={refresh}>
               <RefreshCw className={`w-4 h-4 mr-2 ${checking ? "animate-spin" : ""}`} />
               Verificar novamente
