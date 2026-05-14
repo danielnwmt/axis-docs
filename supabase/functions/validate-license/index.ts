@@ -5,6 +5,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const LICENSE_CHECK_PATH = "/api/public/license/check";
+
+function normalizeLicenseServerUrl(serverUrl: string) {
+  const trimmed = String(serverUrl || "").trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+
+  try {
+    const url = new URL(trimmed);
+    if (url.pathname === "" || url.pathname === "/" || url.pathname === "/admin") {
+      return `${url.origin}${LICENSE_CHECK_PATH}`;
+    }
+  } catch {
+    return trimmed;
+  }
+
+  return trimmed;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -76,7 +94,8 @@ Deno.serve(async (req) => {
     try {
       const ctrl = new AbortController();
       const timeoutId = setTimeout(() => ctrl.abort(), 10000);
-      const resp = await fetch(config.server_url, {
+      const licenseServerUrl = normalizeLicenseServerUrl(config.server_url);
+      const resp = await fetch(licenseServerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -90,7 +109,7 @@ Deno.serve(async (req) => {
 
       // Map API contract: { ok, status, expires_at, blocked, expired, storage, reason }
       const apiStatus = String(serverData.status || "").toLowerCase();
-      if (serverData.ok === true || apiStatus === "active") {
+      if (serverData.ok === true || apiStatus === "active" || apiStatus === "ok") {
         serverStatus = "active";
       } else if (serverData.blocked === true || apiStatus === "blocked" || apiStatus === "cancelled") {
         serverStatus = "blocked";
@@ -122,6 +141,7 @@ Deno.serve(async (req) => {
     const updates: Record<string, any> = {
       status: serverStatus,
       last_check: new Date().toISOString(),
+      server_url: normalizeLicenseServerUrl(config.server_url),
       message: serverData.reason || serverData.message || errorMessage || "",
       customer_name: serverData.customer_name || serverData.customer || config.customer_name || "",
       expires_at: serverData.expires_at || serverData.expiresAt || config.expires_at,
