@@ -59,10 +59,10 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
   const status = info?.status || "inactive";
   const isActive = status === "active";
 
-  // Always allow change-password (forced) and let admins reach /settings to fix the key
+  // Always allow change-password (forced) and /settings (admin configura licença lá; a própria página protege por role)
   const isExempt =
     location.pathname === "/change-password" ||
-    (isAdmin && location.pathname === "/settings");
+    location.pathname === "/settings";
 
   const refresh = async () => {
     setChecking(true);
