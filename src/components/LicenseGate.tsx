@@ -74,6 +74,9 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const isBlocked = status === "blocked" || status === "expired";
+  const showActivationForm = !isBlocked; // inactive, invalid, unreachable → permite cadastrar/ativar
+
   if (!isActive && !isExempt) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-6">
@@ -91,11 +94,17 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
             </h2>
             <p className="text-sm text-muted-foreground mb-6">
               {info?.message ||
-                "Esta instalação do AxisDocs não possui licença ativa."}
+                (isBlocked
+                  ? "Sua licença foi bloqueada por falta de pagamento ou suspensão pelo provedor. Regularize a pendência com o suporte para reativar o sistema. Você pode usar um código de desbloqueio temporário (24h) para liberar o acesso enquanto resolve."
+                  : "Esta instalação do AxisDocs não possui licença ativa.")}
             </p>
           </div>
 
-          <AdminLicenseForm onChanged={refresh} />
+          {showActivationForm ? (
+            <AdminLicenseForm onChanged={refresh} />
+          ) : (
+            <BlockedLicenseInfo info={info} onChanged={refresh} />
+          )}
 
           <div className="flex flex-col sm:flex-row gap-2 mt-6">
             <Button variant="outline" className="flex-1" onClick={() => navigate("/settings")}>
@@ -236,6 +245,79 @@ function AdminLicenseForm({ onChanged }: { onChanged: () => Promise<void> | void
           <h3 className="text-sm font-semibold text-foreground">Desbloqueio temporário (24h)</h3>
           <p className="text-xs text-muted-foreground">
             Use o código fornecido pelo suporte para liberar o sistema por 24 horas.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={unlockCode}
+            onChange={(e) => setUnlockCode(e.target.value)}
+            placeholder="Código de desbloqueio"
+            className="font-mono"
+          />
+          <Button onClick={handleUnlock} disabled={unlocking || !unlockCode.trim()} variant="secondary">
+            <KeyRound className="w-4 h-4 mr-2" />
+            {unlocking ? "..." : "Desbloquear"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BlockedLicenseInfo({ info, onChanged }: { info: LicenseInfo | null; onChanged: () => Promise<void> | void }) {
+  const [unlockCode, setUnlockCode] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+
+  const handleUnlock = async () => {
+    if (!unlockCode.trim()) {
+      toast({ title: "Informe o código de desbloqueio", variant: "destructive" });
+      return;
+    }
+    setUnlocking(true);
+    try {
+      const res = await unlockTemporary(unlockCode.trim());
+      if (res.ok) {
+        clearLicenseCache();
+        setUnlockCode("");
+        toast({
+          title: "Sistema desbloqueado",
+          description: res.valid_until
+            ? `Válido até ${new Date(res.valid_until).toLocaleString("pt-BR")}`
+            : "Desbloqueio temporário ativado por 24h.",
+        });
+        await onChanged();
+      } else {
+        toast({ title: "Código inválido", description: res.message || "Verifique e tente novamente.", variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Falha no desbloqueio", description: e.message, variant: "destructive" });
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 border-t border-border pt-5">
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-2">
+        <h3 className="text-sm font-semibold text-destructive">Acesso suspenso</h3>
+        <p className="text-xs text-muted-foreground">
+          Entre em contato com o suporte para regularizar o pagamento e reativar a licença.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+          {info?.customer_name && (
+            <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{info.customer_name}</span></div>
+          )}
+          {info?.expires_at && (
+            <div><span className="text-muted-foreground">Vencimento:</span> <span className="font-medium">{new Date(info.expires_at).toLocaleDateString("pt-BR")}</span></div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2 rounded-lg bg-muted/30 border border-border p-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Desbloqueio temporário (24h)</h3>
+          <p className="text-xs text-muted-foreground">
+            Use o código fornecido pelo suporte para liberar o sistema por 24 horas enquanto regulariza.
           </p>
         </div>
         <div className="flex gap-2">
