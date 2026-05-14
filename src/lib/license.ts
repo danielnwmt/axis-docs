@@ -25,7 +25,24 @@ export async function unlockTemporary(unlock_code: string): Promise<{ ok: boolea
 }
 
 const CACHE_KEY = "axis_license_cache_v1";
-const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1h
+const LICENSE_CHECK_PATH = "/api/public/license/check";
+
+export function normalizeLicenseServerUrl(server_url: string): string {
+  const trimmed = server_url.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+
+  try {
+    const url = new URL(trimmed);
+    if (url.pathname === "" || url.pathname === "/") {
+      return `${url.origin}${LICENSE_CHECK_PATH}`;
+    }
+  } catch {
+    return trimmed;
+  }
+
+  return trimmed;
+}
 
 function getHardwareId(): string {
   let id = localStorage.getItem("axis_hw_id");
@@ -49,7 +66,7 @@ export async function loadLicenseConfig(): Promise<LicenseInfo | null> {
 export async function saveLicenseConfig(server_url: string, license_key: string): Promise<LicenseInfo> {
   const existing = await loadLicenseConfig();
   const hardware_id = getHardwareId();
-  const payload = { server_url, license_key, hardware_id, status: "inactive", updated_at: new Date().toISOString() };
+  const payload = { server_url: normalizeLicenseServerUrl(server_url), license_key, hardware_id, status: "inactive", updated_at: new Date().toISOString() };
 
   if (existing?.id) {
     const { data, error } = await (supabase as any)
@@ -71,6 +88,7 @@ export async function validateLicense(): Promise<LicenseInfo> {
   if (error) throw error;
   const info = (data || {}) as LicenseInfo;
   localStorage.setItem(CACHE_KEY, JSON.stringify({ info, t: Date.now() }));
+  window.dispatchEvent(new CustomEvent("axis-license-updated", { detail: info }));
   return info;
 }
 
@@ -87,6 +105,7 @@ export function getCachedLicense(): { info: LicenseInfo; t: number } | null {
 export function shouldRevalidate(): boolean {
   const c = getCachedLicense();
   if (!c) return true;
+  if (c.info.status !== "active") return true;
   return Date.now() - c.t > CHECK_INTERVAL_MS;
 }
 
