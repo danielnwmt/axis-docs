@@ -11,6 +11,7 @@ import {
   saveLicenseConfig,
   unlockTemporary,
   clearLicenseCache,
+  normalizeLicenseServerUrl,
   type LicenseInfo,
 } from "@/lib/license";
 import { Button } from "@/components/ui/button";
@@ -53,7 +54,12 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
     };
     run();
     const id = window.setInterval(run, 60 * 60 * 1000); // hourly check
-    return () => window.clearInterval(id);
+    const onLicenseUpdated = (event: Event) => setInfo((event as CustomEvent<LicenseInfo>).detail);
+    window.addEventListener("axis-license-updated", onLicenseUpdated as EventListener);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("axis-license-updated", onLicenseUpdated as EventListener);
+    };
   }, [user]);
 
   const status = info?.status || "inactive";
@@ -152,7 +158,7 @@ function AdminLicenseForm({ onChanged }: { onChanged: () => Promise<void> | void
     }
     setSaving(true);
     try {
-      await saveLicenseConfig(serverUrl.trim(), licenseKey.trim());
+      await saveLicenseConfig(normalizeLicenseServerUrl(serverUrl), licenseKey.trim());
       clearLicenseCache();
       toast({ title: "Configuração salva. Validando..." });
       const res = await validateLicense();
