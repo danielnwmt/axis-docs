@@ -74,6 +74,9 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const isBlocked = status === "blocked" || status === "expired";
+  const showActivationForm = !isBlocked; // inactive, invalid, unreachable → permite cadastrar/ativar
+
   if (!isActive && !isExempt) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-6">
@@ -91,11 +94,17 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
             </h2>
             <p className="text-sm text-muted-foreground mb-6">
               {info?.message ||
-                "Esta instalação do AxisDocs não possui licença ativa."}
+                (isBlocked
+                  ? "Sua licença foi bloqueada por falta de pagamento ou suspensão pelo provedor. Regularize a pendência com o suporte para reativar o sistema. Você pode usar um código de desbloqueio temporário (24h) para liberar o acesso enquanto resolve."
+                  : "Esta instalação do AxisDocs não possui licença ativa.")}
             </p>
           </div>
 
-          <AdminLicenseForm onChanged={refresh} />
+          {showActivationForm ? (
+            <AdminLicenseForm onChanged={refresh} />
+          ) : (
+            <BlockedLicenseInfo info={info} onChanged={refresh} />
+          )}
 
           <div className="flex flex-col sm:flex-row gap-2 mt-6">
             <Button variant="outline" className="flex-1" onClick={() => navigate("/settings")}>
