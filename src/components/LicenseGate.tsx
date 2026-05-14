@@ -65,10 +65,13 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
   const status = info?.status || "inactive";
   const isActive = status === "active";
 
-  // Always allow change-password (forced) and /settings (admin configura licença lá; a própria página protege por role)
+  // Quando bloqueada/expirada, NADA é acessível (nem /settings) — apenas o gate é mostrado.
+  // Para os demais estados (inactive/invalid/unreachable), liberamos /settings e /change-password
+  // para que o admin possa cadastrar/ativar a licença.
+  const isHardBlocked = status === "blocked" || status === "expired";
   const isExempt =
-    location.pathname === "/change-password" ||
-    location.pathname === "/settings";
+    !isHardBlocked &&
+    (location.pathname === "/change-password" || location.pathname === "/settings");
 
   const refresh = async () => {
     setChecking(true);
