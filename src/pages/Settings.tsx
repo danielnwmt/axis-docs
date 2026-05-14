@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchManagedList } from "@/lib/adminLookups";
-import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, unlockTemporary, type LicenseInfo } from "@/lib/license";
+import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, unlockTemporary, normalizeLicenseServerUrl, type LicenseInfo } from "@/lib/license";
 
 type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "backup" | "licenca" | null;
 
@@ -875,7 +875,7 @@ function LicencaSection() {
     }
     setSaving(true);
     try {
-      await saveLicenseConfig(serverUrl.trim(), licenseKey.trim());
+      await saveLicenseConfig(normalizeLicenseServerUrl(serverUrl), licenseKey.trim());
       clearLicenseCache();
       toast({ title: "Configuração salva. Validando..." });
       await handleValidate();
@@ -985,8 +985,8 @@ function LicencaSection() {
             placeholder="https://licencas.suaempresa.com/api/validar"
           />
           <p className="text-xs text-muted-foreground">
-            Endpoint POST que recebe <code>{`{ license_key, hardware_id, product }`}</code> e retorna{" "}
-            <code>{`{ status: "active|blocked|expired|invalid", customer_name?, expires_at?, message? }`}</code>.
+            Endpoint POST que recebe <code>{`{ license_key, hostname }`}</code> e retorna{" "}
+            <code>{`{ ok?, status: "active|blocked|expired|invalid", customer_name?, expires_at?, message? }`}</code>.
           </p>
         </div>
         <div className="space-y-1">
