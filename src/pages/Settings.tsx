@@ -1006,7 +1006,39 @@ function LicencaSection() {
         )}
       </div>
 
-      {/* Desbloqueio temporário 24h */}
+      {/* Armazenamento da licença */}
+      {quota && quota.hasLimit && (() => {
+        const { formatBytes } = require("@/lib/storageQuota") as typeof import("@/lib/storageQuota");
+        const barColor = quota.level === "full" ? "bg-destructive" : quota.level === "warn" ? "bg-warning" : "bg-primary";
+        return (
+          <div className="bg-muted/30 rounded-lg p-4 border border-border">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-foreground">Armazenamento da licença</p>
+              <p className="text-xs text-muted-foreground">{quota.percent.toFixed(1)}% usado</p>
+            </div>
+            <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+              <div className={`h-full ${barColor} transition-all`} style={{ width: `${quota.percent}%` }} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm mt-3">
+              <div><span className="text-muted-foreground">Usado:</span> <span className="font-medium">{formatBytes(quota.usedBytes)}</span></div>
+              <div><span className="text-muted-foreground">Limite:</span> <span className="font-medium">{formatBytes(quota.limitBytes)}</span></div>
+              <div>
+                <span className="text-muted-foreground">Disponível:</span>{" "}
+                <span className={`font-medium ${quota.level === "full" ? "text-destructive" : quota.level === "warn" ? "text-warning" : "text-success"}`}>
+                  {formatBytes(quota.remainingBytes)}
+                </span>
+              </div>
+            </div>
+            {quota.level === "full" && (
+              <p className="mt-3 text-xs text-destructive font-medium">Limite atingido. Novos uploads estão bloqueados.</p>
+            )}
+            {quota.level === "warn" && (
+              <p className="mt-3 text-xs text-warning font-medium">Atenção: você ultrapassou 80% do limite contratado.</p>
+            )}
+          </div>
+        );
+      })()}
+
       <div className="rounded-lg border border-border p-4 space-y-3 bg-card">
         <div>
           <h3 className="text-base font-semibold text-foreground">Desbloqueio temporário (24h)</h3>
