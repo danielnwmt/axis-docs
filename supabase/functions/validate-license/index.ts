@@ -138,9 +138,32 @@ Deno.serve(async (req) => {
       }
     }
 
-    const storageLimitGb = Number(
-      serverData.storage_limit_gb ?? serverData.storage_gb ?? serverData.storage ?? 0,
-    ) || 0;
+    // Parse storage limit from various API shapes
+    // Supports: { storage_limit_gb: 100 } | { storage_gb: 100 } | { storage: 100 }
+    //          | { storage: { amount: 500, unit: "GB" } }
+    function parseStorageGb(input: any): number {
+      if (input == null) return 0;
+      if (typeof input === "number") return input;
+      if (typeof input === "string") return Number(input) || 0;
+      if (typeof input === "object") {
+        const amount = Number(input.amount ?? input.value ?? input.size ?? 0);
+        const unit = String(input.unit ?? input.units ?? "GB").toUpperCase();
+        if (!amount) return 0;
+        switch (unit) {
+          case "TB": return amount * 1024;
+          case "GB": return amount;
+          case "MB": return amount / 1024;
+          case "KB": return amount / (1024 * 1024);
+          default: return amount;
+        }
+      }
+      return 0;
+    }
+    const storageLimitGb =
+      parseStorageGb(serverData.storage_limit_gb) ||
+      parseStorageGb(serverData.storage_gb) ||
+      parseStorageGb(serverData.storage) ||
+      0;
 
     // Compute current storage usage from documents table
     let storageUsedBytes = 0;
