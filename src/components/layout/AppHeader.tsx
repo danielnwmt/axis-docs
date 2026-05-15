@@ -2,11 +2,13 @@ import { Search, Bell, Mail, Settings, FileText, Download, Eye } from "lucide-re
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PdfPreview } from "@/components/documents/PdfPreview";
 import { Button } from "@/components/ui/button";
 import { fetchDriveFileBlob } from "@/lib/driveFile";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
 interface SearchResult {
   id: string;
