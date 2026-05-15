@@ -223,6 +223,8 @@ export type Database = {
           message: string | null
           server_url: string
           status: string
+          storage_limit_gb: number
+          storage_used_bytes: number
           temp_unlock_until: string | null
           updated_at: string
           updated_by: string | null
@@ -237,6 +239,8 @@ export type Database = {
           message?: string | null
           server_url?: string
           status?: string
+          storage_limit_gb?: number
+          storage_used_bytes?: number
           temp_unlock_until?: string | null
           updated_at?: string
           updated_by?: string | null
@@ -251,6 +255,8 @@ export type Database = {
           message?: string | null
           server_url?: string
           status?: string
+          storage_limit_gb?: number
+          storage_used_bytes?: number
           temp_unlock_until?: string | null
           updated_at?: string
           updated_by?: string | null

@@ -138,6 +138,17 @@ Deno.serve(async (req) => {
       }
     }
 
+    const storageLimitGb = Number(
+      serverData.storage_limit_gb ?? serverData.storage_gb ?? serverData.storage ?? 0,
+    ) || 0;
+
+    // Compute current storage usage from documents table
+    let storageUsedBytes = 0;
+    try {
+      const { data: docs } = await admin.from("documents").select("file_size");
+      storageUsedBytes = (docs || []).reduce((sum: number, d: any) => sum + (Number(d.file_size) || 0), 0);
+    } catch {}
+
     const updates: Record<string, any> = {
       status: serverStatus,
       last_check: new Date().toISOString(),
@@ -145,6 +156,8 @@ Deno.serve(async (req) => {
       message: serverData.reason || serverData.message || errorMessage || "",
       customer_name: serverData.customer_name || serverData.customer || config.customer_name || "",
       expires_at: serverData.expires_at || serverData.expiresAt || config.expires_at,
+      storage_limit_gb: storageLimitGb || config.storage_limit_gb || 0,
+      storage_used_bytes: storageUsedBytes,
       updated_at: new Date().toISOString(),
       updated_by: userData.user.id,
     };
@@ -158,6 +171,8 @@ Deno.serve(async (req) => {
         expires_at: updates.expires_at,
         message: updates.message,
         last_check: updates.last_check,
+        storage_limit_gb: updates.storage_limit_gb,
+        storage_used_bytes: updates.storage_used_bytes,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

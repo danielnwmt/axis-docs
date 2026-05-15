@@ -248,6 +248,28 @@ export default function Upload() {
         return;
       }
 
+      // New document mode — enforce license storage quota first
+      const { getStorageQuota, formatBytes } = await import("@/lib/storageQuota");
+      const quota = await getStorageQuota();
+      if (quota.hasLimit) {
+        const incoming = files.reduce((s, f) => s + f.size, 0);
+        if (quota.usedBytes + incoming > quota.limitBytes) {
+          toast({
+            title: "Limite de armazenamento atingido",
+            description: `Sua licença permite ${formatBytes(quota.limitBytes)}. Disponível: ${formatBytes(quota.remainingBytes)}.`,
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+        if (quota.percent >= 80) {
+          toast({
+            title: "Atenção: armazenamento alto",
+            description: `Você está usando ${quota.percent.toFixed(1)}% da licença.`,
+          });
+        }
+      }
+
       // New document mode — send file directly to Drive (no Storage middleman)
       for (const file of files) {
         const isPdf = file.type === "application/pdf";
