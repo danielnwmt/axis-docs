@@ -26,6 +26,7 @@ export function AppHeader() {
   const navigate = useNavigate();
   const isDashboard = location.pathname === "/";
   const { user } = useAuth();
+  const { t } = useTranslation();
   const email = user?.email ?? "";
   const initials = email
     .split("@")[0]
