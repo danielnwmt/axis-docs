@@ -1,0 +1,52 @@
+{
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "search": "Buscar",
+    "loading": "Cargando...",
+    "view": "Ver",
+    "download": "Descargar",
+    "close": "Cerrar",
+    "confirm": "Confirmar",
+    "back": "Volver",
+    "language": "Idioma"
+  },
+  "languages": {
+    "pt-BR": "Português (Brasil)",
+    "en": "English",
+    "es": "Español"
+  },
+  "nav": {
+    "dashboard": "Panel",
+    "documents": "Documentos",
+    "upload": "Subir documentos",
+    "scanner": "Escáner OCR",
+    "search": "Búsqueda Inteligente",
+    "signature": "Firma Digital",
+    "audit": "Auditoría",
+    "users": "Usuarios y Permisos",
+    "settings": "Configuración",
+    "help": "Centro de Ayuda",
+    "logout": "Salir"
+  },
+  "header": {
+    "searchPlaceholder": "Buscar documentos...",
+    "noResults": "No se encontraron documentos.",
+    "noCategory": "Sin categoría",
+    "administrator": "Administrador"
+  },
+  "login": {
+    "title": "Accede a tu cuenta",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "signIn": "Entrar",
+    "forgotPassword": "¿Olvidaste tu contraseña?"
+  },
+  "settings": {
+    "title": "Configuración",
+    "language": "Idioma del sistema",
+    "languageDesc": "Idioma predeterminado de la interfaz para tu usuario."
+  }
+}

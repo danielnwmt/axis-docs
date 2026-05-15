@@ -1,0 +1,52 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "search": "Search",
+    "loading": "Loading...",
+    "view": "View",
+    "download": "Download",
+    "close": "Close",
+    "confirm": "Confirm",
+    "back": "Back",
+    "language": "Language"
+  },
+  "languages": {
+    "pt-BR": "Português (Brasil)",
+    "en": "English",
+    "es": "Español"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "documents": "Documents",
+    "upload": "Upload Documents",
+    "scanner": "OCR Scanner",
+    "search": "Smart Search",
+    "signature": "Digital Signature",
+    "audit": "Audit",
+    "users": "Users & Permissions",
+    "settings": "Settings",
+    "help": "Help Center",
+    "logout": "Sign out"
+  },
+  "header": {
+    "searchPlaceholder": "Search documents...",
+    "noResults": "No documents found.",
+    "noCategory": "Uncategorized",
+    "administrator": "Administrator"
+  },
+  "login": {
+    "title": "Sign in to your account",
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign in",
+    "forgotPassword": "Forgot password?"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "System language",
+    "languageDesc": "Default interface language for your user."
+  }
+}
