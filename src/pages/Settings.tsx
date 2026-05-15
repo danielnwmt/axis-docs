@@ -948,7 +948,14 @@ function LicencaSection() {
       setConfig(c);
       await refreshQuota();
       if (res.status === "active") {
-        toast({ title: "Licença ativa", description: res.customer_name || "Validação concluída." });
+        let desc = "Validação concluída.";
+        if (res.customer_name) {
+          try {
+            const p = JSON.parse(res.customer_name);
+            desc = p?.full_name || p?.name || p?.email || desc;
+          } catch { desc = res.customer_name; }
+        }
+        toast({ title: "Licença ativa", description: desc });
       } else {
         toast({
           title: `Status: ${res.status}`,
