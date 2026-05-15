@@ -141,21 +141,40 @@ Deno.serve(async (req) => {
     // Parse storage limit from various API shapes
     // Supports: { storage_limit_gb: 100 } | { storage_gb: 100 } | { storage: 100 }
     //          | { storage: { amount: 500, unit: "GB" } }
+    function toGb(amount: number, unit: string): number {
+      if (!amount) return 0;
+      switch (String(unit || "GB").toUpperCase()) {
+        case "TB": return amount * 1024;
+        case "GB": return amount;
+        case "MB": return amount / 1024;
+        case "KB": return amount / (1024 * 1024);
+        default: return amount;
+      }
+    }
     function parseStorageGb(input: any): number {
       if (input == null) return 0;
       if (typeof input === "number") return input;
       if (typeof input === "string") return Number(input) || 0;
       if (typeof input === "object") {
-        const amount = Number(input.amount ?? input.value ?? input.size ?? 0);
-        const unit = String(input.unit ?? input.units ?? "GB").toUpperCase();
-        if (!amount) return 0;
-        switch (unit) {
-          case "TB": return amount * 1024;
-          case "GB": return amount;
-          case "MB": return amount / 1024;
-          case "KB": return amount / (1024 * 1024);
-          default: return amount;
+        // If API already returns a consolidated total, prefer it
+        const totalRaw = input.total ?? input.total_amount ?? input.total_gb;
+        if (totalRaw != null) {
+          return toGb(Number(totalRaw) || 0, input.total_unit ?? input.unit ?? "GB");
         }
+        const unit = input.unit ?? input.units ?? "GB";
+        const base = toGb(Number(input.amount ?? input.value ?? input.size ?? 0), unit);
+        // Sum any extra/addon storage if returned by the API
+        const extraRaw =
+          input.extra ?? input.extra_amount ?? input.extra_gb ??
+          input.addon ?? input.addon_amount ?? input.addon_gb ??
+          input.additional ?? input.additional_amount ?? 0;
+        let extra = 0;
+        if (typeof extraRaw === "object" && extraRaw !== null) {
+          extra = toGb(Number(extraRaw.amount ?? extraRaw.value ?? 0), extraRaw.unit ?? "GB");
+        } else {
+          extra = toGb(Number(extraRaw) || 0, input.extra_unit ?? unit);
+        }
+        return base + extra;
       }
       return 0;
     }
