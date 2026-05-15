@@ -986,9 +986,32 @@ function LicencaSection() {
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-          {config?.customer_name && (
-            <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{config.customer_name}</span></div>
-          )}
+          {config?.customer_name && (() => {
+            let parsed: any = null;
+            try { parsed = JSON.parse(config.customer_name); } catch { /* not json */ }
+            if (parsed && typeof parsed === "object") {
+              const name = parsed.full_name || parsed.name || parsed.email;
+              return (
+                <>
+                  {name && (
+                    <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{name}</span></div>
+                  )}
+                  {parsed.email && (
+                    <div className="truncate"><span className="text-muted-foreground">E-mail:</span> <span className="font-medium">{parsed.email}</span></div>
+                  )}
+                  {parsed.cpf_cnpj && (
+                    <div><span className="text-muted-foreground">CPF/CNPJ:</span> <span className="font-medium">{parsed.cpf_cnpj}</span></div>
+                  )}
+                  {parsed.customer_number != null && (
+                    <div><span className="text-muted-foreground">Nº cliente:</span> <span className="font-medium">{parsed.customer_number}</span></div>
+                  )}
+                </>
+              );
+            }
+            return (
+              <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{config.customer_name}</span></div>
+            );
+          })()}
           {config?.expires_at && (
             <div><span className="text-muted-foreground">Expira em:</span> <span className="font-medium">{new Date(config.expires_at).toLocaleDateString("pt-BR")}</span></div>
           )}
