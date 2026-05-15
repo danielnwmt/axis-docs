@@ -990,28 +990,26 @@ function LicencaSection() {
             let parsed: any = null;
             try { parsed = JSON.parse(config.customer_name); } catch { /* not json */ }
             if (parsed && typeof parsed === "object") {
-              const name = parsed.full_name || parsed.name || parsed.email;
-              return (
-                <>
-                  {name && (
-                    <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{name}</span></div>
-                  )}
-                  {parsed.email && (
-                    <div className="truncate"><span className="text-muted-foreground">E-mail:</span> <span className="font-medium">{parsed.email}</span></div>
-                  )}
-                  {parsed.cpf_cnpj && (
-                    <div><span className="text-muted-foreground">CPF/CNPJ:</span> <span className="font-medium">{parsed.cpf_cnpj}</span></div>
-                  )}
-                  {parsed.customer_number != null && (
-                    <div><span className="text-muted-foreground">Nº cliente:</span> <span className="font-medium">{parsed.customer_number}</span></div>
-                  )}
-                </>
-              );
+              return parsed.cpf_cnpj ? (
+                <div><span className="text-muted-foreground">CPF/CNPJ:</span> <span className="font-medium">{parsed.cpf_cnpj}</span></div>
+              ) : null;
             }
-            return (
-              <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{config.customer_name}</span></div>
-            );
+            return null;
           })()}
+          {quota && quota.hasLimit && (
+            <>
+              <div>
+                <span className="text-muted-foreground">Armazenamento:</span>{" "}
+                <span className="font-medium">{formatBytes(quota.usedBytes)} / {formatBytes(quota.limitBytes)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Utilizado:</span>{" "}
+                <span className={`font-medium ${quota.level === "full" ? "text-destructive" : quota.level === "warn" ? "text-warning" : "text-success"}`}>
+                  {quota.percent.toFixed(1)}%
+                </span>
+              </div>
+            </>
+          )}
           {config?.expires_at && (
             <div><span className="text-muted-foreground">Expira em:</span> <span className="font-medium">{new Date(config.expires_at).toLocaleDateString("pt-BR")}</span></div>
           )}
