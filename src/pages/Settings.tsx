@@ -868,13 +868,10 @@ function LicencaSection() {
   const [checking, setChecking] = useState(false);
   const [unlockCode, setUnlockCode] = useState("");
   const [unlocking, setUnlocking] = useState(false);
-  const [quota, setQuota] = useState<import("@/lib/storageQuota").StorageQuota | null>(null);
+  const [quota, setQuota] = useState<StorageQuota | null>(null);
 
   const refreshQuota = async () => {
-    try {
-      const { getStorageQuota } = await import("@/lib/storageQuota");
-      setQuota(await getStorageQuota());
-    } catch {}
+    try { setQuota(await getStorageQuota()); } catch {}
   };
 
   const handleUnlock = async () => {
