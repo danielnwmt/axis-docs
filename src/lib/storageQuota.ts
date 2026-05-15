@@ -1,0 +1,47 @@
+import { supabase } from "@/integrations/supabase/client";
+
+export interface StorageQuota {
+  limitBytes: number;       // 0 = sem limite definido
+  usedBytes: number;
+  remainingBytes: number;
+  percent: number;          // 0-100
+  level: "ok" | "warn" | "full";
+  hasLimit: boolean;
+}
+
+const GB = 1024 ** 3;
+
+export function formatBytes(bytes: number): string {
+  if (!bytes || bytes < 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  let n = bytes;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(n >= 100 || i === 0 ? 0 : n >= 10 ? 1 : 2)} ${units[i]}`;
+}
+
+export async function getStorageQuota(): Promise<StorageQuota> {
+  const { data: cfg } = await (supabase as any)
+    .from("license_config")
+    .select("storage_limit_gb, storage_used_bytes")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const limitGb = Number(cfg?.storage_limit_gb || 0);
+  const limitBytes = limitGb > 0 ? Math.floor(limitGb * GB) : 0;
+
+  // Recompute live from documents to stay accurate even between cron runs
+  let usedBytes = Number(cfg?.storage_used_bytes || 0);
+  try {
+    const { data: docs } = await supabase.from("documents").select("file_size");
+    if (docs) usedBytes = docs.reduce((s: number, d: any) => s + (Number(d.file_size) || 0), 0);
+  } catch {}
+
+  const remainingBytes = limitBytes > 0 ? Math.max(0, limitBytes - usedBytes) : 0;
+  const percent = limitBytes > 0 ? Math.min(100, (usedBytes / limitBytes) * 100) : 0;
+  const level: StorageQuota["level"] =
+    !limitBytes ? "ok" : percent >= 100 ? "full" : percent >= 80 ? "warn" : "ok";
+
+  return { limitBytes, usedBytes, remainingBytes, percent, level, hasLimit: limitBytes > 0 };
+}
