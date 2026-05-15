@@ -1083,6 +1083,7 @@ export default function Settings() {
       case "assinatura": return <AssinaturaSection />;
       case "backup": return <BackupSection />;
       case "licenca": return <LicencaSection />;
+      case "mobile": return <MobileAccessSection />;
       default: return null;
     }
   };
