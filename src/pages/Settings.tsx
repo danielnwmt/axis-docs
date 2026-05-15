@@ -921,6 +921,7 @@ function LicencaSection() {
         setLoading(false);
       }
     })();
+    refreshQuota();
   }, []);
 
   const handleSave = async () => {
