@@ -4,18 +4,19 @@ import {
 import { cn } from "@/lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTranslation } from "react-i18next";
 
 
-const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: FileText, label: "Documentos", path: "/documents" },
-  { icon: Upload, label: "Upload de Documentos", path: "/upload" },
-  { icon: ScanText, label: "Scanner OCR", path: "/scanner" },
-  { icon: Search, label: "Busca Inteligente", path: "/search" },
-  { icon: PenTool, label: "Assinatura Digital", path: "/signature" },
-  { icon: Shield, label: "Auditoria", path: "/audit" },
-  { icon: Users, label: "Usuários e Permissões", path: "/users" },
-  { icon: Settings, label: "Configurações", path: "/settings" },
+const navItemsBase = [
+  { icon: LayoutDashboard, key: "dashboard", path: "/" },
+  { icon: FileText, key: "documents", path: "/documents" },
+  { icon: Upload, key: "upload", path: "/upload" },
+  { icon: ScanText, key: "scanner", path: "/scanner" },
+  { icon: Search, key: "search", path: "/search" },
+  { icon: PenTool, key: "signature", path: "/signature" },
+  { icon: Shield, key: "audit", path: "/audit" },
+  { icon: Users, key: "users", path: "/users" },
+  { icon: Settings, key: "settings", path: "/settings" },
 ];
 
 export function AppSidebar() {
