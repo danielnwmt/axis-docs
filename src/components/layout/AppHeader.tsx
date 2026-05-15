@@ -2,11 +2,13 @@ import { Search, Bell, Mail, Settings, FileText, Download, Eye } from "lucide-re
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PdfPreview } from "@/components/documents/PdfPreview";
 import { Button } from "@/components/ui/button";
 import { fetchDriveFileBlob } from "@/lib/driveFile";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
 interface SearchResult {
   id: string;
@@ -24,6 +26,7 @@ export function AppHeader() {
   const navigate = useNavigate();
   const isDashboard = location.pathname === "/";
   const { user } = useAuth();
+  const { t } = useTranslation();
   const email = user?.email ?? "";
   const initials = email
     .split("@")[0]
@@ -142,7 +145,7 @@ export function AppHeader() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Buscar documentos..."
+            placeholder={t("header.searchPlaceholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => { if (results.length > 0) setShowDropdown(true); }}
@@ -156,7 +159,7 @@ export function AppHeader() {
                 </div>
               )}
               {!loading && results.length === 0 && query.trim() && (
-                <p className="px-4 py-3 text-sm text-muted-foreground text-center">Nenhum documento encontrado.</p>
+                <p className="px-4 py-3 text-sm text-muted-foreground text-center">{t("header.noResults")}</p>
               )}
               {!loading && results.map((r) => (
                 <div key={r.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/50 transition-colors border-b border-border last:border-b-0">
@@ -165,20 +168,20 @@ export function AppHeader() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">{r.title}</p>
-                    <p className="text-xs text-muted-foreground">{r.category || "Sem categoria"}</p>
+                    <p className="text-xs text-muted-foreground">{r.category || t("header.noCategory")}</p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={() => handleView(r)}
                       className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-                      title="Visualizar"
+                      title={t("common.view")}
                     >
                       <Eye className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => handleDownload(r.drive_file_id || "", r.file_name)}
                       className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-                      title="Baixar"
+                      title={t("common.download")}
                     >
                       <Download className="w-3.5 h-3.5" />
                     </button>
@@ -194,6 +197,7 @@ export function AppHeader() {
 
       {/* Right */}
       <div className="flex items-center gap-3 ml-6">
+        <LanguageSelector />
         <button className="relative p-2 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
           <Bell className="w-5 h-5" />
         </button>
@@ -206,7 +210,7 @@ export function AppHeader() {
         <div className="flex items-center gap-3 ml-2 pl-4 border-l border-border">
           <div className="text-right">
             <p className="text-sm font-semibold text-foreground leading-tight">{email}</p>
-            <p className="text-xs text-muted-foreground">Administrador</p>
+            <p className="text-xs text-muted-foreground">{t("header.administrator")}</p>
           </div>
           <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold">
             {initials}

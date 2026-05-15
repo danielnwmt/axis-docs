@@ -2,6 +2,21 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { setAppLanguage, SupportedLanguage, SUPPORTED_LANGUAGES } from "@/i18n";
+
+const loadUserLanguage = async (userId: string) => {
+  try {
+    const { data } = await supabase
+      .from("profiles")
+      .select("language")
+      .eq("id", userId)
+      .maybeSingle();
+    const lang = (data as any)?.language as SupportedLanguage | undefined;
+    if (lang && (SUPPORTED_LANGUAGES as readonly string[]).includes(lang)) {
+      setAppLanguage(lang);
+    }
+  } catch {}
+};
 
 interface AuthContextType {
   user: User | null;
@@ -39,6 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
         setLoading(false);
         clearTimeout(timeout);
+        if (session?.user?.id) {
+          setTimeout(() => loadUserLanguage(session.user.id), 0);
+        }
       }
     );
 
@@ -47,6 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       setLoading(false);
       clearTimeout(timeout);
+      if (session?.user?.id) {
+        loadUserLanguage(session.user.id);
+      }
     }).catch(() => {
       setLoading(false);
       clearTimeout(timeout);
