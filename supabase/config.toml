@@ -1,1 +1,2 @@
-project_id = "pevufhsuhbfnvstfoulq"
+[functions.scheduled-license-check]
+verify_jwt = false
