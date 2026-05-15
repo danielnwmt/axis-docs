@@ -1003,16 +1003,18 @@ function LicencaSection() {
             }
             return null;
           })()}
-          {quota && quota.hasLimit && (
+          {quota && (
             <>
               <div>
                 <span className="text-muted-foreground">Armazenamento:</span>{" "}
-                <span className="font-medium">{formatBytes(quota.usedBytes)} / {formatBytes(quota.limitBytes)}</span>
+                <span className="font-medium">
+                  {formatBytes(quota.usedBytes)} / {quota.hasLimit ? formatBytes(quota.limitBytes) : "Sem limite"}
+                </span>
               </div>
               <div>
                 <span className="text-muted-foreground">Utilizado:</span>{" "}
-                <span className={`font-medium ${quota.level === "full" ? "text-destructive" : quota.level === "warn" ? "text-warning" : "text-success"}`}>
-                  {quota.percent.toFixed(1)}%
+                <span className={`font-medium ${quota.hasLimit ? (quota.level === "full" ? "text-destructive" : quota.level === "warn" ? "text-warning" : "text-success") : "text-muted-foreground"}`}>
+                  {quota.hasLimit ? `${quota.percent.toFixed(1)}%` : "—"}
                 </span>
               </div>
             </>
