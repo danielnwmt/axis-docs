@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, Upload, HardDrive, CheckCircle, AlertCircle, RefreshCw, DatabaseBackup, FileSignature, Eye, EyeOff, Download, KeyRound, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Settings as SettingsIcon, Building, Tag, FolderTree, Sliders, ArrowLeft, Plus, Trash2, Edit2, Save, X, Upload, HardDrive, CheckCircle, AlertCircle, RefreshCw, DatabaseBackup, FileSignature, Eye, EyeOff, Download, KeyRound, ShieldCheck, ShieldAlert, Smartphone, Copy } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchManagedList } from "@/lib/adminLookups";
 import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, unlockTemporary, normalizeLicenseServerUrl, type LicenseInfo } from "@/lib/license";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "backup" | "licenca" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "backup" | "licenca" | "mobile" | null;
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
@@ -20,7 +21,53 @@ const sectionCards = [
   { id: "assinatura" as Section, icon: FileSignature, title: "Assinatura Digital", description: "Configurar API ZapSign (ICP-Brasil A1/A3)" },
   { id: "backup" as Section, icon: DatabaseBackup, title: "Backup & Restauração", description: "Exportar e importar usuários, auditoria e referências de documentos" },
   { id: "licenca" as Section, icon: KeyRound, title: "Licença", description: "Ativar e consultar o status da licença do AxisDocs" },
+  { id: "mobile" as Section, icon: Smartphone, title: "Acesso Mobile", description: "QR Code para abrir o sistema no aplicativo" },
 ];
+
+function MobileAccessSection() {
+  const url = typeof window !== "undefined" ? window.location.origin : "";
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "URL copiada" });
+    } catch {
+      toast({ title: "Falha ao copiar", variant: "destructive" });
+    }
+  };
+  const handleDownload = () => {
+    const svg = document.getElementById("axis-mobile-qrcode");
+    if (!svg) return;
+    const serializer = new XMLSerializer();
+    const data = serializer.serializeToString(svg);
+    const blob = new Blob([data], { type: "image/svg+xml;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "axisdocs-qrcode.svg";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+  return (
+    <div className="max-w-xl space-y-5">
+      <p className="text-sm text-muted-foreground">
+        Aponte a câmera do aplicativo para o QR Code abaixo para abrir esta instalação do AxisDocs.
+      </p>
+      <div className="flex flex-col items-center gap-4 p-6 bg-secondary/40 rounded-xl border border-border">
+        <div className="bg-white p-4 rounded-lg">
+          <QRCodeSVG id="axis-mobile-qrcode" value={url} size={224} level="H" includeMargin={false} />
+        </div>
+        <code className="text-xs text-muted-foreground break-all text-center">{url}</code>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={handleCopy} className="flex-1">
+          <Copy className="w-4 h-4 mr-2" /> Copiar URL
+        </Button>
+        <Button variant="outline" onClick={handleDownload} className="flex-1">
+          <Download className="w-4 h-4 mr-2" /> Baixar QR Code
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function OrgaoSection() {
   const [data, setData] = useState({
@@ -1036,6 +1083,7 @@ export default function Settings() {
       case "assinatura": return <AssinaturaSection />;
       case "backup": return <BackupSection />;
       case "licenca": return <LicencaSection />;
+      case "mobile": return <MobileAccessSection />;
       default: return null;
     }
   };
