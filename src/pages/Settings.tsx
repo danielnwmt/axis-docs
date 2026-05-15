@@ -1019,9 +1019,6 @@ function LicencaSection() {
               </div>
             </>
           )}
-          {config?.expires_at && (
-            <div><span className="text-muted-foreground">Expira em:</span> <span className="font-medium">{new Date(config.expires_at).toLocaleDateString("pt-BR")}</span></div>
-          )}
           {config?.last_check && (
             <div><span className="text-muted-foreground">Última verificação:</span> <span className="font-medium">{new Date(config.last_check).toLocaleString("pt-BR")}</span></div>
           )}
