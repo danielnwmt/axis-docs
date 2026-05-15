@@ -156,14 +156,19 @@ Deno.serve(async (req) => {
       if (typeof input === "number") return input;
       if (typeof input === "string") return Number(input) || 0;
       if (typeof input === "object") {
-        // If API already returns a consolidated total, prefer it
+        const unit = input.unit ?? input.units ?? "GB";
+        // 1. Consolidated total field (highest priority)
         const totalRaw = input.total ?? input.total_amount ?? input.total_gb;
         if (totalRaw != null) {
-          return toGb(Number(totalRaw) || 0, input.total_unit ?? input.unit ?? "GB");
+          return toGb(Number(totalRaw) || 0, input.total_unit ?? unit);
         }
-        const unit = input.unit ?? input.units ?? "GB";
-        const base = toGb(Number(input.amount ?? input.value ?? input.size ?? 0), unit);
-        // Sum any extra/addon storage if returned by the API
+        // 2. If "amount" is present, treat it as the already-consolidated total
+        //    (the API returns amount = base_amount + extra_amount).
+        if (input.amount != null || input.value != null || input.size != null) {
+          return toGb(Number(input.amount ?? input.value ?? input.size) || 0, unit);
+        }
+        // 3. Fallback: explicit base + extra split (no consolidated amount provided)
+        const base = toGb(Number(input.base_amount ?? input.base ?? input.base_gb ?? 0), input.base_unit ?? unit);
         const extraRaw =
           input.extra ?? input.extra_amount ?? input.extra_gb ??
           input.addon ?? input.addon_amount ?? input.addon_gb ??
