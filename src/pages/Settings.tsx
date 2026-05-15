@@ -9,6 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchManagedList } from "@/lib/adminLookups";
 import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, unlockTemporary, normalizeLicenseServerUrl, type LicenseInfo } from "@/lib/license";
+import { getStorageQuota, formatBytes, type StorageQuota } from "@/lib/storageQuota";
 
 type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "backup" | "licenca" | "mobile" | null;
 
