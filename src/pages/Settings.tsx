@@ -1006,7 +1006,7 @@ function LicencaSection() {
 
       {/* Armazenamento da licença */}
       {quota && quota.hasLimit && (() => {
-        const { formatBytes } = require("@/lib/storageQuota") as typeof import("@/lib/storageQuota");
+        // formatBytes imported at top
         const barColor = quota.level === "full" ? "bg-destructive" : quota.level === "warn" ? "bg-warning" : "bg-primary";
         return (
           <div className="bg-muted/30 rounded-lg p-4 border border-border">
