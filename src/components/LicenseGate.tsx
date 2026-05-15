@@ -166,7 +166,14 @@ function AdminLicenseForm({ onChanged }: { onChanged: () => Promise<void> | void
       toast({ title: "Configuração salva. Validando..." });
       const res = await validateLicense();
       if (res.status === "active") {
-        toast({ title: "Licença ativa", description: res.customer_name || "Validação concluída." });
+        let desc = "Validação concluída.";
+        if (res.customer_name) {
+          try {
+            const p = JSON.parse(res.customer_name);
+            desc = p?.full_name || p?.name || p?.email || desc;
+          } catch { desc = res.customer_name; }
+        }
+        toast({ title: "Licença ativa", description: desc });
       } else {
         toast({
           title: `Status: ${res.status}`,
@@ -313,9 +320,14 @@ function BlockedLicenseInfo({ info, onChanged }: { info: LicenseInfo | null; onC
           Entre em contato com o suporte para regularizar o pagamento e reativar a licença.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
-          {info?.customer_name && (
-            <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{info.customer_name}</span></div>
-          )}
+          {info?.customer_name && (() => {
+            let label = info.customer_name;
+            try {
+              const p = JSON.parse(info.customer_name);
+              label = p?.full_name || p?.name || p?.email || label;
+            } catch { /* keep raw */ }
+            return <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{label}</span></div>;
+          })()}
           {info?.expires_at && (
             <div><span className="text-muted-foreground">Vencimento:</span> <span className="font-medium">{new Date(info.expires_at).toLocaleDateString("pt-BR")}</span></div>
           )}
