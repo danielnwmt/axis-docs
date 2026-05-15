@@ -23,6 +23,7 @@ export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { t } = useTranslation();
 
   const handleSignOut = async () => {
     await signOut();
@@ -44,11 +45,11 @@ export function AppSidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 space-y-0.5">
-        {navItems.map((item) => {
+        {navItemsBase.map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <button
-              key={item.label}
+              key={item.key}
               onClick={() => navigate(item.path)}
               className={cn(
                 "flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
@@ -58,7 +59,7 @@ export function AppSidebar() {
               )}
             >
               <item.icon className="w-[18px] h-[18px] shrink-0" />
-              <span>{item.label}</span>
+              <span>{t(`nav.${item.key}`)}</span>
             </button>
           );
         })}
@@ -68,14 +69,14 @@ export function AppSidebar() {
       <div className="px-3 pb-4 space-y-1">
         <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors">
           <HelpCircle className="w-[18px] h-[18px]" />
-          <span>Central de Ajuda</span>
+          <span>{t("nav.help")}</span>
         </button>
         <button
           onClick={handleSignOut}
           className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
         >
           <LogOut className="w-[18px] h-[18px]" />
-          <span>Sair</span>
+          <span>{t("nav.logout")}</span>
         </button>
         <div className="flex items-center gap-3 mx-3 px-3 py-2.5 rounded-lg bg-sidebar-accent">
           <div className="w-8 h-8 rounded-full bg-info flex items-center justify-center text-info-foreground text-xs font-bold">
