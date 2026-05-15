@@ -54,6 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
         setLoading(false);
         clearTimeout(timeout);
+        if (session?.user?.id) {
+          setTimeout(() => loadUserLanguage(session.user.id), 0);
+        }
       }
     );
 
@@ -62,6 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       setLoading(false);
       clearTimeout(timeout);
+      if (session?.user?.id) {
+        loadUserLanguage(session.user.id);
+      }
     }).catch(() => {
       setLoading(false);
       clearTimeout(timeout);
