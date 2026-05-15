@@ -2,6 +2,21 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { setAppLanguage, SupportedLanguage, SUPPORTED_LANGUAGES } from "@/i18n";
+
+const loadUserLanguage = async (userId: string) => {
+  try {
+    const { data } = await supabase
+      .from("profiles")
+      .select("language")
+      .eq("id", userId)
+      .maybeSingle();
+    const lang = (data as any)?.language as SupportedLanguage | undefined;
+    if (lang && (SUPPORTED_LANGUAGES as readonly string[]).includes(lang)) {
+      setAppLanguage(lang);
+    }
+  } catch {}
+};
 
 interface AuthContextType {
   user: User | null;
