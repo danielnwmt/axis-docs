@@ -948,6 +948,7 @@ function LicencaSection() {
       const res = await validateLicense();
       const c = await loadLicenseConfig();
       setConfig(c);
+      await refreshQuota();
       if (res.status === "active") {
         toast({ title: "Licença ativa", description: res.customer_name || "Validação concluída." });
       } else {
