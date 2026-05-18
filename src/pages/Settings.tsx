@@ -259,9 +259,11 @@ function ParametrosSection() {
   const [params, setParams] = useState({
     tamanhoMaxMB: "50",
     autoOCR: true,
+    allowUnsigned: typeof window !== "undefined" ? localStorage.getItem("allow_unsigned_uploads") !== "false" : true,
   });
 
   const handleSave = () => {
+    localStorage.setItem("allow_unsigned_uploads", params.allowUnsigned ? "true" : "false");
     toast({ title: "Parâmetros salvos com sucesso!" });
   };
 
@@ -288,6 +290,21 @@ function ParametrosSection() {
           className="rounded border-border"
         />
         <Label htmlFor="autoOCR">Ativar OCR automático nos uploads</Label>
+      </div>
+      <div className="flex items-start gap-3 p-3 rounded-lg border border-border bg-secondary/30">
+        <input
+          type="checkbox"
+          id="allowUnsigned"
+          checked={params.allowUnsigned}
+          onChange={(e) => setParams({ ...params, allowUnsigned: e.target.checked })}
+          className="rounded border-border mt-0.5"
+        />
+        <div className="flex-1">
+          <Label htmlFor="allowUnsigned" className="cursor-pointer">Permitir envio de arquivos sem assinatura digital</Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            Quando desativado, somente PDFs já assinados ou marcados para assinar serão aceitos no upload.
+          </p>
+        </div>
       </div>
       <Button onClick={handleSave} className="mt-2">
         <Save className="w-4 h-4 mr-2" /> Salvar
