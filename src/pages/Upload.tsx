@@ -206,18 +206,26 @@ export default function Upload() {
     for (const f of incoming) {
       if (f.type === "application/pdf") {
         const signed = await isPdfSigned(f);
-        if (signed) {
+        const icp = signed && (await isPdfIcpBrasilSigned(f));
+        if (icp) {
           setSignedFiles((prev) => new Set(prev).add(f.name));
           setSignDocument(false);
           toast({
-            title: "Documento já assinado digitalmente",
-            description: `"${f.name}" já contém assinatura digital. A opção de assinar foi desativada.`,
+            title: "PDF com assinatura ICP-Brasil",
+            description: `"${f.name}" já está assinado com certificado ICP-Brasil válido.`,
+          });
+        } else if (signed) {
+          toast({
+            title: "Assinatura não é ICP-Brasil",
+            description: `"${f.name}" possui assinatura, mas NÃO é ICP-Brasil. Marque "Assinar com Certificado Digital" para reassinar.`,
+            variant: "destructive",
           });
         } else {
           toast({
             title: "Documento não assinado",
-            description: `"${f.name}" não possui assinatura digital. Marque a opção "Assinar com Certificado Digital" se desejar assiná-lo.`,
+            description: `"${f.name}" não possui assinatura digital. Marque a opção "Assinar com Certificado Digital" para assiná-lo.`,
           });
+
         }
       }
     }
