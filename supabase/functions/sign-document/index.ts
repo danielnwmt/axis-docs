@@ -6,6 +6,64 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function b64Url(value: string): string {
+  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64UrlBuf(value: ArrayBuffer): string {
+  return btoa(String.fromCharCode(...new Uint8Array(value)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function getDriveAccessToken(sa: { client_email: string; private_key: string; token_uri: string }) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = b64Url(JSON.stringify({
+    iss: sa.client_email,
+    scope: "https://www.googleapis.com/auth/drive",
+    aud: sa.token_uri,
+    iat: now,
+    exp: now + 3600,
+  }));
+  const pem = sa.private_key
+    .replace(/-----BEGIN PRIVATE KEY-----/, "")
+    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(/\n/g, "");
+  const key = Uint8Array.from(atob(pem), (c) => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey("pkcs8", key, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, new TextEncoder().encode(`${header}.${payload}`));
+  const jwt = `${header}.${payload}.${b64UrlBuf(sig)}`;
+  const res = await fetch(sa.token_uri, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+  });
+  if (!res.ok) throw new Error(`Drive auth failed: ${await res.text()}`);
+  return (await res.json()).access_token as string;
+}
+
+async function downloadDrivePdfBase64(supabase: any, driveFileId: string): Promise<string> {
+  const { data: cfgFile, error: cfgErr } = await supabase.storage.from("settings").download("google-drive-config.json");
+  if (cfgErr || !cfgFile) throw new Error("Google Drive não configurado.");
+  const cfg = JSON.parse(await cfgFile.text());
+  if (!cfg.serviceAccount?.client_email || !cfg.serviceAccount?.private_key) {
+    throw new Error("Configuração do Google Drive incompleta.");
+  }
+  const token = await getDriveAccessToken(cfg.serviceAccount);
+  const fileRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media&supportsAllDrives=true`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!fileRes.ok) throw new Error(`Erro ao baixar do Drive: ${fileRes.status}`);
+  const buf = new Uint8Array(await fileRes.arrayBuffer());
+  // Convert to base64 in chunks to avoid stack overflow
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < buf.length; i += chunk) {
+    binary += String.fromCharCode(...buf.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -18,7 +76,6 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Fallback: load API key from settings bucket if env var is not set
     if (!zapSignApiKey) {
       try {
         const { data: cfgFile } = await supabase.storage.from("settings").download("zapsign-config.json");
@@ -26,44 +83,33 @@ Deno.serve(async (req) => {
           const cfg = JSON.parse(await cfgFile.text());
           if (cfg?.apiKey) zapSignApiKey = cfg.apiKey as string;
         }
-      } catch {
-        // no config file
-      }
+      } catch {}
     }
 
-    // Validate JWT from request
     const authHeader = req.headers.get("authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
-
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Token inválido" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const { documentId, filePath, fileName, certType } = await req.json();
-
     if (!documentId || !filePath || !fileName) {
       return new Response(JSON.stringify({ error: "Dados incompletos" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Verify document ownership (or admin) before any privileged action
     const { data: doc } = await supabase
       .from("documents")
-      .select("id, user_id, file_path")
+      .select("id, user_id, file_path, drive_file_id")
       .eq("id", documentId)
       .eq("file_path", filePath)
       .maybeSingle();
@@ -78,67 +124,51 @@ Deno.serve(async (req) => {
 
     if (!doc || (doc.user_id !== user.id && !isAdmin)) {
       return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Check if ZapSign API key is configured
     if (!zapSignApiKey) {
       console.log("ZapSign API key not configured. Document saved as pending.");
-
-      // Update document with pending signature status
-      await supabase
-        .from("documents")
-        .update({
-          sign_status: "pendente",
-          notes: `Certificado: ${certType} | Aguardando configuração da API ZapSign`,
-        })
-        .eq("id", documentId);
-
-      return new Response(
-        JSON.stringify({
-          signed: false,
-          message: "API ZapSign não configurada. Documento salvo como pendente.",
-          documentId,
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      await supabase.from("documents").update({
+        sign_status: "pendente",
+        notes: `Certificado: ${certType} | Aguardando configuração da API ZapSign`,
+      }).eq("id", documentId);
+      return new Response(JSON.stringify({
+        signed: false,
+        message: "API ZapSign não configurada. Documento salvo como pendente.",
+        documentId,
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ===== ZapSign Integration =====
-    // 1. Get signed URL for the file
-    const { data: signedUrlData, error: urlError } = await supabase.storage
-      .from("documents")
-      .createSignedUrl(filePath, 3600);
+    // ===== Build ZapSign payload =====
+    const zapBody: Record<string, unknown> = {
+      name: fileName,
+      lang: "pt-br",
+      signers: [{
+        name: user.email || "Assinante",
+        email: user.email,
+        auth_mode: certType === "A3" ? "tokenEmail" : "assinaturaTela",
+        send_automatic_email: true,
+      }],
+    };
 
-    if (urlError) throw urlError;
+    if (filePath.startsWith("drive://")) {
+      const driveId = doc.drive_file_id || filePath.replace("drive://", "");
+      const base64 = await downloadDrivePdfBase64(supabase, driveId);
+      zapBody.base64_pdf = base64;
+    } else {
+      const { data: signedUrlData, error: urlError } = await supabase.storage
+        .from("documents")
+        .createSignedUrl(filePath, 3600);
+      if (urlError) throw urlError;
+      zapBody.url_pdf = signedUrlData.signedUrl;
+    }
 
-    const fileUrl = signedUrlData.signedUrl;
-
-    // 2. Create document in ZapSign
     const zapSignResponse = await fetch("https://api.zapsign.com.br/api/v1/docs/", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${zapSignApiKey}`,
-      },
-      body: JSON.stringify({
-        name: fileName,
-        url_pdf: fileUrl,
-        lang: "pt-br",
-        signers: [
-          {
-            name: user.email || "Assinante",
-            email: user.email,
-            auth_mode: certType === "A3" ? "tokenEmail" : "assinaturaTela",
-            send_automatic_email: true,
-          },
-        ],
-      }),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${zapSignApiKey}` },
+      body: JSON.stringify(zapBody),
     });
 
     if (!zapSignResponse.ok) {
@@ -148,36 +178,22 @@ Deno.serve(async (req) => {
 
     const zapSignData = await zapSignResponse.json();
 
-    // 3. Update document status
-    await supabase
-      .from("documents")
-      .update({
-        sign_status: "assinado",
-        notes: `Certificado: ${certType} | ZapSign ID: ${zapSignData.token || "N/A"}`,
-      })
-      .eq("id", documentId);
+    await supabase.from("documents").update({
+      sign_status: "assinado",
+      notes: `Certificado: ${certType} | ZapSign ID: ${zapSignData.token || "N/A"}`,
+    }).eq("id", documentId);
 
-    return new Response(
-      JSON.stringify({
-        signed: true,
-        zapSignToken: zapSignData.token,
-        signUrl: zapSignData.signers?.[0]?.sign_url,
-        documentId,
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return new Response(JSON.stringify({
+      signed: true,
+      zapSignToken: zapSignData.token,
+      signUrl: zapSignData.signers?.[0]?.sign_url,
+      documentId,
+    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: unknown) {
     console.error("Error in sign-document:", error);
     const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
