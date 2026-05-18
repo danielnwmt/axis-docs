@@ -1,4 +1,17 @@
 {
+  "errors": {
+    "generic": "Ocorreu um erro inesperado.",
+    "rls": "Você não tem permissão para realizar esta ação.",
+    "duplicate": "Este registro já existe.",
+    "forbidden": "Permissão negada.",
+    "auth": "Sessão expirada. Faça login novamente.",
+    "network": "Falha de conexão. Verifique sua internet.",
+    "tooLarge": "Arquivo muito grande.",
+    "notFound": "Registro não encontrado.",
+    "quota": "Cota de armazenamento excedida.",
+    "invalid": "Dados inválidos.",
+    "uploadFailed": "Erro ao enviar"
+  },
   "common": {
     "save": "Salvar",
     "cancel": "Cancelar",
