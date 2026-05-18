@@ -320,11 +320,12 @@ export default function Upload() {
       // New document mode — send file directly to Drive (no Storage middleman)
       for (const file of files) {
         const isPdf = file.type === "application/pdf";
-        const alreadySigned = isPdf && (signedFiles.has(file.name) || (await isPdfSigned(file)));
-        const shouldSign = signDocument && isPdf && !alreadySigned;
+        const alreadyIcp = isPdf && (signedFiles.has(file.name) || (await isPdfIcpBrasilSigned(file)));
+        const hasAnySignature = isPdf && !alreadyIcp && (await isPdfSigned(file));
+        const shouldSign = signDocument && isPdf && !alreadyIcp;
 
         // Conformidade Lei 12.682/2012 e Decreto 10.278/2020:
-        // somente PDFs já assinados ou marcados para assinatura ICP-Brasil são aceitos.
+        // somente PDFs com assinatura ICP-Brasil (já presente ou a ser aplicada) são aceitos.
         if (!isPdf) {
           toast({
             title: "Formato não permitido",
@@ -334,15 +335,25 @@ export default function Upload() {
           setLoading(false);
           return;
         }
-        if (!alreadySigned && !shouldSign) {
+        if (hasAnySignature && !shouldSign) {
           toast({
-            title: "Assinatura ICP-Brasil obrigatória",
-            description: `"${file.name}" não possui assinatura ICP-Brasil. Marque "Assinar digitalmente" ou envie um PDF já assinado.`,
+            title: "Certificado não é ICP-Brasil",
+            description: `"${file.name}" está assinado, mas o certificado NÃO é ICP-Brasil. Marque "Assinar digitalmente" para reassinar com ICP-Brasil.`,
             variant: "destructive",
           });
           setLoading(false);
           return;
         }
+        if (!alreadyIcp && !shouldSign) {
+          toast({
+            title: "Assinatura ICP-Brasil obrigatória",
+            description: `"${file.name}" não possui assinatura ICP-Brasil. Marque "Assinar digitalmente" ou envie um PDF já assinado com certificado ICP-Brasil.`,
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
 
 
 
