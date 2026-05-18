@@ -98,8 +98,9 @@ export default function ChangePassword() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={10}
             />
+            <p className="text-[11px] text-muted-foreground">Mín. 10 caracteres, com maiúscula, número e símbolo.</p>
           </div>
 
           <div className="space-y-2">
@@ -111,11 +112,21 @@ export default function ChangePassword() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={10}
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <div className="flex items-start gap-2 pt-1">
+            <Checkbox id="accept" checked={acceptTerms} onCheckedChange={(v) => setAcceptTerms(!!v)} />
+            <Label htmlFor="accept" className="text-xs leading-snug cursor-pointer">
+              Li e aceito a{" "}
+              <Link to="/privacidade" target="_blank" className="text-info underline">Política de Privacidade</Link>{" "}
+              e os{" "}
+              <Link to="/termos" target="_blank" className="text-info underline">Termos de Uso</Link>.
+            </Label>
+          </div>
+
+          <Button type="submit" className="w-full" disabled={loading || !acceptTerms}>
             {loading ? "Salvando..." : "Alterar Senha"}
           </Button>
         </form>
