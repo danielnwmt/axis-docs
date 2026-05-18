@@ -309,23 +309,34 @@ export default function Upload() {
         }
       }
 
-      const allowUnsigned = localStorage.getItem("allow_unsigned_uploads") !== "false";
-
       // New document mode — send file directly to Drive (no Storage middleman)
       for (const file of files) {
         const isPdf = file.type === "application/pdf";
         const alreadySigned = isPdf && (signedFiles.has(file.name) || (await isPdfSigned(file)));
         const shouldSign = signDocument && isPdf && !alreadySigned;
 
-        if (!allowUnsigned && !alreadySigned && !shouldSign) {
+        // Conformidade Lei 12.682/2012 e Decreto 10.278/2020:
+        // somente PDFs já assinados ou marcados para assinatura ICP-Brasil são aceitos.
+        if (!isPdf) {
           toast({
-            title: "Envio sem assinatura bloqueado",
-            description: `"${file.name}" não está assinado. Ative a opção em Configurações › Parâmetros para permitir envios sem assinatura.`,
+            title: "Formato não permitido",
+            description: `"${file.name}" não é PDF. Apenas PDFs com assinatura ICP-Brasil são aceitos.`,
             variant: "destructive",
           });
           setLoading(false);
           return;
         }
+        if (!alreadySigned && !shouldSign) {
+          toast({
+            title: "Assinatura ICP-Brasil obrigatória",
+            description: `"${file.name}" não possui assinatura ICP-Brasil. Marque "Assinar digitalmente" ou envie um PDF já assinado.`,
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
+
 
 
         let driveFileId: string | null = null;
