@@ -143,7 +143,7 @@ export default function Upload() {
       logAudit("Visualizou documento", "view", existingFile.name);
     } catch (error: any) {
       closePreview();
-      toast({ title: "Erro ao visualizar", description: error.message, variant: "destructive" });
+      toast({ title: t("errors.generic"), description: translateError(error.message), variant: "destructive" });
     } finally {
       setPreviewLoading(false);
     }
