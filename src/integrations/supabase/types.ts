@@ -495,6 +495,7 @@ export type Database = {
     Functions: {
       anonymize_user: { Args: { _target: string }; Returns: undefined }
       get_my_data_export: { Args: never; Returns: Json }
+      get_user_unit: { Args: { _user_id: string }; Returns: string }
       has_role: { Args: { _role: string; _user_id: string }; Returns: boolean }
       insert_audit_log: {
         Args: {
