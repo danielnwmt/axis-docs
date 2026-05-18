@@ -55,7 +55,11 @@ export default function ChangePassword() {
         .eq("id", user.id);
       if (profileError) throw profileError;
 
-      // Invalidate the profile cache so ProtectedRoute won't redirect back
+      // Registrar consentimentos LGPD (prova legal — Art. 8º §1º)
+      const ua = navigator.userAgent;
+      await supabase.rpc("record_consent", { _document_type: "privacy_policy", _version: "1.0", _ip: null, _user_agent: ua });
+      await supabase.rpc("record_consent", { _document_type: "terms_of_use", _version: "1.0", _ip: null, _user_agent: ua });
+
       await queryClient.invalidateQueries({ queryKey: ["profile-password-check"] });
 
       toast({ title: "Senha alterada", description: "Sua senha foi atualizada com sucesso." });
