@@ -40,6 +40,8 @@
     "signature": "Firma Digital",
     "audit": "Auditoría",
     "users": "Usuarios y Permisos",
+    "mydata": "Mis Datos (LGPD)",
+    "lgpd": "Panel LGPD",
     "settings": "Configuración",
     "help": "Centro de Ayuda",
     "logout": "Salir"
