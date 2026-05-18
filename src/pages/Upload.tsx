@@ -167,7 +167,7 @@ export default function Upload() {
       link.remove();
       window.URL.revokeObjectURL(blobUrl);
     } catch (error: any) {
-      toast({ title: "Erro ao baixar", description: error.message, variant: "destructive" });
+      toast({ title: t("errors.generic"), description: translateError(error.message), variant: "destructive" });
     }
   };
 
