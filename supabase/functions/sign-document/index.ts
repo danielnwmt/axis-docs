@@ -141,28 +141,51 @@ Deno.serve(async (req) => {
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ===== Build ZapSign payload =====
+    // ===== Build ZapSign payload (ICP-Brasil enforced) =====
     const zapBody: Record<string, unknown> = {
       name: fileName,
       lang: "pt-br",
       signers: [{
         name: user.email || "Assinante",
         email: user.email,
-        auth_mode: certType === "A3" ? "tokenEmail" : "assinaturaTela",
+        auth_mode: "icp-brasil",
         send_automatic_email: true,
+        signer_needs_to_sign_with_certificate: true,
+        require_selfie_photo: false,
+        require_document_photo: false,
       }],
     };
+
+    let pdfBytes: Uint8Array | null = null;
 
     if (filePath.startsWith("drive://")) {
       const driveId = doc.drive_file_id || filePath.replace("drive://", "");
       const base64 = await downloadDrivePdfBase64(supabase, driveId);
       zapBody.base64_pdf = base64;
+      // Decode for hashing
+      const bin = atob(base64);
+      pdfBytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) pdfBytes[i] = bin.charCodeAt(i);
     } else {
       const { data: signedUrlData, error: urlError } = await supabase.storage
         .from("documents")
         .createSignedUrl(filePath, 3600);
       if (urlError) throw urlError;
       zapBody.url_pdf = signedUrlData.signedUrl;
+      try {
+        const r = await fetch(signedUrlData.signedUrl);
+        if (r.ok) pdfBytes = new Uint8Array(await r.arrayBuffer());
+      } catch (e) {
+        console.warn("Could not fetch PDF for hashing:", e);
+      }
+    }
+
+    // SHA-256 do PDF original (conformidade Decreto 10.278/2020 Art. 5º)
+    let fileHashOriginal = "";
+    if (pdfBytes) {
+      const hashBuf = await crypto.subtle.digest("SHA-256", pdfBytes);
+      fileHashOriginal = Array.from(new Uint8Array(hashBuf))
+        .map((b) => b.toString(16).padStart(2, "0")).join("");
     }
 
     const zapSignResponse = await fetch("https://api.zapsign.com.br/api/v1/docs/", {
@@ -177,18 +200,56 @@ Deno.serve(async (req) => {
     }
 
     const zapSignData = await zapSignResponse.json();
+    const signTimestamp = new Date().toISOString();
+    const zapToken = zapSignData.token || "";
+
+    const certInfo = {
+      provider: "ZapSign",
+      cert_type: certType,
+      standard: "ICP-Brasil",
+      pades: true,
+      signer_email: user.email,
+      zapsign_open_id: zapSignData.open_id || null,
+      zapsign_status: zapSignData.status || null,
+    };
 
     await supabase.from("documents").update({
       sign_status: "assinado",
-      notes: `Certificado: ${certType} | ZapSign ID: ${zapSignData.token || "N/A"}`,
+      sign_timestamp: signTimestamp,
+      sign_token: zapToken,
+      sign_certificate_info: certInfo,
+      file_hash_original: fileHashOriginal,
+      notes: `Certificado ICP-Brasil ${certType} | ZapSign Token: ${zapToken} | SHA-256: ${fileHashOriginal.substring(0,16)}...`,
     }).eq("id", documentId);
+
+    // Audit log formal de assinatura (Lei 12.682/2012 Art. 2º-A)
+    await supabase.from("audit_logs").insert({
+      user_id: user.id,
+      user_email: user.email || "",
+      action: `Assinatura digital ICP-Brasil ${certType} aplicada`,
+      action_type: "sign",
+      target: documentId,
+      details: JSON.stringify({
+        file_name: fileName,
+        cert_type: certType,
+        standard: "ICP-Brasil",
+        pades: true,
+        zapsign_token: zapToken,
+        sha256_original: fileHashOriginal,
+        timestamp: signTimestamp,
+        legal_basis: "Lei 12.682/2012 e Decreto 10.278/2020",
+      }),
+    });
 
     return new Response(JSON.stringify({
       signed: true,
-      zapSignToken: zapSignData.token,
+      zapSignToken: zapToken,
       signUrl: zapSignData.signers?.[0]?.sign_url,
+      signTimestamp,
+      fileHashOriginal,
       documentId,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
   } catch (error: unknown) {
     console.error("Error in sign-document:", error);
     const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
