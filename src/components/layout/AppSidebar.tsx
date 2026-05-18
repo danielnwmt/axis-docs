@@ -1,10 +1,12 @@
 import { 
-  LayoutDashboard, FileText, Upload, ScanText, Search, PenTool, Shield, Users, Settings, HelpCircle, ChevronRight, LogOut
+  LayoutDashboard, FileText, Upload, ScanText, Search, PenTool, Shield, Users, Settings, HelpCircle, LogOut, ShieldCheck, Scale
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 
 const navItemsBase = [
@@ -16,6 +18,7 @@ const navItemsBase = [
   { icon: PenTool, key: "signature", path: "/signature" },
   { icon: Shield, key: "audit", path: "/audit" },
   { icon: Users, key: "users", path: "/users" },
+  { icon: ShieldCheck, key: "mydata", path: "/meus-dados" },
   { icon: Settings, key: "settings", path: "/settings" },
 ];
 
