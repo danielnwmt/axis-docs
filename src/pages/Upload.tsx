@@ -41,6 +41,7 @@ export default function Upload() {
   const [loading, setLoading] = useState(false);
   const [signDocument, setSignDocument] = useState(false);
   const [certType, setCertType] = useState("A1");
+  const [signedFiles, setSignedFiles] = useState<Set<string>>(new Set());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
