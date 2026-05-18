@@ -59,7 +59,7 @@ export function AppSidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 space-y-0.5">
-        {navItemsBase.map((item) => {
+        {items.map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <button
