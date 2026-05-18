@@ -20,8 +20,7 @@ import Signature from "./pages/Signature";
 import ChangePassword from "./pages/ChangePassword";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
-import MyData from "./pages/MyData";
-import LgpdAdmin from "./pages/LgpdAdmin";
+
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -53,8 +52,6 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/privacidade" element={<Privacy />} />
             <Route path="/termos" element={<Terms />} />
-            <Route path="/meus-dados" element={<ProtectedRoute><MyData /></ProtectedRoute>} />
-            <Route path="/lgpd" element={<ProtectedRoute><LgpdAdmin /></ProtectedRoute>} />
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
             <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
