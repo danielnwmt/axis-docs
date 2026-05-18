@@ -13,6 +13,7 @@ import axisLogo from "@/assets/axis-logo.png";
 export default function ChangePassword() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { user, session } = useAuth();
