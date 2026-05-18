@@ -146,6 +146,75 @@ export type Database = {
         }
         Relationships: []
       }
+      consents: {
+        Row: {
+          accepted_at: string
+          document_type: string
+          id: string
+          ip: string | null
+          user_agent: string | null
+          user_id: string
+          version: string
+        }
+        Insert: {
+          accepted_at?: string
+          document_type: string
+          id?: string
+          ip?: string | null
+          user_agent?: string | null
+          user_id: string
+          version: string
+        }
+        Update: {
+          accepted_at?: string
+          document_type?: string
+          id?: string
+          ip?: string | null
+          user_agent?: string | null
+          user_id?: string
+          version?: string
+        }
+        Relationships: []
+      }
+      data_requests: {
+        Row: {
+          id: string
+          notes: string | null
+          payload: Json | null
+          processed_at: string | null
+          processed_by: string | null
+          requested_at: string
+          status: string
+          type: string
+          user_email: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          notes?: string | null
+          payload?: Json | null
+          processed_at?: string | null
+          processed_by?: string | null
+          requested_at?: string
+          status?: string
+          type: string
+          user_email?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          notes?: string | null
+          payload?: Json | null
+          processed_at?: string | null
+          processed_by?: string | null
+          requested_at?: string
+          status?: string
+          type?: string
+          user_email?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           category: string
@@ -212,6 +281,39 @@ export type Database = {
         }
         Relationships: []
       }
+      dpo_config: {
+        Row: {
+          email: string
+          id: string
+          name: string
+          phone: string
+          privacy_policy_version: string
+          terms_version: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          email?: string
+          id?: string
+          name?: string
+          phone?: string
+          privacy_policy_version?: string
+          terms_version?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          email?: string
+          id?: string
+          name?: string
+          phone?: string
+          privacy_policy_version?: string
+          terms_version?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       license_config: {
         Row: {
           customer_name: string | null
@@ -263,6 +365,42 @@ export type Database = {
         }
         Relationships: []
       }
+      privacy_incidents: {
+        Row: {
+          affected_users_count: number
+          anpd_protocol: string | null
+          created_at: string
+          created_by: string
+          description: string
+          id: string
+          reported_to_anpd_at: string | null
+          severity: string
+          title: string
+        }
+        Insert: {
+          affected_users_count?: number
+          anpd_protocol?: string | null
+          created_at?: string
+          created_by: string
+          description: string
+          id?: string
+          reported_to_anpd_at?: string | null
+          severity?: string
+          title: string
+        }
+        Update: {
+          affected_users_count?: number
+          anpd_protocol?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string
+          id?: string
+          reported_to_anpd_at?: string | null
+          severity?: string
+          title?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           active: boolean
@@ -296,6 +434,36 @@ export type Database = {
         }
         Relationships: []
       }
+      retention_policies: {
+        Row: {
+          action: string
+          active: boolean
+          category: string
+          id: string
+          retention_days: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          action?: string
+          active?: boolean
+          category: string
+          id?: string
+          retention_days: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          action?: string
+          active?: boolean
+          category?: string
+          id?: string
+          retention_days?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       units: {
         Row: {
           active: boolean
@@ -325,6 +493,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      anonymize_user: { Args: { _target: string }; Returns: undefined }
+      get_my_data_export: { Args: never; Returns: Json }
       has_role: { Args: { _role: string; _user_id: string }; Returns: boolean }
       insert_audit_log: {
         Args: {
@@ -334,6 +504,19 @@ export type Database = {
           _target?: string
         }
         Returns: undefined
+      }
+      record_consent: {
+        Args: {
+          _document_type: string
+          _ip?: string
+          _user_agent?: string
+          _version: string
+        }
+        Returns: string
+      }
+      request_data_action: {
+        Args: { _notes?: string; _type: string }
+        Returns: string
       }
     }
     Enums: {

@@ -3,15 +3,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import axisLogo from "@/assets/axis-logo.png";
 
 export default function ChangePassword() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { user, session } = useAuth();
@@ -21,13 +23,18 @@ export default function ChangePassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (newPassword.length < 6) {
-      toast({ title: "Erro", description: "A senha deve ter no mínimo 6 caracteres.", variant: "destructive" });
+    if (newPassword.length < 10 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+      toast({ title: "Senha fraca", description: "Mínimo 10 caracteres, com maiúscula, número e símbolo.", variant: "destructive" });
       return;
     }
 
     if (newPassword !== confirmPassword) {
       toast({ title: "Erro", description: "As senhas não coincidem.", variant: "destructive" });
+      return;
+    }
+
+    if (!acceptTerms) {
+      toast({ title: "Aceite obrigatório", description: "Você deve aceitar a Política de Privacidade e os Termos de Uso.", variant: "destructive" });
       return;
     }
 
@@ -48,7 +55,11 @@ export default function ChangePassword() {
         .eq("id", user.id);
       if (profileError) throw profileError;
 
-      // Invalidate the profile cache so ProtectedRoute won't redirect back
+      // Registrar consentimentos LGPD (prova legal — Art. 8º §1º)
+      const ua = navigator.userAgent;
+      await supabase.rpc("record_consent", { _document_type: "privacy_policy", _version: "1.0", _ip: null, _user_agent: ua });
+      await supabase.rpc("record_consent", { _document_type: "terms_of_use", _version: "1.0", _ip: null, _user_agent: ua });
+
       await queryClient.invalidateQueries({ queryKey: ["profile-password-check"] });
 
       toast({ title: "Senha alterada", description: "Sua senha foi atualizada com sucesso." });
@@ -87,8 +98,9 @@ export default function ChangePassword() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={10}
             />
+            <p className="text-[11px] text-muted-foreground">Mín. 10 caracteres, com maiúscula, número e símbolo.</p>
           </div>
 
           <div className="space-y-2">
@@ -100,11 +112,21 @@ export default function ChangePassword() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={10}
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <div className="flex items-start gap-2 pt-1">
+            <Checkbox id="accept" checked={acceptTerms} onCheckedChange={(v) => setAcceptTerms(!!v)} />
+            <Label htmlFor="accept" className="text-xs leading-snug cursor-pointer">
+              Li e aceito a{" "}
+              <Link to="/privacidade" target="_blank" className="text-info underline">Política de Privacidade</Link>{" "}
+              e os{" "}
+              <Link to="/termos" target="_blank" className="text-info underline">Termos de Uso</Link>.
+            </Label>
+          </div>
+
+          <Button type="submit" className="w-full" disabled={loading || !acceptTerms}>
             {loading ? "Salvando..." : "Alterar Senha"}
           </Button>
         </form>

@@ -40,6 +40,8 @@
     "signature": "Digital Signature",
     "audit": "Audit",
     "users": "Users & Permissions",
+    "mydata": "My Data (GDPR)",
+    "lgpd": "Privacy Panel",
     "settings": "Settings",
     "help": "Help Center",
     "logout": "Sign out"
