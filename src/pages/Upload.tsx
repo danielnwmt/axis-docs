@@ -26,6 +26,8 @@ import { logAudit } from "@/lib/auditLog";
 import { PdfPreview } from "@/components/documents/PdfPreview";
 import { fetchActiveNames } from "@/lib/adminLookups";
 import { isPdfSigned } from "@/lib/pdfSignature";
+import { translateError } from "@/lib/errorMessages";
+import { useTranslation } from "react-i18next";
 
 export default function Upload() {
   const [files, setFiles] = useState<File[]>([]);
@@ -50,6 +52,7 @@ export default function Upload() {
   const [categorias, setCategorias] = useState<string[]>([]);
   const [unidades, setUnidades] = useState<string[]>([]);
   const { toast } = useToast();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -65,7 +68,7 @@ export default function Upload() {
         setCategorias(categoryNames);
         setUnidades(unitNames);
       } catch (error: any) {
-        toast({ title: "Erro", description: error.message || "Não foi possível carregar listas.", variant: "destructive" });
+        toast({ title: t("errors.generic"), description: translateError(error.message), variant: "destructive" });
       }
     };
     loadLists();
@@ -140,7 +143,7 @@ export default function Upload() {
       logAudit("Visualizou documento", "view", existingFile.name);
     } catch (error: any) {
       closePreview();
-      toast({ title: "Erro ao visualizar", description: error.message, variant: "destructive" });
+      toast({ title: t("errors.generic"), description: translateError(error.message), variant: "destructive" });
     } finally {
       setPreviewLoading(false);
     }
@@ -164,7 +167,7 @@ export default function Upload() {
       link.remove();
       window.URL.revokeObjectURL(blobUrl);
     } catch (error: any) {
-      toast({ title: "Erro ao baixar", description: error.message, variant: "destructive" });
+      toast({ title: t("errors.generic"), description: translateError(error.message), variant: "destructive" });
     }
   };
 
@@ -404,7 +407,7 @@ export default function Upload() {
       setSignDocument(false);
       navigate("/documents");
     } catch (error: any) {
-      toast({ title: "Erro ao enviar", description: error.message, variant: "destructive" });
+      toast({ title: t("errors.uploadFailed"), description: translateError(error.message), variant: "destructive" });
     } finally {
       setLoading(false);
     }
