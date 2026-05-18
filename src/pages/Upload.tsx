@@ -25,7 +25,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { logAudit } from "@/lib/auditLog";
 import { PdfPreview } from "@/components/documents/PdfPreview";
 import { fetchActiveNames } from "@/lib/adminLookups";
-import { isPdfSigned } from "@/lib/pdfSignature";
+import { isPdfSigned, isPdfIcpBrasilSigned } from "@/lib/pdfSignature";
 import { translateError } from "@/lib/errorMessages";
 import { useTranslation } from "react-i18next";
 
