@@ -385,7 +385,7 @@ export default function Upload() {
 
         const filePath = `drive://${driveFileId}`;
 
-        const signedNote = alreadySigned ? `${notes}\n[Documento já assinado digitalmente — detectado no upload]` : notes;
+        const signedNote = alreadyIcp ? `${notes}\n[Documento já assinado digitalmente — detectado no upload]` : notes;
 
         const { data: docData, error: dbError } = await supabase.from("documents").insert({
           user_id: user.id,
@@ -401,7 +401,7 @@ export default function Upload() {
           file_type: file.type,
           drive_file_id: driveFileId,
           drive_link: driveLink,
-          sign_status: alreadySigned ? "assinado" : "pendente",
+          sign_status: alreadyIcp ? "assinado" : "pendente",
         } as any).select().single();
 
         if (dbError) {
