@@ -210,6 +210,11 @@ export default function Upload() {
             title: "Documento já assinado digitalmente",
             description: `"${f.name}" já contém assinatura digital. A opção de assinar foi desativada.`,
           });
+        } else {
+          toast({
+            title: "Documento não assinado",
+            description: `"${f.name}" não possui assinatura digital. Marque a opção "Assinar com Certificado Digital" se desejar assiná-lo.`,
+          });
         }
       }
     }
