@@ -48,6 +48,8 @@ import { fetchActiveOptions } from "@/lib/adminLookups";
 interface UserProfile {
   id: string;
   email: string;
+  full_name?: string;
+  cpf?: string;
   role: string;
   unit: string;
   active: boolean;
@@ -58,6 +60,8 @@ export default function Users() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [cpf, setCpf] = useState("");
   const [role, setRole] = useState("Usuário");
   const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
