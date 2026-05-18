@@ -1,5 +1,5 @@
 import { 
-  LayoutDashboard, FileText, Upload, ScanText, Search, PenTool, Shield, Users, Settings, HelpCircle, LogOut, ShieldCheck, Scale
+  LayoutDashboard, FileText, Upload, ScanText, Search, PenTool, Shield, Users, Settings, HelpCircle, LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
