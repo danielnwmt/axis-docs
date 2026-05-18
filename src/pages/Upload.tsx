@@ -304,7 +304,8 @@ export default function Upload() {
       // New document mode — send file directly to Drive (no Storage middleman)
       for (const file of files) {
         const isPdf = file.type === "application/pdf";
-        const shouldSign = signDocument && isPdf;
+        const alreadySigned = isPdf && (signedFiles.has(file.name) || (await isPdfSigned(file)));
+        const shouldSign = signDocument && isPdf && !alreadySigned;
 
         let driveFileId: string | null = null;
         let driveLink: string | null = null;
@@ -333,6 +334,8 @@ export default function Upload() {
 
         const filePath = `drive://${driveFileId}`;
 
+        const signedNote = alreadySigned ? `${notes}\n[Documento já assinado digitalmente — detectado no upload]` : notes;
+
         const { data: docData, error: dbError } = await supabase.from("documents").insert({
           user_id: user.id,
           title: title || file.name,
@@ -340,14 +343,14 @@ export default function Upload() {
           unit,
           subject,
           keywords,
-          notes: shouldSign ? `${notes}\nCertificado: ${certType}` : notes,
+          notes: shouldSign ? `${notes}\nCertificado: ${certType}` : signedNote,
           file_name: file.name,
           file_path: filePath,
           file_size: file.size,
           file_type: file.type,
           drive_file_id: driveFileId,
           drive_link: driveLink,
-          sign_status: shouldSign ? "pendente" : "pendente",
+          sign_status: alreadySigned ? "assinado" : "pendente",
         } as any).select().single();
 
         if (dbError) {
