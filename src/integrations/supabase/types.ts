@@ -221,6 +221,8 @@ export type Database = {
           created_at: string
           drive_file_id: string | null
           drive_link: string | null
+          file_hash_original: string | null
+          file_hash_signed: string | null
           file_name: string
           file_path: string
           file_size: number | null
@@ -230,7 +232,10 @@ export type Database = {
           notes: string | null
           ocr_status: string
           ocr_text: string | null
+          sign_certificate_info: Json | null
           sign_status: string
+          sign_timestamp: string | null
+          sign_token: string | null
           subject: string | null
           title: string
           unit: string
@@ -242,6 +247,8 @@ export type Database = {
           created_at?: string
           drive_file_id?: string | null
           drive_link?: string | null
+          file_hash_original?: string | null
+          file_hash_signed?: string | null
           file_name: string
           file_path: string
           file_size?: number | null
@@ -251,7 +258,10 @@ export type Database = {
           notes?: string | null
           ocr_status?: string
           ocr_text?: string | null
+          sign_certificate_info?: Json | null
           sign_status?: string
+          sign_timestamp?: string | null
+          sign_token?: string | null
           subject?: string | null
           title: string
           unit?: string
@@ -263,6 +273,8 @@ export type Database = {
           created_at?: string
           drive_file_id?: string | null
           drive_link?: string | null
+          file_hash_original?: string | null
+          file_hash_signed?: string | null
           file_name?: string
           file_path?: string
           file_size?: number | null
@@ -272,7 +284,10 @@ export type Database = {
           notes?: string | null
           ocr_status?: string
           ocr_text?: string | null
+          sign_certificate_info?: Json | null
           sign_status?: string
+          sign_timestamp?: string | null
+          sign_token?: string | null
           subject?: string | null
           title?: string
           unit?: string
