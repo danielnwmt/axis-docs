@@ -50,11 +50,16 @@ export default function Signature() {
 
   const loadFromStorage = async (filePath: string, fileName: string) => {
     try {
-      const { data, error } = await supabase.storage
-        .from("documents")
-        .download(filePath);
-      if (error) throw error;
-      const loadedFile = new File([data], fileName, { type: "application/pdf" });
+      let blob: Blob;
+      if (filePath.startsWith("drive://")) {
+        const driveId = filePath.replace("drive://", "");
+        blob = await fetchDriveFileBlob(driveId, "view", "application/pdf");
+      } else {
+        const { data, error } = await supabase.storage.from("documents").download(filePath);
+        if (error) throw error;
+        blob = data;
+      }
+      const loadedFile = new File([blob], fileName, { type: "application/pdf" });
       setFile(loadedFile);
       setFileUrl(URL.createObjectURL(loadedFile));
       setStep("preview");
