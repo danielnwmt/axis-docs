@@ -40,6 +40,8 @@
     "signature": "Assinatura Digital",
     "audit": "Auditoria",
     "users": "Usuários e Permissões",
+    "mydata": "Meus Dados (LGPD)",
+    "lgpd": "Painel LGPD",
     "settings": "Configurações",
     "help": "Central de Ajuda",
     "logout": "Sair"
