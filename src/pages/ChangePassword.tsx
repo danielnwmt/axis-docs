@@ -23,13 +23,18 @@ export default function ChangePassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (newPassword.length < 6) {
-      toast({ title: "Erro", description: "A senha deve ter no mínimo 6 caracteres.", variant: "destructive" });
+    if (newPassword.length < 10 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+      toast({ title: "Senha fraca", description: "Mínimo 10 caracteres, com maiúscula, número e símbolo.", variant: "destructive" });
       return;
     }
 
     if (newPassword !== confirmPassword) {
       toast({ title: "Erro", description: "As senhas não coincidem.", variant: "destructive" });
+      return;
+    }
+
+    if (!acceptTerms) {
+      toast({ title: "Aceite obrigatório", description: "Você deve aceitar a Política de Privacidade e os Termos de Uso.", variant: "destructive" });
       return;
     }
 
