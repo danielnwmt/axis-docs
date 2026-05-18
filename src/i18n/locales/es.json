@@ -1,4 +1,17 @@
 {
+  "errors": {
+    "generic": "Ocurrió un error inesperado.",
+    "rls": "No tienes permiso para realizar esta acción.",
+    "duplicate": "Este registro ya existe.",
+    "forbidden": "Permiso denegado.",
+    "auth": "Sesión expirada. Inicia sesión nuevamente.",
+    "network": "Error de conexión. Verifica tu internet.",
+    "tooLarge": "Archivo demasiado grande.",
+    "notFound": "Registro no encontrado.",
+    "quota": "Cuota de almacenamiento excedida.",
+    "invalid": "Datos inválidos.",
+    "uploadFailed": "Error al enviar"
+  },
   "common": {
     "save": "Guardar",
     "cancel": "Cancelar",
