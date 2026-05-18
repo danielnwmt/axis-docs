@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
+import { fetchDriveFileBlob } from "@/lib/driveFile";
 import {
   Select,
   SelectContent,
@@ -49,11 +50,16 @@ export default function Signature() {
 
   const loadFromStorage = async (filePath: string, fileName: string) => {
     try {
-      const { data, error } = await supabase.storage
-        .from("documents")
-        .download(filePath);
-      if (error) throw error;
-      const loadedFile = new File([data], fileName, { type: "application/pdf" });
+      let blob: Blob;
+      if (filePath.startsWith("drive://")) {
+        const driveId = filePath.replace("drive://", "");
+        blob = await fetchDriveFileBlob(driveId, "view", "application/pdf");
+      } else {
+        const { data, error } = await supabase.storage.from("documents").download(filePath);
+        if (error) throw error;
+        blob = data;
+      }
+      const loadedFile = new File([blob], fileName, { type: "application/pdf" });
       setFile(loadedFile);
       setFileUrl(URL.createObjectURL(loadedFile));
       setStep("preview");
@@ -103,15 +109,23 @@ export default function Signature() {
         filePath = existingFilePath;
         setProgress(50);
       } else {
-        // New document — upload and create record
-        filePath = `${user.id}/${Date.now()}_${file.name}`;
-        setProgress(30);
+        // New document — upload to Google Drive and create record
+        setProgress(20);
 
-        const { error: uploadError } = await supabase.storage
-          .from("documents")
-          .upload(filePath, file, { cacheControl: "3600" });
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("fileName", file.name);
+        formData.append("unitName", "ICP-Brasil");
 
-        if (uploadError) throw uploadError;
+        const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", {
+          body: formData,
+        });
+
+        if (driveError || !driveResult?.success || !driveResult?.driveFileId) {
+          throw new Error(driveError?.message || driveResult?.error || "Falha ao enviar para o Google Drive.");
+        }
+
+        filePath = `drive://${driveResult.driveFileId}`;
         setProgress(50);
 
         const { data: docData, error: insertError } = await supabase
@@ -125,10 +139,12 @@ export default function Signature() {
             file_path: filePath,
             file_size: file.size,
             file_type: file.type,
+            drive_file_id: driveResult.driveFileId,
+            drive_link: driveResult.driveLink || null,
             ocr_status: "pendente",
             sign_status: "pendente",
             notes: `Certificado: ${certType}`,
-          })
+          } as any)
           .select()
           .single();
 
