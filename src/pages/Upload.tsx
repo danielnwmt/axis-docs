@@ -25,6 +25,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { logAudit } from "@/lib/auditLog";
 import { PdfPreview } from "@/components/documents/PdfPreview";
 import { fetchActiveNames } from "@/lib/adminLookups";
+import { isPdfSigned } from "@/lib/pdfSignature";
 
 export default function Upload() {
   const [files, setFiles] = useState<File[]>([]);
