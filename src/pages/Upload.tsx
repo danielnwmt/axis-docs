@@ -25,6 +25,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { logAudit } from "@/lib/auditLog";
 import { PdfPreview } from "@/components/documents/PdfPreview";
 import { fetchActiveNames } from "@/lib/adminLookups";
+import { isPdfSigned } from "@/lib/pdfSignature";
 
 export default function Upload() {
   const [files, setFiles] = useState<File[]>([]);
@@ -40,6 +41,7 @@ export default function Upload() {
   const [loading, setLoading] = useState(false);
   const [signDocument, setSignDocument] = useState(false);
   const [certType, setCertType] = useState("A1");
+  const [signedFiles, setSignedFiles] = useState<Set<string>>(new Set());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -197,20 +199,49 @@ export default function Upload() {
     );
   };
 
+  const checkSignatures = async (incoming: File[]) => {
+    for (const f of incoming) {
+      if (f.type === "application/pdf") {
+        const signed = await isPdfSigned(f);
+        if (signed) {
+          setSignedFiles((prev) => new Set(prev).add(f.name));
+          setSignDocument(false);
+          toast({
+            title: "Documento já assinado digitalmente",
+            description: `"${f.name}" já contém assinatura digital. A opção de assinar foi desativada.`,
+          });
+        }
+      }
+    }
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const dropped = Array.from(e.dataTransfer.files);
     setFiles((prev) => [...prev, ...dropped]);
+    checkSignatures(dropped);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+      const selected = Array.from(e.target.files);
+      setFiles((prev) => [...prev, ...selected]);
+      checkSignatures(selected);
     }
   };
 
   const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setFiles((prev) => {
+      const removed = prev[index];
+      if (removed) {
+        setSignedFiles((s) => {
+          const next = new Set(s);
+          next.delete(removed.name);
+          return next;
+        });
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const cleanupDriveFile = async (driveFileId?: string | null) => {
@@ -273,7 +304,8 @@ export default function Upload() {
       // New document mode — send file directly to Drive (no Storage middleman)
       for (const file of files) {
         const isPdf = file.type === "application/pdf";
-        const shouldSign = signDocument && isPdf;
+        const alreadySigned = isPdf && (signedFiles.has(file.name) || (await isPdfSigned(file)));
+        const shouldSign = signDocument && isPdf && !alreadySigned;
 
         let driveFileId: string | null = null;
         let driveLink: string | null = null;
@@ -302,6 +334,8 @@ export default function Upload() {
 
         const filePath = `drive://${driveFileId}`;
 
+        const signedNote = alreadySigned ? `${notes}\n[Documento já assinado digitalmente — detectado no upload]` : notes;
+
         const { data: docData, error: dbError } = await supabase.from("documents").insert({
           user_id: user.id,
           title: title || file.name,
@@ -309,14 +343,14 @@ export default function Upload() {
           unit,
           subject,
           keywords,
-          notes: shouldSign ? `${notes}\nCertificado: ${certType}` : notes,
+          notes: shouldSign ? `${notes}\nCertificado: ${certType}` : signedNote,
           file_name: file.name,
           file_path: filePath,
           file_size: file.size,
           file_type: file.type,
           drive_file_id: driveFileId,
           drive_link: driveLink,
-          sign_status: shouldSign ? "pendente" : "pendente",
+          sign_status: alreadySigned ? "assinado" : "pendente",
         } as any).select().single();
 
         if (dbError) {
@@ -439,7 +473,7 @@ export default function Upload() {
                 id="sign"
                 checked={signDocument}
                 onCheckedChange={(checked) => setSignDocument(checked === true)}
-                disabled={!hasPdf}
+                disabled={!hasPdf || signedFiles.size > 0}
               />
               <label htmlFor="sign" className="flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer">
                 <PenTool className="w-4 h-4 text-primary" />
@@ -449,6 +483,15 @@ export default function Upload() {
 
             {!hasPdf && files.length > 0 && (
               <p className="text-xs text-muted-foreground ml-7">Apenas arquivos PDF podem ser assinados digitalmente.</p>
+            )}
+
+            {signedFiles.size > 0 && (
+              <div className="flex items-start gap-2 bg-success/10 rounded-lg p-2.5 ml-7">
+                <ShieldCheck className="w-3.5 h-3.5 text-success mt-0.5 shrink-0" />
+                <p className="text-xs text-success">
+                  Documento(s) já assinado(s) digitalmente detectado(s): {Array.from(signedFiles).join(", ")}. Serão marcados como assinados automaticamente.
+                </p>
+              </div>
             )}
 
             {signDocument && (
