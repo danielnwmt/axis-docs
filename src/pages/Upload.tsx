@@ -407,7 +407,7 @@ export default function Upload() {
       setSignDocument(false);
       navigate("/documents");
     } catch (error: any) {
-      toast({ title: "Erro ao enviar", description: error.message, variant: "destructive" });
+      toast({ title: t("errors.uploadFailed"), description: translateError(error.message), variant: "destructive" });
     } finally {
       setLoading(false);
     }
