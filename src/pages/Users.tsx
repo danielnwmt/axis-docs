@@ -269,6 +269,14 @@ export default function Users() {
           </DialogHeader>
           <form onSubmit={handleAddUser} className="space-y-4">
             <div className="space-y-2">
+              <Label>Nome completo</Label>
+              <Input type="text" placeholder="Nome do usuário" value={fullName} onChange={(e) => setFullName(e.target.value)} required maxLength={120} />
+            </div>
+            <div className="space-y-2">
+              <Label>CPF</Label>
+              <Input type="text" inputMode="numeric" placeholder="000.000.000-00" value={cpf} onChange={(e) => setCpf(maskCpf(e.target.value))} required />
+            </div>
+            <div className="space-y-2">
               <Label>E-mail</Label>
               <Input type="email" placeholder="usuario@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
