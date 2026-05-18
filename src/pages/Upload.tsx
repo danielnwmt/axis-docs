@@ -473,7 +473,7 @@ export default function Upload() {
                 id="sign"
                 checked={signDocument}
                 onCheckedChange={(checked) => setSignDocument(checked === true)}
-                disabled={!hasPdf}
+                disabled={!hasPdf || signedFiles.size > 0}
               />
               <label htmlFor="sign" className="flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer">
                 <PenTool className="w-4 h-4 text-primary" />
@@ -483,6 +483,15 @@ export default function Upload() {
 
             {!hasPdf && files.length > 0 && (
               <p className="text-xs text-muted-foreground ml-7">Apenas arquivos PDF podem ser assinados digitalmente.</p>
+            )}
+
+            {signedFiles.size > 0 && (
+              <div className="flex items-start gap-2 bg-success/10 rounded-lg p-2.5 ml-7">
+                <ShieldCheck className="w-3.5 h-3.5 text-success mt-0.5 shrink-0" />
+                <p className="text-xs text-success">
+                  Documento(s) já assinado(s) digitalmente detectado(s): {Array.from(signedFiles).join(", ")}. Serão marcados como assinados automaticamente.
+                </p>
+              </div>
             )}
 
             {signDocument && (
