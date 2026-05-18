@@ -404,8 +404,10 @@ export type Database = {
       profiles: {
         Row: {
           active: boolean
+          cpf: string
           created_at: string
           email: string
+          full_name: string
           id: string
           language: string
           must_change_password: boolean
@@ -414,8 +416,10 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          cpf?: string
           created_at?: string
           email?: string
+          full_name?: string
           id: string
           language?: string
           must_change_password?: boolean
@@ -424,8 +428,10 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          cpf?: string
           created_at?: string
           email?: string
+          full_name?: string
           id?: string
           language?: string
           must_change_password?: boolean

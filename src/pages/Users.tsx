@@ -48,6 +48,8 @@ import { fetchActiveOptions } from "@/lib/adminLookups";
 interface UserProfile {
   id: string;
   email: string;
+  full_name?: string;
+  cpf?: string;
   role: string;
   unit: string;
   active: boolean;
@@ -58,6 +60,8 @@ export default function Users() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [cpf, setCpf] = useState("");
   const [role, setRole] = useState("Usuário");
   const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -97,8 +101,12 @@ export default function Users() {
 
     setLoading(true);
     try {
+      const cpfDigits = cpf.replace(/\D/g, "");
+      if (cpfDigits && cpfDigits.length !== 11) {
+        throw new Error("CPF deve conter 11 dígitos.");
+      }
       const response = await supabase.functions.invoke("create-user?action=create", {
-        body: { email, password, role, unit: selectedUnits.join(", ") },
+        body: { email, password, role, unit: selectedUnits.join(", "), full_name: fullName.trim(), cpf: cpfDigits },
       });
 
       if (response.error) throw new Error(response.error.message);
@@ -108,6 +116,8 @@ export default function Users() {
       setOpen(false);
       setEmail("");
       setPassword("");
+      setFullName("");
+      setCpf("");
       setRole("Usuário");
       setSelectedUnits([]);
       fetchUsers();
@@ -116,6 +126,14 @@ export default function Users() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const maskCpf = (v: string) => {
+    const d = v.replace(/\D/g, "").slice(0, 11);
+    return d
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
   };
 
   const handleToggleActive = async (user: UserProfile) => {
@@ -250,6 +268,14 @@ export default function Users() {
             <DialogTitle>Novo Usuário</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleAddUser} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome completo</Label>
+              <Input type="text" placeholder="Nome do usuário" value={fullName} onChange={(e) => setFullName(e.target.value)} required maxLength={120} />
+            </div>
+            <div className="space-y-2">
+              <Label>CPF</Label>
+              <Input type="text" inputMode="numeric" placeholder="000.000.000-00" value={cpf} onChange={(e) => setCpf(maskCpf(e.target.value))} required />
+            </div>
             <div className="space-y-2">
               <Label>E-mail</Label>
               <Input type="email" placeholder="usuario@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required />

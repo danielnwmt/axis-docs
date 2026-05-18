@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
     const action = url.searchParams.get("action");
 
     if (req.method === "POST" && action === "create") {
-      const { email, password, role, unit } = await req.json();
+      const { email, password, role, unit, full_name, cpf } = await req.json();
 
       if (!email || !password) {
         return new Response(JSON.stringify({ error: "E-mail e senha são obrigatórios" }), {
@@ -77,6 +77,8 @@ Deno.serve(async (req) => {
         email,
         role: role || "Usuário",
         unit: unit || "",
+        full_name: full_name || "",
+        cpf: cpf || "",
         active: true,
         must_change_password: true,
       });

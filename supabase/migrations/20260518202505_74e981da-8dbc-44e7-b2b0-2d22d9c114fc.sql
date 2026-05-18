@@ -1,0 +1,4 @@
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS full_name text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS cpf text NOT NULL DEFAULT '';
