@@ -18,6 +18,10 @@ import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import Signature from "./pages/Signature";
 import ChangePassword from "./pages/ChangePassword";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
+import MyData from "./pages/MyData";
+import LgpdAdmin from "./pages/LgpdAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
