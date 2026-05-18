@@ -27,6 +27,17 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { t } = useTranslation();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+      .then(({ data }) => setIsAdmin(data?.role === "Administrador"));
+  }, [user?.id]);
+
+  const items = isAdmin
+    ? [...navItemsBase.slice(0, -1), { icon: Scale, key: "lgpd", path: "/lgpd" }, navItemsBase[navItemsBase.length - 1]]
+    : navItemsBase;
 
   const handleSignOut = async () => {
     await signOut();
