@@ -101,8 +101,12 @@ export default function Users() {
 
     setLoading(true);
     try {
+      const cpfDigits = cpf.replace(/\D/g, "");
+      if (cpfDigits && cpfDigits.length !== 11) {
+        throw new Error("CPF deve conter 11 dígitos.");
+      }
       const response = await supabase.functions.invoke("create-user?action=create", {
-        body: { email, password, role, unit: selectedUnits.join(", ") },
+        body: { email, password, role, unit: selectedUnits.join(", "), full_name: fullName.trim(), cpf: cpfDigits },
       });
 
       if (response.error) throw new Error(response.error.message);
@@ -112,6 +116,8 @@ export default function Users() {
       setOpen(false);
       setEmail("");
       setPassword("");
+      setFullName("");
+      setCpf("");
       setRole("Usuário");
       setSelectedUnits([]);
       fetchUsers();
@@ -120,6 +126,14 @@ export default function Users() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const maskCpf = (v: string) => {
+    const d = v.replace(/\D/g, "").slice(0, 11);
+    return d
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
   };
 
   const handleToggleActive = async (user: UserProfile) => {
