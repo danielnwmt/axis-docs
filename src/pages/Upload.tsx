@@ -68,7 +68,7 @@ export default function Upload() {
         setCategorias(categoryNames);
         setUnidades(unitNames);
       } catch (error: any) {
-        toast({ title: "Erro", description: error.message || "Não foi possível carregar listas.", variant: "destructive" });
+        toast({ title: t("errors.generic"), description: translateError(error.message), variant: "destructive" });
       }
     };
     loadLists();
