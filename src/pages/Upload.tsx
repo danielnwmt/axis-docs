@@ -199,20 +199,49 @@ export default function Upload() {
     );
   };
 
+  const checkSignatures = async (incoming: File[]) => {
+    for (const f of incoming) {
+      if (f.type === "application/pdf") {
+        const signed = await isPdfSigned(f);
+        if (signed) {
+          setSignedFiles((prev) => new Set(prev).add(f.name));
+          setSignDocument(false);
+          toast({
+            title: "Documento já assinado digitalmente",
+            description: `"${f.name}" já contém assinatura digital. A opção de assinar foi desativada.`,
+          });
+        }
+      }
+    }
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const dropped = Array.from(e.dataTransfer.files);
     setFiles((prev) => [...prev, ...dropped]);
+    checkSignatures(dropped);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+      const selected = Array.from(e.target.files);
+      setFiles((prev) => [...prev, ...selected]);
+      checkSignatures(selected);
     }
   };
 
   const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setFiles((prev) => {
+      const removed = prev[index];
+      if (removed) {
+        setSignedFiles((s) => {
+          const next = new Set(s);
+          next.delete(removed.name);
+          return next;
+        });
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const cleanupDriveFile = async (driveFileId?: string | null) => {
