@@ -1,4 +1,17 @@
 {
+  "errors": {
+    "generic": "An unexpected error occurred.",
+    "rls": "You do not have permission to perform this action.",
+    "duplicate": "This record already exists.",
+    "forbidden": "Permission denied.",
+    "auth": "Session expired. Please sign in again.",
+    "network": "Connection failed. Check your internet.",
+    "tooLarge": "File is too large.",
+    "notFound": "Record not found.",
+    "quota": "Storage quota exceeded.",
+    "invalid": "Invalid data.",
+    "uploadFailed": "Upload error"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
