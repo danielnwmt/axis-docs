@@ -309,11 +309,24 @@ export default function Upload() {
         }
       }
 
+      const allowUnsigned = localStorage.getItem("allow_unsigned_uploads") !== "false";
+
       // New document mode — send file directly to Drive (no Storage middleman)
       for (const file of files) {
         const isPdf = file.type === "application/pdf";
         const alreadySigned = isPdf && (signedFiles.has(file.name) || (await isPdfSigned(file)));
         const shouldSign = signDocument && isPdf && !alreadySigned;
+
+        if (!allowUnsigned && !alreadySigned && !shouldSign) {
+          toast({
+            title: "Envio sem assinatura bloqueado",
+            description: `"${file.name}" não está assinado. Ative a opção em Configurações › Parâmetros para permitir envios sem assinatura.`,
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
 
         let driveFileId: string | null = null;
         let driveLink: string | null = null;
