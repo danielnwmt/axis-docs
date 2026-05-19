@@ -5,13 +5,16 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Não autenticado" }), {
+      return new Response(JSON.stringify({ ok: false, message: "Não autenticado" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -26,7 +29,7 @@ Deno.serve(async (req) => {
     });
     const { data: userData } = await userClient.auth.getUser();
     if (!userData?.user) {
-      return new Response(JSON.stringify({ error: "Não autenticado" }), {
+      return new Response(JSON.stringify({ ok: false, message: "Não autenticado" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -34,24 +37,14 @@ Deno.serve(async (req) => {
 
     const admin = createClient(supabaseUrl, serviceKey);
 
-    // require admin
     const { data: profile } = await admin
       .from("profiles")
       .select("role, active")
       .eq("id", userData.user.id)
       .single();
     if (profile?.role !== "Administrador" || profile?.active !== true) {
-      return new Response(JSON.stringify({ error: "Permissão negada" }), {
+      return new Response(JSON.stringify({ ok: false, message: "Permissão negada" }), {
         status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const body = await req.json().catch(() => ({}));
-    const unlock_code = String(body?.unlock_code || "").trim();
-    if (!unlock_code) {
-      return new Response(JSON.stringify({ error: "Informe o código de desbloqueio" }), {
-        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -63,56 +56,35 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    if (!config || !config.server_url) {
+    if (!config) {
       return new Response(
-        JSON.stringify({ ok: false, message: "Configure a URL do servidor de licenças primeiro." }),
+        JSON.stringify({ ok: false, message: "Configuração de licença não encontrada." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Call license server with action=unlock
-    let ok = false;
-    let serverMsg = "";
-    let valid_until: string | null = null;
-    try {
-      const ctrl = new AbortController();
-      const timeoutId = setTimeout(() => ctrl.abort(), 10000);
-      const resp = await fetch(config.server_url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "unlock",
-          unlock_code,
-          license_key: config.license_key || "",
-          hardware_id: config.hardware_id || "",
-          product: "axisdocs",
+    // Enforce: once per 30 days
+    const last = config.last_temp_unlock_at ? new Date(config.last_temp_unlock_at).getTime() : 0;
+    const now = Date.now();
+    if (last && now - last < THIRTY_DAYS_MS) {
+      const nextAllowed = new Date(last + THIRTY_DAYS_MS);
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          message: `Desbloqueio temporário já utilizado este mês. Próximo disponível em ${nextAllowed.toLocaleString("pt-BR")}.`,
+          next_allowed_at: nextAllowed.toISOString(),
         }),
-        signal: ctrl.signal,
-      });
-      clearTimeout(timeoutId);
-      const data = await resp.json().catch(() => ({}));
-      ok = resp.ok && (data.ok === true || String(data.status || "").toLowerCase() === "active");
-      serverMsg = data.message || "";
-      if (data.valid_until) valid_until = data.valid_until;
-    } catch (e: any) {
-      serverMsg = `Servidor inacessível: ${e?.message || e}`;
-    }
-
-    if (!ok) {
-      return new Response(
-        JSON.stringify({ ok: false, message: serverMsg || "Código inválido" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const until = valid_until
-      ? new Date(valid_until).toISOString()
-      : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const until = new Date(now + TWENTY_FOUR_HOURS_MS).toISOString();
 
     await admin
       .from("license_config")
       .update({
         temp_unlock_until: until,
+        last_temp_unlock_at: new Date(now).toISOString(),
         message: `Desbloqueio temporário ativo até ${new Date(until).toLocaleString("pt-BR")}`,
         updated_at: new Date().toISOString(),
         updated_by: userData.user.id,
@@ -120,11 +92,11 @@ Deno.serve(async (req) => {
       .eq("id", config.id);
 
     return new Response(
-      JSON.stringify({ ok: true, valid_until: until, message: serverMsg }),
+      JSON.stringify({ ok: true, valid_until: until }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message || String(error) }), {
+    return new Response(JSON.stringify({ ok: false, message: error.message || String(error) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
