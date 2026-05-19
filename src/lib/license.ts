@@ -13,15 +13,20 @@ export interface LicenseInfo {
   hardware_id?: string | null;
   id?: string | null;
   temp_unlock_until?: string | null;
+  last_temp_unlock_at?: string | null;
+  storage_limit_gb?: number | null;
+  storage_used_bytes?: number | null;
 }
 
 export async function unlockTemporary(): Promise<{ ok: boolean; valid_until?: string; message?: string; next_allowed_at?: string }> {
-  const { data, error } = await supabase.functions.invoke("license-temp-unlock", { body: {} });
-  if (error) {
-    const msg = (error as any)?.message || "Falha no desbloqueio";
-    return { ok: false, message: msg };
+  try {
+    const { data, error } = await supabase.functions.invoke("license-temp-unlock", { body: {} });
+    if (!error) return data as any;
+  } catch {
+    // Instalações locais antigas podem não ter este endpoint em /functions/v1.
   }
-  return data as any;
+
+  return unlockTemporaryDirect();
 }
 
 const CACHE_KEY = "axis_license_cache_v1";
@@ -51,6 +56,12 @@ function getHardwareId(): string {
     localStorage.setItem("axis_hw_id", id);
   }
   return id;
+}
+
+function cacheAndNotifyLicense(info: LicenseInfo): LicenseInfo {
+  localStorage.setItem(CACHE_KEY, JSON.stringify({ info, t: Date.now() }));
+  window.dispatchEvent(new CustomEvent("axis-license-updated", { detail: info }));
+  return info;
 }
 
 export async function loadLicenseConfig(): Promise<LicenseInfo | null> {
