@@ -1983,6 +1983,43 @@ VITE_SUPABASE_PROJECT_ID=local
 EOF_ENV
 chmod 600 "$APP_DIR/.env"
 
+echo "➡️  Atualizando schema local de licença..."
+sudo -u postgres psql -d "$PG_DB" <<'SQL'
+CREATE TABLE IF NOT EXISTS public.license_config (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  server_url text NOT NULL DEFAULT '',
+  license_key text NOT NULL DEFAULT '',
+  hardware_id text NOT NULL DEFAULT '',
+  status text NOT NULL DEFAULT 'inactive',
+  customer_name text DEFAULT '',
+  expires_at timestamptz,
+  message text DEFAULT '',
+  last_check timestamptz,
+  temp_unlock_until timestamptz,
+  last_temp_unlock_at timestamptz,
+  storage_limit_gb numeric NOT NULL DEFAULT 0,
+  storage_used_bytes bigint NOT NULL DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid
+);
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS last_temp_unlock_at timestamptz;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS storage_limit_gb numeric NOT NULL DEFAULT 0;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS storage_used_bytes bigint NOT NULL DEFAULT 0;
+ALTER TABLE public.license_config ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins read license config' AND tablename = 'license_config') THEN
+    CREATE POLICY "Admins read license config" ON public.license_config FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Administrador'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins insert license config' AND tablename = 'license_config') THEN
+    CREATE POLICY "Admins insert license config" ON public.license_config FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'Administrador'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins update license config' AND tablename = 'license_config') THEN
+    CREATE POLICY "Admins update license config" ON public.license_config FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'Administrador'));
+  END IF;
+END $$;
+SQL
+systemctl restart postgrest 2>/dev/null || true
+
 echo "➡️  Reconstruindo AxisDocs..."
 cd "$APP_DIR"
 npm install --no-fund --no-audit
