@@ -345,8 +345,7 @@ function BlockedLicenseInfo({ info, onChanged }: { info: LicenseInfo | null; onC
           {unlocking ? "Desbloqueando..." : "Desbloquear por 24 horas"}
         </Button>
       </div>
-
-      </div>
     </div>
   );
 }
+
