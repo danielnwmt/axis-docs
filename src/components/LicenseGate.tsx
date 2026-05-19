@@ -183,7 +183,16 @@ function AdminLicenseForm({ onChanged }: { onChanged: () => Promise<void> | void
       }
       await onChanged();
     } catch (e: any) {
-      toast({ title: "Erro ao salvar", description: e.message, variant: "destructive" });
+      const msg = e?.message || e?.error_description || e?.hint || JSON.stringify(e);
+      const isMissing = /relation .*license_config.* does not exist|schema cache/i.test(msg);
+      toast({
+        title: "Erro ao salvar",
+        description: isMissing
+          ? "Tabela license_config não encontrada no banco local. Execute novamente o script scripts/setup-database.sql para criar a tabela."
+          : msg,
+        variant: "destructive",
+      });
+      console.error("[LicenseGate] save error", e);
     } finally {
       setSaving(false);
     }
