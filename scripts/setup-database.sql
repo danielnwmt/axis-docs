@@ -239,11 +239,27 @@ CREATE TABLE IF NOT EXISTS public.license_config (
   message text DEFAULT '',
   last_check timestamptz,
   temp_unlock_until timestamptz,
+  last_temp_unlock_at timestamptz,
   storage_limit_gb numeric NOT NULL DEFAULT 0,
   storage_used_bytes bigint NOT NULL DEFAULT 0,
   updated_at timestamptz NOT NULL DEFAULT now(),
   updated_by uuid
 );
+
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS server_url text NOT NULL DEFAULT '';
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS license_key text NOT NULL DEFAULT '';
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS hardware_id text NOT NULL DEFAULT '';
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'inactive';
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS customer_name text DEFAULT '';
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS expires_at timestamptz;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS message text DEFAULT '';
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS last_check timestamptz;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS temp_unlock_until timestamptz;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS last_temp_unlock_at timestamptz;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS storage_limit_gb numeric NOT NULL DEFAULT 0;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS storage_used_bytes bigint NOT NULL DEFAULT 0;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS updated_by uuid;
 
 ALTER TABLE public.license_config ENABLE ROW LEVEL SECURITY;
 

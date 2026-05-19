@@ -13,15 +13,20 @@ export interface LicenseInfo {
   hardware_id?: string | null;
   id?: string | null;
   temp_unlock_until?: string | null;
+  last_temp_unlock_at?: string | null;
+  storage_limit_gb?: number | null;
+  storage_used_bytes?: number | null;
 }
 
 export async function unlockTemporary(): Promise<{ ok: boolean; valid_until?: string; message?: string; next_allowed_at?: string }> {
-  const { data, error } = await supabase.functions.invoke("license-temp-unlock", { body: {} });
-  if (error) {
-    const msg = (error as any)?.message || "Falha no desbloqueio";
-    return { ok: false, message: msg };
+  try {
+    const { data, error } = await supabase.functions.invoke("license-temp-unlock", { body: {} });
+    if (!error) return data as any;
+  } catch {
+    // Instalações locais antigas podem não ter este endpoint em /functions/v1.
   }
-  return data as any;
+
+  return unlockTemporaryDirect();
 }
 
 const CACHE_KEY = "axis_license_cache_v1";
@@ -51,6 +56,12 @@ function getHardwareId(): string {
     localStorage.setItem("axis_hw_id", id);
   }
   return id;
+}
+
+function cacheAndNotifyLicense(info: LicenseInfo): LicenseInfo {
+  localStorage.setItem(CACHE_KEY, JSON.stringify({ info, t: Date.now() }));
+  window.dispatchEvent(new CustomEvent("axis-license-updated", { detail: info }));
+  return info;
 }
 
 export async function loadLicenseConfig(): Promise<LicenseInfo | null> {
@@ -102,13 +113,108 @@ export async function saveLicenseConfig(server_url: string, license_key: string)
   return saved as LicenseInfo;
 }
 
-export async function validateLicense(): Promise<LicenseInfo> {
-  const { data, error } = await supabase.functions.invoke("validate-license");
+function parseStorageGb(input: any): number {
+  if (input == null) return 0;
+  if (typeof input === "number") return input;
+  if (typeof input === "string") return Number(input) || 0;
+  const unit = String(input.unit ?? input.units ?? "GB").toUpperCase();
+  const amount = Number(input.total ?? input.total_amount ?? input.total_gb ?? input.amount ?? input.value ?? input.size ?? 0) || 0;
+  if (unit === "TB") return amount * 1024;
+  if (unit === "MB") return amount / 1024;
+  if (unit === "KB") return amount / (1024 * 1024);
+  return amount;
+}
+
+async function getStorageUsedBytes(): Promise<number> {
+  const { data } = await (supabase as any).from("documents").select("file_size");
+  return (data || []).reduce((sum: number, doc: any) => sum + (Number(doc.file_size) || 0), 0);
+}
+
+async function validateLicenseDirect(): Promise<LicenseInfo> {
+  const config = await loadLicenseConfig();
+  if (config?.temp_unlock_until && new Date(config.temp_unlock_until).getTime() > Date.now()) {
+    return cacheAndNotifyLicense({
+      ...config,
+      status: "active",
+      message: `Desbloqueio temporário ativo até ${new Date(config.temp_unlock_until).toLocaleString("pt-BR")}`,
+    });
+  }
+
+  if (!config?.id || !config.server_url || !config.license_key) {
+    return cacheAndNotifyLicense({ status: "inactive", message: "Licença não configurada. Cadastre a URL do servidor e a chave." });
+  }
+
+  let status: LicenseStatus = "unreachable";
+  let serverData: any = {};
+  let message = "";
+  try {
+    const ctrl = new AbortController();
+    const timeoutId = window.setTimeout(() => ctrl.abort(), 10000);
+    const resp = await fetch(normalizeLicenseServerUrl(config.server_url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ license_key: config.license_key, hostname: config.hardware_id || "axisdocs" }),
+      signal: ctrl.signal,
+    });
+    window.clearTimeout(timeoutId);
+    serverData = await resp.json().catch(() => ({}));
+    const apiStatus = String(serverData.status || "").toLowerCase();
+    if (serverData.ok === true || apiStatus === "active" || apiStatus === "ok") status = "active";
+    else if (serverData.blocked === true || apiStatus === "blocked" || apiStatus === "cancelled") status = "blocked";
+    else if (serverData.expired === true || apiStatus === "expired") status = "expired";
+    else if (apiStatus === "invalid" || resp.status === 404 || resp.status === 400) status = "invalid";
+    else if (apiStatus === "pending") status = "inactive";
+    else status = resp.ok ? "active" : "blocked";
+  } catch (e: any) {
+    message = `Servidor de licença inacessível: ${e?.message || e}`;
+    status = config.status === "active" ? "active" : "unreachable";
+  }
+
+  const storageLimitGb = parseStorageGb(serverData.storage_limit_gb) || parseStorageGb(serverData.storage_gb) || parseStorageGb(serverData.storage) || config.storage_limit_gb || 0;
+  const updates: Partial<LicenseInfo> = {
+    status,
+    last_check: new Date().toISOString(),
+    server_url: normalizeLicenseServerUrl(config.server_url),
+    message: serverData.reason || serverData.message || message || "",
+    customer_name: serverData.customer_name || serverData.customer || config.customer_name || "",
+    expires_at: serverData.expires_at || serverData.expiresAt || config.expires_at,
+    storage_limit_gb: storageLimitGb,
+    storage_used_bytes: await getStorageUsedBytes(),
+  };
+  const { data, error } = await (supabase as any).from("license_config").update(updates).eq("id", config.id).select().maybeSingle();
   if (error) throw error;
-  const info = (data || {}) as LicenseInfo;
-  localStorage.setItem(CACHE_KEY, JSON.stringify({ info, t: Date.now() }));
-  window.dispatchEvent(new CustomEvent("axis-license-updated", { detail: info }));
-  return info;
+  return cacheAndNotifyLicense((data || { ...config, ...updates }) as LicenseInfo);
+}
+
+async function unlockTemporaryDirect(): Promise<{ ok: boolean; valid_until?: string; message?: string; next_allowed_at?: string }> {
+  const config = await loadLicenseConfig();
+  if (!config?.id) return { ok: false, message: "Configuração de licença não encontrada." };
+  const last = config.last_temp_unlock_at ? new Date(config.last_temp_unlock_at).getTime() : 0;
+  const now = Date.now();
+  if (last && now - last < 30 * 24 * 60 * 60 * 1000) {
+    const next = new Date(last + 30 * 24 * 60 * 60 * 1000);
+    return { ok: false, message: `Desbloqueio temporário já utilizado este mês. Próximo disponível em ${next.toLocaleString("pt-BR")}.`, next_allowed_at: next.toISOString() };
+  }
+  const until = new Date(now + 24 * 60 * 60 * 1000).toISOString();
+  const { error } = await (supabase as any).from("license_config").update({
+    temp_unlock_until: until,
+    last_temp_unlock_at: new Date(now).toISOString(),
+    message: `Desbloqueio temporário ativo até ${new Date(until).toLocaleString("pt-BR")}`,
+    updated_at: new Date().toISOString(),
+  }).eq("id", config.id);
+  if (error) return { ok: false, message: error.message };
+  return { ok: true, valid_until: until };
+}
+
+export async function validateLicense(): Promise<LicenseInfo> {
+  try {
+    const { data, error } = await supabase.functions.invoke("validate-license");
+    if (!error) return cacheAndNotifyLicense((data || {}) as LicenseInfo);
+  } catch {
+    // Instalações locais antigas podem não ter este endpoint em /functions/v1.
+  }
+
+  return validateLicenseDirect();
 }
 
 export function getCachedLicense(): { info: LicenseInfo; t: number } | null {
