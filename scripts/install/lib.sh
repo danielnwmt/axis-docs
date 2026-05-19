@@ -364,6 +364,40 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 );
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
+-- Tabela de licença
+CREATE TABLE IF NOT EXISTS public.license_config (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  server_url text NOT NULL DEFAULT '',
+  license_key text NOT NULL DEFAULT '',
+  hardware_id text NOT NULL DEFAULT '',
+  status text NOT NULL DEFAULT 'inactive',
+  customer_name text DEFAULT '',
+  expires_at timestamptz,
+  message text DEFAULT '',
+  last_check timestamptz,
+  temp_unlock_until timestamptz,
+  last_temp_unlock_at timestamptz,
+  storage_limit_gb numeric NOT NULL DEFAULT 0,
+  storage_used_bytes bigint NOT NULL DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid
+);
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS server_url text NOT NULL DEFAULT '';
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS license_key text NOT NULL DEFAULT '';
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS hardware_id text NOT NULL DEFAULT '';
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'inactive';
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS customer_name text DEFAULT '';
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS expires_at timestamptz;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS message text DEFAULT '';
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS last_check timestamptz;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS temp_unlock_until timestamptz;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS last_temp_unlock_at timestamptz;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS storage_limit_gb numeric NOT NULL DEFAULT 0;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS storage_used_bytes bigint NOT NULL DEFAULT 0;
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS updated_by uuid;
+ALTER TABLE public.license_config ENABLE ROW LEVEL SECURITY;
+
 -- Funções
 CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role text)
 RETURNS boolean
@@ -490,6 +524,20 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users read own or admin reads all audit logs' AND tablename = 'audit_logs') THEN
     CREATE POLICY "Users read own or admin reads all audit logs" ON public.audit_logs
       FOR SELECT TO authenticated USING (auth.uid() = user_id OR has_role(auth.uid(), 'Administrador'));
+  END IF;
+
+  -- License Config
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins read license config' AND tablename = 'license_config') THEN
+    CREATE POLICY "Admins read license config" ON public.license_config
+      FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Administrador'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins insert license config' AND tablename = 'license_config') THEN
+    CREATE POLICY "Admins insert license config" ON public.license_config
+      FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'Administrador'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins update license config' AND tablename = 'license_config') THEN
+    CREATE POLICY "Admins update license config" ON public.license_config
+      FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'Administrador'));
   END IF;
 END $$;
 
