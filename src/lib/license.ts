@@ -15,8 +15,8 @@ export interface LicenseInfo {
   temp_unlock_until?: string | null;
 }
 
-export async function unlockTemporary(unlock_code: string): Promise<{ ok: boolean; valid_until?: string; message?: string }> {
-  const { data, error } = await supabase.functions.invoke("license-temp-unlock", { body: { unlock_code } });
+export async function unlockTemporary(): Promise<{ ok: boolean; valid_until?: string; message?: string; next_allowed_at?: string }> {
+  const { data, error } = await supabase.functions.invoke("license-temp-unlock", { body: {} });
   if (error) {
     const msg = (error as any)?.message || "Falha no desbloqueio";
     return { ok: false, message: msg };
