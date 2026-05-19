@@ -1073,7 +1073,7 @@ function LicencaSection() {
         <div>
           <h3 className="text-base font-semibold text-foreground">Desbloqueio temporário (24h)</h3>
           <p className="text-xs text-muted-foreground">
-            Insira o código fornecido pelo suporte para liberar o sistema por 24 horas, mesmo que a licença esteja bloqueada ou o servidor inacessível.
+            Libere o sistema por 24 horas mesmo que a licença esteja bloqueada ou o servidor inacessível. Disponível apenas uma vez a cada 30 dias.
           </p>
           {config?.temp_unlock_until && new Date(config.temp_unlock_until).getTime() > Date.now() && (
             <p className="mt-2 text-xs text-success font-medium">
@@ -1081,18 +1081,10 @@ function LicencaSection() {
             </p>
           )}
         </div>
-        <div className="flex gap-2">
-          <Input
-            value={unlockCode}
-            onChange={(e) => setUnlockCode(e.target.value)}
-            placeholder="Cole aqui o código de desbloqueio"
-            className="font-mono"
-          />
-          <Button onClick={handleUnlock} disabled={unlocking || !unlockCode.trim()}>
-            <KeyRound className="w-4 h-4 mr-2" />
-            {unlocking ? "Liberando..." : "Desbloquear 24h"}
-          </Button>
-        </div>
+        <Button onClick={handleUnlock} disabled={unlocking} className="w-full sm:w-auto">
+          <KeyRound className="w-4 h-4 mr-2" />
+          {unlocking ? "Liberando..." : "Desbloquear por 24 horas"}
+        </Button>
       </div>
 
       <div className="space-y-3">
