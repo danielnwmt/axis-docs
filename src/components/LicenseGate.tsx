@@ -109,11 +109,7 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
             </p>
           </div>
 
-          {showActivationForm ? (
-            <AdminLicenseForm onChanged={refresh} />
-          ) : (
-            <BlockedLicenseInfo info={info} onChanged={refresh} />
-          )}
+          {isBlocked && <BlockedLicenseInfo info={info} onChanged={refresh} />}
 
           <div className="flex flex-col sm:flex-row gap-2 mt-6">
             <Button variant="outline" className="flex-1" onClick={() => navigate("/settings")}>
