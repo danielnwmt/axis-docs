@@ -336,6 +336,7 @@ export type Database = {
           hardware_id: string
           id: string
           last_check: string | null
+          last_temp_unlock_at: string | null
           license_key: string
           message: string | null
           server_url: string
@@ -352,6 +353,7 @@ export type Database = {
           hardware_id?: string
           id?: string
           last_check?: string | null
+          last_temp_unlock_at?: string | null
           license_key?: string
           message?: string | null
           server_url?: string
@@ -368,6 +370,7 @@ export type Database = {
           hardware_id?: string
           id?: string
           last_check?: string | null
+          last_temp_unlock_at?: string | null
           license_key?: string
           message?: string | null
           server_url?: string
