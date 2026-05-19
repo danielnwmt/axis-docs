@@ -223,3 +223,37 @@ FROM (VALUES
   ('Licitações'), ('Controle Interno'), ('Tributos'), ('Agricultura')
 ) AS v(name)
 WHERE NOT EXISTS (SELECT 1 FROM public.units u WHERE lower(u.name) = lower(v.name));
+
+-- ============================================
+-- LICENÇA (license_config)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS public.license_config (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  server_url text NOT NULL DEFAULT '',
+  license_key text NOT NULL DEFAULT '',
+  hardware_id text NOT NULL DEFAULT '',
+  status text NOT NULL DEFAULT 'inactive',
+  customer_name text DEFAULT '',
+  expires_at timestamptz,
+  message text DEFAULT '',
+  last_check timestamptz,
+  temp_unlock_until timestamptz,
+  storage_limit_gb numeric NOT NULL DEFAULT 0,
+  storage_used_bytes bigint NOT NULL DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid
+);
+
+ALTER TABLE public.license_config ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Admins read license config" ON public.license_config;
+DROP POLICY IF EXISTS "Admins insert license config" ON public.license_config;
+DROP POLICY IF EXISTS "Admins update license config" ON public.license_config;
+
+CREATE POLICY "Admins read license config" ON public.license_config
+  FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Administrador'));
+CREATE POLICY "Admins insert license config" ON public.license_config
+  FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'Administrador'));
+CREATE POLICY "Admins update license config" ON public.license_config
+  FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'Administrador'));
