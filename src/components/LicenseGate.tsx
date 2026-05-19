@@ -286,20 +286,14 @@ function AdminLicenseForm({ onChanged }: { onChanged: () => Promise<void> | void
 }
 
 function BlockedLicenseInfo({ info, onChanged }: { info: LicenseInfo | null; onChanged: () => Promise<void> | void }) {
-  const [unlockCode, setUnlockCode] = useState("");
   const [unlocking, setUnlocking] = useState(false);
 
   const handleUnlock = async () => {
-    if (!unlockCode.trim()) {
-      toast({ title: "Informe o código de desbloqueio", variant: "destructive" });
-      return;
-    }
     setUnlocking(true);
     try {
-      const res = await unlockTemporary(unlockCode.trim());
+      const res = await unlockTemporary();
       if (res.ok) {
         clearLicenseCache();
-        setUnlockCode("");
         toast({
           title: "Sistema desbloqueado",
           description: res.valid_until
@@ -308,7 +302,7 @@ function BlockedLicenseInfo({ info, onChanged }: { info: LicenseInfo | null; onC
         });
         await onChanged();
       } else {
-        toast({ title: "Código inválido", description: res.message || "Verifique e tente novamente.", variant: "destructive" });
+        toast({ title: "Não foi possível desbloquear", description: res.message || "Tente novamente mais tarde.", variant: "destructive" });
       }
     } catch (e: any) {
       toast({ title: "Falha no desbloqueio", description: e.message, variant: "destructive" });
@@ -339,25 +333,19 @@ function BlockedLicenseInfo({ info, onChanged }: { info: LicenseInfo | null; onC
         </div>
       </div>
 
-      <div className="space-y-2 rounded-lg bg-muted/30 border border-border p-3">
+      <div className="space-y-3 rounded-lg bg-muted/30 border border-border p-4">
         <div>
           <h3 className="text-sm font-semibold text-foreground">Desbloqueio temporário (24h)</h3>
           <p className="text-xs text-muted-foreground">
-            Use o código fornecido pelo suporte para liberar o sistema por 24 horas enquanto regulariza.
+            Libere o sistema por 24 horas enquanto regulariza. Disponível apenas uma vez a cada 30 dias.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Input
-            value={unlockCode}
-            onChange={(e) => setUnlockCode(e.target.value)}
-            placeholder="Código de desbloqueio"
-            className="font-mono"
-          />
-          <Button onClick={handleUnlock} disabled={unlocking || !unlockCode.trim()} variant="secondary">
-            <KeyRound className="w-4 h-4 mr-2" />
-            {unlocking ? "..." : "Desbloquear"}
-          </Button>
-        </div>
+        <Button onClick={handleUnlock} disabled={unlocking} variant="secondary" className="w-full">
+          <KeyRound className="w-4 h-4 mr-2" />
+          {unlocking ? "Desbloqueando..." : "Desbloquear por 24 horas"}
+        </Button>
+      </div>
+
       </div>
     </div>
   );
