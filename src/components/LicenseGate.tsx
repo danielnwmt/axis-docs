@@ -201,7 +201,7 @@ function AdminLicenseForm({ onChanged }: { onChanged: () => Promise<void> | void
     }
     setUnlocking(true);
     try {
-      const res = await unlockTemporary(unlockCode.trim());
+      const res = await unlockTemporary();
       if (res.ok) {
         clearLicenseCache();
         setUnlockCode("");
