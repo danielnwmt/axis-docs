@@ -99,6 +99,15 @@ Deno.serve(async (req) => {
     const { data: config, error } = await query;
     if (error) throw error;
 
+    await admin.from("audit_logs").insert({
+      user_id: userData.user.id,
+      user_email: userData.user.email || "",
+      action: "Configuração de licença atualizada",
+      action_type: "edit",
+      target: "license_config",
+      details: `Servidor: ${serverUrl}`,
+    });
+
     return new Response(JSON.stringify({ ok: true, config }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
