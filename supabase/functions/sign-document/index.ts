@@ -145,6 +145,7 @@ Deno.serve(async (req) => {
     const zapBody: Record<string, unknown> = {
       name: fileName,
       lang: "pt-br",
+      sandbox: true,
       signers: [{
         name: user.email || "Assinante",
         email: user.email,
