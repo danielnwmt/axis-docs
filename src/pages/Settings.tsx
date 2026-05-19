@@ -885,18 +885,13 @@ function LicencaSection() {
   };
 
   const handleUnlock = async () => {
-    if (!unlockCode.trim()) {
-      toast({ title: "Informe o código de desbloqueio", variant: "destructive" });
-      return;
-    }
     setUnlocking(true);
     try {
-      const res = await unlockTemporary(unlockCode.trim());
+      const res = await unlockTemporary();
       if (res.ok) {
         clearLicenseCache();
         const c = await loadLicenseConfig();
         setConfig(c);
-        setUnlockCode("");
         toast({
           title: "Sistema desbloqueado",
           description: res.valid_until
@@ -905,7 +900,7 @@ function LicencaSection() {
         });
         await validateLicense();
       } else {
-        toast({ title: "Código inválido", description: res.message || "Verifique e tente novamente.", variant: "destructive" });
+        toast({ title: "Não foi possível desbloquear", description: res.message || "Tente novamente mais tarde.", variant: "destructive" });
       }
     } catch (e: any) {
       toast({ title: "Falha no desbloqueio", description: e.message, variant: "destructive" });
