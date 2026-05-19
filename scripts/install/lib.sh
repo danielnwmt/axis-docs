@@ -1299,6 +1299,42 @@ function getAuth(req) {
   return verifyJwt(token);
 }
 
+async function withDb(fn) {
+  const client = new Client({ connectionString: DATABASE_URL });
+  await client.connect();
+  try { return await fn(client); }
+  finally { await client.end(); }
+}
+
+async function requireAdmin(claims) {
+  return withDb(async (db) => {
+    const r = await db.query("SELECT role, active FROM public.profiles WHERE id = $1", [claims.sub]);
+    return r.rows[0]?.role === "Administrador" && r.rows[0]?.active === true;
+  });
+}
+
+function normalizeLicenseServerUrl(serverUrl) {
+  const trimmed = String(serverUrl || "").trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  try {
+    const u = new URL(trimmed);
+    if (!u.pathname || u.pathname === "/" || u.pathname === "/admin") return `${u.origin}/api/public/license/check`;
+  } catch {}
+  return trimmed;
+}
+
+function parseStorageGb(input) {
+  if (input == null) return 0;
+  if (typeof input === "number") return input;
+  if (typeof input === "string") return Number(input) || 0;
+  const unit = String(input.unit ?? input.units ?? "GB").toUpperCase();
+  const amount = Number(input.total ?? input.total_amount ?? input.total_gb ?? input.amount ?? input.value ?? input.size ?? 0) || 0;
+  if (unit === "TB") return amount * 1024;
+  if (unit === "MB") return amount / 1024;
+  if (unit === "KB") return amount / (1024 * 1024);
+  return amount;
+}
+
 function readBuffer(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -1531,6 +1567,104 @@ async function deleteFromDrive(req, res, claims) {
   return json(res, 200, { success: true });
 }
 
+async function validateLicense(req, res, claims) {
+  const isAdmin = await requireAdmin(claims);
+  if (!isAdmin) return json(res, 403, { error: "Permissão negada" });
+
+  const config = await withDb(async (db) => {
+    const r = await db.query("SELECT * FROM public.license_config ORDER BY updated_at DESC LIMIT 1");
+    return r.rows[0] || null;
+  });
+
+  if (config?.temp_unlock_until && new Date(config.temp_unlock_until).getTime() > Date.now()) {
+    return json(res, 200, {
+      status: "active",
+      customer_name: config.customer_name || "",
+      expires_at: config.expires_at,
+      message: `Desbloqueio temporário ativo até ${new Date(config.temp_unlock_until).toLocaleString("pt-BR")}`,
+      last_check: config.last_check,
+      temp_unlock_until: config.temp_unlock_until,
+      storage_limit_gb: Number(config.storage_limit_gb || 0),
+      storage_used_bytes: Number(config.storage_used_bytes || 0),
+    });
+  }
+
+  if (!config?.server_url || !config?.license_key) {
+    return json(res, 200, { status: "inactive", message: "Licença não configurada. Cadastre a URL do servidor e a chave." });
+  }
+
+  let serverStatus = "unreachable";
+  let serverData = {};
+  let errorMessage = "";
+  try {
+    const r = await httpRequest(normalizeLicenseServerUrl(config.server_url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ license_key: config.license_key, hostname: config.hardware_id || "axisdocs" }),
+    });
+    try { serverData = JSON.parse(r.body.toString() || "{}"); } catch { serverData = {}; }
+    const apiStatus = String(serverData.status || "").toLowerCase();
+    if (serverData.ok === true || apiStatus === "active" || apiStatus === "ok") serverStatus = "active";
+    else if (serverData.blocked === true || apiStatus === "blocked" || apiStatus === "cancelled") serverStatus = "blocked";
+    else if (serverData.expired === true || apiStatus === "expired") serverStatus = "expired";
+    else if (apiStatus === "invalid" || r.status === 404 || r.status === 400) serverStatus = "invalid";
+    else if (apiStatus === "pending") serverStatus = "inactive";
+    else serverStatus = r.status < 300 ? "active" : "blocked";
+  } catch (e) {
+    errorMessage = `Servidor de licença inacessível: ${e?.message || e}`;
+    serverStatus = config.status === "active" ? "active" : "unreachable";
+  }
+
+  const storageLimitGb = parseStorageGb(serverData.storage_limit_gb) || parseStorageGb(serverData.storage_gb) || parseStorageGb(serverData.storage) || Number(config.storage_limit_gb || 0);
+  const updated = await withDb(async (db) => {
+    const docs = await db.query("SELECT COALESCE(SUM(file_size),0)::bigint AS used FROM public.documents");
+    const storageUsedBytes = Number(docs.rows[0]?.used || 0);
+    const r = await db.query(`
+      UPDATE public.license_config
+      SET status=$1, last_check=now(), server_url=$2, message=$3, customer_name=$4, expires_at=COALESCE($5::timestamptz, expires_at),
+          storage_limit_gb=$6, storage_used_bytes=$7, updated_at=now(), updated_by=$8
+      WHERE id=$9 RETURNING *
+    `, [
+      serverStatus,
+      normalizeLicenseServerUrl(config.server_url),
+      serverData.reason || serverData.message || errorMessage || "",
+      serverData.customer_name || serverData.customer || config.customer_name || "",
+      serverData.expires_at || serverData.expiresAt || null,
+      storageLimitGb,
+      storageUsedBytes,
+      claims.sub,
+      config.id,
+    ]);
+    return r.rows[0];
+  });
+
+  return json(res, 200, updated);
+}
+
+async function licenseTempUnlock(req, res, claims) {
+  const isAdmin = await requireAdmin(claims);
+  if (!isAdmin) return json(res, 403, { ok: false, message: "Permissão negada" });
+
+  const result = await withDb(async (db) => {
+    const r = await db.query("SELECT * FROM public.license_config ORDER BY updated_at DESC LIMIT 1");
+    const config = r.rows[0];
+    if (!config) return { ok: false, message: "Configuração de licença não encontrada." };
+    const last = config.last_temp_unlock_at ? new Date(config.last_temp_unlock_at).getTime() : 0;
+    const now = Date.now();
+    if (last && now - last < 30 * 24 * 60 * 60 * 1000) {
+      const next = new Date(last + 30 * 24 * 60 * 60 * 1000);
+      return { ok: false, message: `Desbloqueio temporário já utilizado este mês. Próximo disponível em ${next.toLocaleString("pt-BR")}.`, next_allowed_at: next.toISOString() };
+    }
+    const until = new Date(now + 24 * 60 * 60 * 1000).toISOString();
+    await db.query(
+      "UPDATE public.license_config SET temp_unlock_until=$1, last_temp_unlock_at=now(), message=$2, updated_at=now(), updated_by=$3 WHERE id=$4",
+      [until, `Desbloqueio temporário ativo até ${new Date(until).toLocaleString("pt-BR")}`, claims.sub, config.id]
+    );
+    return { ok: true, valid_until: until };
+  });
+  return json(res, result.ok ? 200 : 400, result);
+}
+
 async function handle(req, res) {
   if (req.method === "OPTIONS") { res.writeHead(204, CORS); return res.end(); }
   const url = new URL(req.url, "http://localhost");
@@ -1544,6 +1678,8 @@ async function handle(req, res) {
     if (fnPath === "upload-to-drive" && req.method === "POST") return await uploadToDrive(req, res, claims);
     if (fnPath === "serve-drive-file" && req.method === "POST") return await serveDriveFile(req, res, claims);
     if (fnPath === "delete-from-drive" && req.method === "POST") return await deleteFromDrive(req, res, claims);
+    if (fnPath === "validate-license" && req.method === "POST") return await validateLicense(req, res, claims);
+    if (fnPath === "license-temp-unlock" && req.method === "POST") return await licenseTempUnlock(req, res, claims);
     return json(res, 404, { error: `Função '${fnPath}' não disponível na instalação local` });
   } catch (e) {
     console.error("[FUNCTION ERROR]", fnPath, e);
