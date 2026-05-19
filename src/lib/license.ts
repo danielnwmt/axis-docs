@@ -64,23 +64,13 @@ export async function loadLicenseConfig(): Promise<LicenseInfo | null> {
 }
 
 export async function saveLicenseConfig(server_url: string, license_key: string): Promise<LicenseInfo> {
-  const existing = await loadLicenseConfig();
   const hardware_id = getHardwareId();
-  const payload = { server_url: normalizeLicenseServerUrl(server_url), license_key, hardware_id, status: "inactive", updated_at: new Date().toISOString() };
-
-  if (existing?.id) {
-    const { data, error } = await (supabase as any)
-      .from("license_config")
-      .update(payload)
-      .eq("id", existing.id)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
-  }
-  const { data, error } = await (supabase as any).from("license_config").insert(payload).select().single();
+  const { data, error } = await supabase.functions.invoke("save-license-config", {
+    body: { server_url: normalizeLicenseServerUrl(server_url), license_key, hardware_id },
+  });
   if (error) throw error;
-  return data;
+  if (!data?.ok) throw new Error(data?.message || "Erro ao salvar licença");
+  return data.config as LicenseInfo;
 }
 
 export async function validateLicense(): Promise<LicenseInfo> {
