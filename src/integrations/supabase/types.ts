@@ -512,6 +512,54 @@ export type Database = {
         }
         Relationships: []
       }
+      user_certificates: {
+        Row: {
+          cpf: string
+          fingerprint_sha256: string
+          id: string
+          issuer: string
+          pfx_auth_tag: string
+          pfx_encrypted: string
+          pfx_iv: string
+          subject_cn: string
+          updated_at: string
+          uploaded_at: string
+          user_id: string
+          valid_from: string | null
+          valid_to: string | null
+        }
+        Insert: {
+          cpf?: string
+          fingerprint_sha256?: string
+          id?: string
+          issuer?: string
+          pfx_auth_tag: string
+          pfx_encrypted: string
+          pfx_iv: string
+          subject_cn?: string
+          updated_at?: string
+          uploaded_at?: string
+          user_id: string
+          valid_from?: string | null
+          valid_to?: string | null
+        }
+        Update: {
+          cpf?: string
+          fingerprint_sha256?: string
+          id?: string
+          issuer?: string
+          pfx_auth_tag?: string
+          pfx_encrypted?: string
+          pfx_iv?: string
+          subject_cn?: string
+          updated_at?: string
+          uploaded_at?: string
+          user_id?: string
+          valid_from?: string | null
+          valid_to?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
