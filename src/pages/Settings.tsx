@@ -10,8 +10,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchManagedList } from "@/lib/adminLookups";
 import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, unlockTemporary, normalizeLicenseServerUrl, type LicenseInfo } from "@/lib/license";
 import { getStorageQuota, formatBytes, type StorageQuota } from "@/lib/storageQuota";
+import { MyCertificateSection } from "@/components/settings/MyCertificateSection";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "backup" | "licenca" | "mobile" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "meucertificado" | "backup" | "licenca" | "mobile" | null;
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
@@ -20,6 +21,7 @@ const sectionCards = [
   { id: "parametros" as Section, icon: Sliders, title: "Parâmetros do Sistema", description: "Configurações gerais da plataforma" },
   { id: "googledrive" as Section, icon: HardDrive, title: "Google Drive", description: "Configurar integração com Google Drive via API" },
   { id: "assinatura" as Section, icon: FileSignature, title: "Assinatura Digital", description: "Configurar API ZapSign (ICP-Brasil A1/A3)" },
+  { id: "meucertificado" as Section, icon: ShieldCheck, title: "Meu Certificado", description: "Cadastre seu certificado A1 (.pfx) ICP-Brasil para assinar documentos" },
   { id: "backup" as Section, icon: DatabaseBackup, title: "Backup & Restauração", description: "Exportar e importar usuários, auditoria e referências de documentos" },
   { id: "licenca" as Section, icon: KeyRound, title: "Licença", description: "Ativar e consultar o status da licença do AxisDocs" },
   { id: "mobile" as Section, icon: Smartphone, title: "Acesso Mobile", description: "QR Code para abrir o sistema no aplicativo" },
@@ -1145,6 +1147,7 @@ export default function Settings() {
       case "parametros": return <ParametrosSection />;
       case "googledrive": return <GoogleDriveSection />;
       case "assinatura": return <AssinaturaSection />;
+      case "meucertificado": return <MyCertificateSection />;
       case "backup": return <BackupSection />;
       case "licenca": return <LicencaSection />;
       case "mobile": return <MobileAccessSection />;

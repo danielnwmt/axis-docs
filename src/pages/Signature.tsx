@@ -17,6 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type SignatureStep = "upload" | "preview" | "signing" | "done";
 
@@ -25,6 +27,7 @@ export default function Signature() {
   const [file, setFile] = useState<File | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [certType, setCertType] = useState<string>("A1");
+  const [pfxPassword, setPfxPassword] = useState<string>("");
   const [signing, setSigning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [signedDocId, setSignedDocId] = useState<string | null>(null);
@@ -95,6 +98,10 @@ export default function Signature() {
 
   const handleSign = async () => {
     if (!file || !user) return;
+    if (!pfxPassword) {
+      toast({ title: "Senha obrigatória", description: "Digite a senha do seu certificado .pfx", variant: "destructive" });
+      return;
+    }
     setSigning(true);
     setStep("signing");
     setProgress(10);
@@ -104,33 +111,23 @@ export default function Signature() {
       let filePath: string;
 
       if (existingDocId && existingFilePath) {
-        // Document already exists — use existing record
         docId = existingDocId;
         filePath = existingFilePath;
-        setProgress(50);
+        setProgress(40);
       } else {
-        // New document — upload to Google Drive and create record
         setProgress(20);
-
         const formData = new FormData();
         formData.append("file", file);
         formData.append("fileName", file.name);
         formData.append("unitName", "ICP-Brasil");
-
-        const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", {
-          body: formData,
-        });
-
+        const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", { body: formData });
         if (driveError || !driveResult?.success || !driveResult?.driveFileId) {
           throw new Error(driveError?.message || driveResult?.error || "Falha ao enviar para o Google Drive.");
         }
-
         filePath = `drive://${driveResult.driveFileId}`;
-        setProgress(50);
-
+        setProgress(40);
         const { data: docData, error: insertError } = await supabase
-          .from("documents")
-          .insert({
+          .from("documents").insert({
             user_id: user.id,
             title: file.name.replace(".pdf", ""),
             category: "Assinatura Digital",
@@ -143,52 +140,31 @@ export default function Signature() {
             drive_link: driveResult.driveLink || null,
             ocr_status: "pendente",
             sign_status: "pendente",
-            notes: `Certificado: ${certType}`,
-          } as any)
-          .select()
-          .single();
-
+          } as any).select().single();
         if (insertError) throw insertError;
         docId = docData.id;
       }
 
-      setProgress(70);
+      setProgress(60);
 
-      // 3. Chamar edge function de assinatura (ZapSign)
-      const { data: signResult, error: signError } = await supabase.functions.invoke("sign-document", {
-        body: {
-          documentId: docId,
-          filePath,
-          fileName: file.name,
-          certType,
-        },
+      const { data: signResult, error: signError } = await supabase.functions.invoke("sign-pdf-a1", {
+        body: { documentId: docId, filePath, fileName: file.name, password: pfxPassword },
       });
 
       setProgress(90);
-
-      if (signError) {
-        // Se a API ainda não está configurada, marcar como pendente
-        console.warn("Edge function não disponível, marcando como pendente:", signError);
-        toast({
-          title: "Assinatura enviada",
-          description: "O documento foi enviado para assinatura. A integração com ZapSign será ativada quando a API key for configurada.",
-        });
-      } else if (signResult?.signed) {
-        // Atualizar status para assinado
-        await supabase
-          .from("documents")
-          .update({ sign_status: "assinado" })
-          .eq("id", docId);
-
-        toast({
-          title: "Documento assinado!",
-          description: "A assinatura digital ICP-Brasil foi aplicada com sucesso.",
-        });
+      if (signError || (signResult as any)?.error) {
+        throw new Error((signResult as any)?.error || signError?.message || "Falha na assinatura");
       }
+
+      toast({
+        title: "Documento assinado!",
+        description: "Assinatura PAdES ICP-Brasil A1 aplicada com sucesso.",
+      });
 
       setProgress(100);
       setSignedDocId(docId);
       setStep("done");
+      setPfxPassword("");
       queryClient.invalidateQueries({ queryKey: ["documents"] });
     } catch (error: any) {
       console.error("Erro na assinatura:", error);
@@ -318,22 +294,21 @@ export default function Signature() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-foreground mb-2">Tipo de Certificado</p>
-                  <Select value={certType} onValueChange={setCertType}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="A1">Certificado A1 (arquivo digital)</SelectItem>
-                      <SelectItem value="A3">Certificado A3 (token/cartão)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-sm font-medium">Senha do seu certificado (.pfx)</Label>
+                  <Input
+                    type="password"
+                    value={pfxPassword}
+                    onChange={(e) => setPfxPassword(e.target.value)}
+                    placeholder="Senha do certificado A1"
+                    autoComplete="off"
+                    className="mt-2"
+                  />
                 </div>
 
                 <div className="bg-info/10 rounded-lg p-3 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-info mt-0.5 shrink-0" />
                   <p className="text-xs text-info">
-                    A assinatura será realizada via ZapSign com certificado ICP-Brasil {certType}.
+                    Assinatura PAdES local com seu certificado A1 ICP-Brasil. A senha é usada apenas para esta assinatura e não fica armazenada.
                   </p>
                 </div>
               </CardContent>
