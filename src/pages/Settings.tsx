@@ -1147,6 +1147,7 @@ export default function Settings() {
       case "parametros": return <ParametrosSection />;
       case "googledrive": return <GoogleDriveSection />;
       case "assinatura": return <AssinaturaSection />;
+      case "meucertificado": return <MyCertificateSection />;
       case "backup": return <BackupSection />;
       case "licenca": return <LicencaSection />;
       case "mobile": return <MobileAccessSection />;
