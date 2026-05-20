@@ -12,7 +12,7 @@ import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCach
 import { getStorageQuota, formatBytes, type StorageQuota } from "@/lib/storageQuota";
 import { MyCertificateSection } from "@/components/settings/MyCertificateSection";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "assinatura" | "meucertificado" | "backup" | "licenca" | "mobile" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | null;
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
