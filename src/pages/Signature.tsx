@@ -294,22 +294,21 @@ export default function Signature() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-foreground mb-2">Tipo de Certificado</p>
-                  <Select value={certType} onValueChange={setCertType}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="A1">Certificado A1 (arquivo digital)</SelectItem>
-                      <SelectItem value="A3">Certificado A3 (token/cartão)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-sm font-medium">Senha do seu certificado (.pfx)</Label>
+                  <Input
+                    type="password"
+                    value={pfxPassword}
+                    onChange={(e) => setPfxPassword(e.target.value)}
+                    placeholder="Senha do certificado A1"
+                    autoComplete="off"
+                    className="mt-2"
+                  />
                 </div>
 
                 <div className="bg-info/10 rounded-lg p-3 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-info mt-0.5 shrink-0" />
                   <p className="text-xs text-info">
-                    A assinatura será realizada via ZapSign com certificado ICP-Brasil {certType}.
+                    Assinatura PAdES local com seu certificado A1 ICP-Brasil. A senha é usada apenas para esta assinatura e não fica armazenada.
                   </p>
                 </div>
               </CardContent>
