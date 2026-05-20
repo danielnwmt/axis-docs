@@ -27,6 +27,7 @@ export default function Signature() {
   const [file, setFile] = useState<File | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [certType, setCertType] = useState<string>("A1");
+  const [pfxPassword, setPfxPassword] = useState<string>("");
   const [signing, setSigning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [signedDocId, setSignedDocId] = useState<string | null>(null);
