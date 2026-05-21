@@ -75,6 +75,16 @@ export default function Users() {
   const [resetLoading, setResetLoading] = useState(false);
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
+  const [currentRole, setCurrentRole] = useState<string | null>(null);
+  const [roleLoaded, setRoleLoaded] = useState(false);
+
+  const isAdmin = currentRole === "Administrador";
+  const isOperator = currentRole === "Operador";
+  const canCreate = isAdmin || isOperator;
+  const canManageRow = isAdmin;
+  const allowedRoles = isAdmin
+    ? ["Administrador", "Operador", "Usuário"]
+    : ["Operador", "Usuário"];
 
   const fetchUsers = async () => {
     const { data, error } = await supabase.from("profiles" as any).select("*").order("created_at", { ascending: true });
@@ -93,9 +103,20 @@ export default function Users() {
   };
 
   useEffect(() => {
+    if (!currentUser?.id) return;
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", currentUser.id)
+        .maybeSingle();
+      setCurrentRole((data as any)?.role ?? null);
+      setRoleLoaded(true);
+    })();
     fetchUsers();
     fetchUnits();
-  }, []);
+  }, [currentUser?.id]);
+
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
