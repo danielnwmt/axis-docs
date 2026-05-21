@@ -202,7 +202,7 @@ install_postgresql() {
     success "PostgreSQL já instalado"
   else
     log "Instalando PostgreSQL"
-    apt-get install -y -qq postgresql postgresql-contrib
+    apt_install postgresql postgresql-contrib
     success "PostgreSQL instalado"
   fi
 
