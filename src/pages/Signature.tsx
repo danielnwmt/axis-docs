@@ -253,7 +253,7 @@ export default function Signature() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <ShieldCheck className="w-5 h-5 text-primary" />
-                Certificado ICP-Brasil A1
+                Certificado Digital
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
