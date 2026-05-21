@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authErr } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authErr || !user) return new Response(JSON.stringify({ error: "Token inválido" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { documentId, filePath, fileName, password, reason } = await req.json();
+    const { documentId, filePath, fileName, password, reason, position } = await req.json();
     if (!documentId || !filePath || !fileName || !password) {
       return new Response(JSON.stringify({ error: "Dados incompletos (informe senha do certificado)" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
