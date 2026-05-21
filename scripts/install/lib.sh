@@ -132,14 +132,49 @@ ADMINSQL
   success "Administrador criado: $ADMIN_EMAIL"
 }
 
+wait_apt_lock() {
+  local waited=0
+  local max_wait=600
+  while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
+     || fuser /var/lib/dpkg/lock >/dev/null 2>&1 \
+     || fuser /var/lib/apt/lists/lock >/dev/null 2>&1 \
+     || pgrep -x unattended-upgr >/dev/null 2>&1 \
+     || pgrep -x apt >/dev/null 2>&1 \
+     || pgrep -x apt-get >/dev/null 2>&1; do
+    if [ "$waited" -ge "$max_wait" ]; then
+      echo "⚠ Tempo esgotado aguardando o apt. Parando unattended-upgrades para prosseguir."
+      systemctl stop unattended-upgrades >/dev/null 2>&1 || true
+      systemctl stop apt-daily.service apt-daily-upgrade.service >/dev/null 2>&1 || true
+      sleep 2
+      break
+    fi
+    if [ "$waited" -eq 0 ]; then
+      echo "⏳ Aguardando outro processo apt/dpkg liberar o lock (unattended-upgrades)..."
+    fi
+    sleep 5
+    waited=$((waited + 5))
+  done
+}
+
+apt_install() {
+  wait_apt_lock
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" "$@"
+}
+
+apt_update() {
+  wait_apt_lock
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq
+}
+
 install_base_packages() {
   log "Atualizando pacotes do sistema"
-  apt-get update -qq
-  apt-get install -y -qq ca-certificates curl gnupg nginx jq openssl
+  apt_update
+  apt_install ca-certificates curl gnupg nginx jq openssl psmisc
   systemctl enable nginx >/dev/null 2>&1 || true
   systemctl start nginx
   success "Dependências base instaladas"
 }
+
 
 install_nodejs() {
   local current_major="0"
@@ -157,8 +192,8 @@ install_nodejs() {
   mkdir -p /etc/apt/keyrings
   curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
   echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
-  apt-get update -qq
-  apt-get install -y -qq nodejs
+  apt_update
+  apt_install nodejs
   success "Node.js $(node -v) instalado"
 }
 
@@ -167,7 +202,7 @@ install_postgresql() {
     success "PostgreSQL já instalado"
   else
     log "Instalando PostgreSQL"
-    apt-get install -y -qq postgresql postgresql-contrib
+    apt_install postgresql postgresql-contrib
     success "PostgreSQL instalado"
   fi
 
@@ -1723,7 +1758,7 @@ install_ssl_packages() {
   fi
 
   log "Instalando pacotes de SSL"
-  apt-get install -y -qq certbot python3-certbot-nginx
+  apt_install certbot python3-certbot-nginx
   success "Pacotes de SSL instalados"
 }
 
