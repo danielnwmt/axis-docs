@@ -296,6 +296,12 @@ export default function Upload() {
     e.preventDefault();
     if (!user || (!editId && files.length === 0)) return;
 
+    if (!editId && hasCert === false) {
+      toast({ title: "Certificado obrigatório", description: "Cadastre um certificado digital antes de enviar documentos.", variant: "destructive" });
+      return;
+    }
+
+
     if (!editId && signDocument && hasPdf) {
       if (!pfxPassword) {
         toast({ title: "Senha obrigatória", description: "Digite a senha do seu certificado .pfx para assinar.", variant: "destructive" });
