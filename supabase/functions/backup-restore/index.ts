@@ -394,18 +394,20 @@ async function performDriveBackup(admin: any, settings: any, createdBy: string) 
   }
   const backup = await buildBackupJson(admin);
   const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-  const fileName = `axisdocs-backup-${ts}.json`;
-  const jsonStr = JSON.stringify(backup, null, 2);
-  const driveFile = await uploadJsonToDrive(token, backupsFolderId, fileName, jsonStr);
+  const fileName = `axisdocs-backup-${ts}.enc.json`;
+  const plain = JSON.stringify(backup);
+  const { envelope, sha256 } = await encryptBackup(plain);
+  const driveFile = await uploadJsonToDrive(token, backupsFolderId, fileName, envelope);
   const expiresAt = new Date(Date.now() + retentionDays * 24 * 60 * 60 * 1000).toISOString();
   const { data: row } = await admin.from("backup_files").insert({
     drive_file_id: driveFile.id,
     drive_link: driveFile.webViewLink,
     file_name: driveFile.name,
-    file_size: Number(driveFile.size || jsonStr.length),
+    file_size: Number(driveFile.size || envelope.length),
     retention_days: retentionDays,
     expires_at: expiresAt,
     created_by: createdBy,
+    sha256, encrypted: true, encryption_algo: "AES-256-GCM",
   }).select().single();
   return { row, fileName, retentionDays, expiresAt };
 }
