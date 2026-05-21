@@ -201,15 +201,11 @@ export function AppHeader() {
       {/* Right */}
       <div className="flex items-center gap-3 ml-6">
         <LanguageSelector />
-        <button className="relative p-2 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
-          <Bell className="w-5 h-5" />
-        </button>
+        <NotificationsBell />
         <button className="p-2 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
           <Mail className="w-5 h-5" />
         </button>
-        <button className="p-2 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
-          <Settings className="w-5 h-5" />
-        </button>
+        <StorageInfoButton />
         <div className="flex items-center gap-3 ml-2 pl-4 border-l border-border">
           <div className="text-right">
             <p className="text-sm font-semibold text-foreground leading-tight">{email}</p>
