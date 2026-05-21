@@ -739,7 +739,7 @@ export default function Upload() {
           )}
 
 
-          <Button type="submit" className="w-full gap-2" disabled={(!editId && files.length === 0) || loading || (!editId && hasCert === false)}>
+          <Button type="submit" className="w-full gap-2" disabled={(!editId && files.length === 0) || loading || (!editId && hasCert === false) || (!editId && quotaFull)}>
             <UploadIcon className="w-4 h-4" />
             {loading ? "Salvando..." : editId ? "Salvar Alterações" : signDocument && hasPdf ? "Enviar e Assinar Documento" : "Enviar Documento"}
           </Button>
