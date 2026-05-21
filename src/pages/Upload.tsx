@@ -426,28 +426,29 @@ export default function Upload() {
           throw dbError;
         }
 
-        // Se marcou para assinar e é PDF, chamar edge function
+        // Se marcou para assinar e é PDF, chamar edge function A1 com posição + senha
         if (shouldSign && docData) {
           try {
-            const { data: signResult, error: signError } = await supabase.functions.invoke("sign-document", {
+            const { data: signResult, error: signError } = await supabase.functions.invoke("sign-pdf-a1", {
               body: {
                 documentId: docData.id,
                 filePath,
                 fileName: file.name,
-                certType,
+                password: pfxPassword,
+                position: signaturePos,
               },
             });
 
-            if (signError) {
-              console.warn("Assinatura pendente:", signError);
-            } else if (signResult?.signed) {
-              await supabase
-                .from("documents")
-                .update({ sign_status: "assinado" })
-                .eq("id", docData.id);
+            if (signError || (signResult as any)?.error) {
+              throw new Error((signResult as any)?.error || signError?.message || "Falha na assinatura");
             }
-          } catch (signErr) {
-            console.warn("Erro na assinatura, documento salvo como pendente:", signErr);
+            await supabase
+              .from("documents")
+              .update({ sign_status: "assinado" })
+              .eq("id", docData.id);
+          } catch (signErr: any) {
+            console.warn("Erro na assinatura:", signErr);
+            toast({ title: "Falha ao assinar", description: signErr.message, variant: "destructive" });
           }
         }
       }
