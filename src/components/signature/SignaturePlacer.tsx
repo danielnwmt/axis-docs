@@ -38,11 +38,16 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [renderSize, setRenderSize] = useState({ w: 0, h: 0 });
+  const [now, setNow] = useState(() => new Date());
   const dragRef = useRef<DragMode | null>(null);
   const valueRef = useRef<SignaturePosition | null>(value);
   const pageRef = useRef<number>(page);
   useEffect(() => { valueRef.current = value; }, [value]);
   useEffect(() => { pageRef.current = page; }, [page]);
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
