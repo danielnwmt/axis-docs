@@ -25,6 +25,7 @@ export default function Signature() {
   const [existingDocId, setExistingDocId] = useState<string | null>(null);
   const [existingFilePath, setExistingFilePath] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [signaturePos, setSignaturePos] = useState<SignaturePosition | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
