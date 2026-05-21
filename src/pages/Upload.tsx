@@ -464,7 +464,7 @@ export default function Upload() {
         }
       }
 
-      const signMsg = signDocument && hasPdf ? " Assinatura digital solicitada." : "";
+      const signMsg = signDocument && hasPdf ? " Assinatura digital ICP-Brasil A1 aplicada." : "";
       toast({ title: "Documento cadastrado!", description: `${files.length} arquivo(s) enviado(s) com sucesso.${signMsg}` });
       for (const file of files) {
         logAudit("Enviou documento", "upload", title || file.name);
