@@ -60,6 +60,8 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
   useEffect(() => {
     if (!pdf || !canvasRef.current) return;
     let cancelled = false;
+    let cancelled = false;
+    let renderTask: any = null;
     (async () => {
       const p = await pdf.getPage(page);
       const containerW = containerRef.current?.clientWidth || 800;
@@ -72,10 +74,11 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
       canvas.height = viewport.height;
       canvas.style.width = `${viewport.width}px`;
       canvas.style.height = `${viewport.height}px`;
-      await p.render({ canvasContext: ctx, viewport }).promise;
+      renderTask = p.render({ canvasContext: ctx, viewport });
+      try { await renderTask.promise; } catch (e: any) { if (e?.name !== "RenderingCancelledException") throw e; }
       if (!cancelled) setRenderSize({ w: viewport.width, h: viewport.height });
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; try { renderTask?.cancel(); } catch {} };
   }, [pdf, page]);
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
