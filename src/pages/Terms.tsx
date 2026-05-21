@@ -36,7 +36,7 @@ export default function Terms() {
 
         <section className="space-y-2">
           <h2 className="font-semibold text-lg">5. Assinatura Digital</h2>
-          <p className="text-sm text-foreground/80">Assinaturas ICP-Brasil (A1/A3) realizadas via ZapSign possuem validade jurídica conforme MP 2.200-2/2001.</p>
+          <p className="text-sm text-foreground/80">Assinaturas ICP-Brasil A1 aplicadas localmente pelo próprio sistema possuem validade jurídica conforme MP 2.200-2/2001.</p>
         </section>
 
         <section className="space-y-2">

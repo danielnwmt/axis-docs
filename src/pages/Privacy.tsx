@@ -57,7 +57,7 @@ export default function Privacy() {
 
         <section className="space-y-2">
           <h2 className="font-semibold text-lg">5. Compartilhamento</h2>
-          <p className="text-sm text-foreground/80">Os dados são tratados internamente. Compartilhamos apenas com: provedor de assinatura digital (ZapSign), provedor de armazenamento (Google Drive), conforme necessidade técnica, com cláusulas contratuais de proteção.</p>
+          <p className="text-sm text-foreground/80">Os dados são tratados internamente. A assinatura digital ICP-Brasil A1 é processada localmente pelo próprio sistema. Compartilhamos apenas com o provedor de armazenamento (Google Drive), conforme necessidade técnica, com cláusulas contratuais de proteção.</p>
         </section>
 
         <section className="space-y-2">
