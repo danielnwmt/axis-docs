@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
     const pdfWithPlaceholder = await pdfDoc.save();
 
     const signer = new P12Signer(pfxBytes, { passphrase: password });
-    const signedPdfBuf: Uint8Array = await signpdf.sign(pdfWithPlaceholder, signer);
+    const signedPdfBuf: Uint8Array = await new SignPdf().sign(pdfWithPlaceholder as any, signer);
 
     const hashSigned = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", signedPdfBuf)))
       .map((b) => b.toString(16).padStart(2, "0")).join("");
