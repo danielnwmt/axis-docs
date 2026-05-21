@@ -132,7 +132,7 @@ export default function Signature() {
 
       setProgress(60);
       const { data: signResult, error: signError } = await supabase.functions.invoke("sign-pdf-a1", {
-        body: { documentId: docId, filePath, fileName: file.name, password: pfxPassword },
+        body: { documentId: docId, filePath, fileName: file.name, password: pfxPassword, position: signaturePos },
       });
 
       setProgress(90);
