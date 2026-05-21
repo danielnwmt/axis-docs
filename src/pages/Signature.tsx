@@ -20,6 +20,7 @@ export default function Signature() {
   const [step, setStep] = useState<SignatureStep>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [pfxPassword, setPfxPassword] = useState<string>("");
+  const [showPfxPassword, setShowPfxPassword] = useState(false);
   const [signing, setSigning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [existingDocId, setExistingDocId] = useState<string | null>(null);
