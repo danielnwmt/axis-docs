@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState, useEffect } from "react";
+import { Navigate } from "react-router-dom";
+
 
 interface UnitOption {
   id: string;
@@ -73,6 +75,16 @@ export default function Users() {
   const [resetLoading, setResetLoading] = useState(false);
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
+  const [currentRole, setCurrentRole] = useState<string | null>(null);
+  const [roleLoaded, setRoleLoaded] = useState(false);
+
+  const isAdmin = currentRole === "Administrador";
+  const isOperator = currentRole === "Operador";
+  const canCreate = isAdmin || isOperator;
+  const canManageRow = isAdmin;
+  const allowedRoles = isAdmin
+    ? ["Administrador", "Operador", "Usuário"]
+    : ["Operador", "Usuário"];
 
   const fetchUsers = async () => {
     const { data, error } = await supabase.from("profiles" as any).select("*").order("created_at", { ascending: true });
@@ -91,9 +103,20 @@ export default function Users() {
   };
 
   useEffect(() => {
+    if (!currentUser?.id) return;
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", currentUser.id)
+        .maybeSingle();
+      setCurrentRole((data as any)?.role ?? null);
+      setRoleLoaded(true);
+    })();
     fetchUsers();
     fetchUnits();
-  }, []);
+  }, [currentUser?.id]);
+
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,6 +212,10 @@ export default function Users() {
     }
   };
 
+  if (roleLoaded && !isAdmin && !isOperator) {
+    return <Navigate to="/" replace />;
+  }
+
   return (
     <AppLayout>
       <div className="flex items-center justify-between mb-6">
@@ -196,10 +223,13 @@ export default function Users() {
           <UsersIcon className="w-7 h-7 text-primary" />
           <h1 className="font-display text-2xl font-bold text-foreground">Usuários e Permissões</h1>
         </div>
-        <Button className="gap-2" onClick={() => setOpen(true)}>
-          <Plus className="w-4 h-4" /> Novo Usuário
-        </Button>
+        {canCreate && (
+          <Button className="gap-2" onClick={() => { setRole(allowedRoles[allowedRoles.length - 1]); setOpen(true); }}>
+            <Plus className="w-4 h-4" /> Novo Usuário
+          </Button>
+        )}
       </div>
+
 
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
@@ -231,7 +261,8 @@ export default function Users() {
                   </Badge>
                 </td>
                 <td className="px-5 py-3">
-                  {user.id !== currentUser?.id && (
+                  {canManageRow && user.id !== currentUser?.id && (
+
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button className="p-1 hover:bg-secondary rounded-lg transition-colors">
@@ -291,10 +322,11 @@ export default function Users() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Administrador">Administrador</SelectItem>
-                  <SelectItem value="Operador">Operador</SelectItem>
-                  <SelectItem value="Usuário">Usuário</SelectItem>
+                  {allowedRoles.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
                 </SelectContent>
+
               </Select>
             </div>
             <div className="space-y-2">
