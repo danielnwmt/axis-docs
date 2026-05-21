@@ -295,13 +295,15 @@ export default function Documents() {
                       >
                         <Download className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => setDeleteDoc(doc)}
-                        className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
-                        title="Apagar"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => setDeleteDoc(doc)}
+                          className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
+                          title="Apagar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
