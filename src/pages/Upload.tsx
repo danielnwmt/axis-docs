@@ -631,22 +631,27 @@ export default function Upload() {
         </div>
 
         <div className="space-y-4">
-          <div
-            onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
-            className="bg-card rounded-xl border-2 border-dashed border-accent/40 shadow-sm p-8 flex flex-col items-center justify-center gap-4 min-h-[300px] hover:border-accent transition-colors cursor-pointer"
-            onClick={() => document.getElementById("file-input")?.click()}
-          >
-            <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center">
-              <UploadIcon className="w-8 h-8 text-accent" />
-            </div>
-            <div className="text-center">
-              <p className="font-semibold text-foreground">{editId ? "Adicionar novos arquivos" : "Arraste arquivos aqui"}</p>
-              <p className="text-sm text-muted-foreground mt-1">ou clique para selecionar</p>
-              <p className="text-xs text-muted-foreground mt-2">PDF, JPG, PNG, DOCX, XLSX</p>
-            </div>
-            <input id="file-input" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" className="hidden" onChange={handleFileSelect} />
-          </div>
+          {(() => {
+            const blocked = !editId && hasCert === false;
+            return (
+              <div
+                onDrop={blocked ? (e) => e.preventDefault() : handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+                className={`bg-card rounded-xl border-2 border-dashed shadow-sm p-8 flex flex-col items-center justify-center gap-4 min-h-[300px] transition-colors ${blocked ? "border-muted opacity-50 cursor-not-allowed pointer-events-none" : "border-accent/40 hover:border-accent cursor-pointer"}`}
+                onClick={() => { if (!blocked) document.getElementById("file-input")?.click(); }}
+              >
+                <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center">
+                  <UploadIcon className="w-8 h-8 text-accent" />
+                </div>
+                <div className="text-center">
+                  <p className="font-semibold text-foreground">{blocked ? "Upload bloqueado" : editId ? "Adicionar novos arquivos" : "Arraste arquivos aqui"}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{blocked ? "Cadastre um certificado digital para enviar arquivos" : "ou clique para selecionar"}</p>
+                  <p className="text-xs text-muted-foreground mt-2">PDF, JPG, PNG, DOCX, XLSX</p>
+                </div>
+                <input id="file-input" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" className="hidden" onChange={handleFileSelect} disabled={blocked} />
+              </div>
+            );
+          })()}
 
           {editId && existingFile && (
             <div className="bg-card rounded-xl border border-border shadow-sm p-4 space-y-3">
