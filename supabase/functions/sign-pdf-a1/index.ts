@@ -82,10 +82,21 @@ async function getDriveAccessToken(sa: { client_email: string; private_key: stri
   return (await res.json()).access_token as string;
 }
 
+function extractFolderId(input: string | undefined | null): string {
+  if (!input) return "";
+  const s = String(input).trim();
+  const m = s.match(/[-\w]{25,}/);
+  return m ? m[0] : s;
+}
+
 async function loadDriveConfig(supabase: any) {
   const { data: cfgFile, error } = await supabase.storage.from("settings").download("google-drive-config.json");
   if (error || !cfgFile) throw new Error("Google Drive não configurado");
-  return JSON.parse(await cfgFile.text());
+  const cfg = JSON.parse(await cfgFile.text());
+  // Normaliza: aceita rootFolderId (formato novo) ou folderId (legado).
+  // Sem isso o upload vai para "My Drive" da Service Account, que não tem cota.
+  cfg.folderId = extractFolderId(cfg.rootFolderId || cfg.folderId);
+  return cfg;
 }
 
 async function loadCertForUser(supabase: any, userId: string, password: string) {
