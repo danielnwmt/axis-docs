@@ -67,7 +67,17 @@ export function MyCertificateSection() {
         body: { pfxBase64, password },
       });
       if (error || (data as any)?.error) {
-        throw new Error((data as any)?.error || error?.message || "Falha ao processar certificado");
+        let msg = (data as any)?.error || error?.message || "Falha ao processar certificado";
+        try {
+          const ctx: any = (error as any)?.context;
+          if (ctx?.json) { const j = await ctx.json(); if (j?.error) msg = j.error; }
+          else if (ctx?.text) { const j = JSON.parse(await ctx.text()); if (j?.error) msg = j.error; }
+        } catch {}
+        if (/senha|pfx inválido|incorret/i.test(msg)) {
+          toast({ title: "Senha incorreta", description: "A senha do certificado está incorreta ou o arquivo .pfx é inválido.", variant: "destructive" });
+          return;
+        }
+        throw new Error(msg);
       }
       toast({ title: "Certificado cadastrado!", description: `CN: ${(data as any).subject_cn}` });
       setFile(null); setPassword("");
