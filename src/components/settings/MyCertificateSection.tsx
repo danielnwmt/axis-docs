@@ -133,7 +133,7 @@ export function MyCertificateSection() {
         </div>
       </div>
 
-      {cert ? (
+      {cert && (
         <div className={`rounded-xl border p-5 space-y-4 ${expired ? "border-destructive/40 bg-destructive/5" : expiringSoon ? "border-warning/40 bg-warning/5" : "border-success/40 bg-success/5"}`}>
           <div className="flex items-center gap-2">
             <FileKey2 className="w-5 h-5 text-primary" />
