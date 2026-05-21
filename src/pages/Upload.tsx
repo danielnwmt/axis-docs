@@ -48,6 +48,7 @@ export default function Upload() {
   const [showPfxPassword, setShowPfxPassword] = useState(false);
   const [signaturePos, setSignaturePos] = useState<SignaturePosition | null>(null);
   const [certCN, setCertCN] = useState<string>("");
+  const [hasCert, setHasCert] = useState<boolean | null>(null);
   const [signedFiles, setSignedFiles] = useState<Set<string>>(new Set());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
