@@ -160,6 +160,7 @@ export default function Signature() {
     setProgress(0);
     setExistingDocId(null);
     setExistingFilePath(null);
+    setSignaturePos(null);
   };
 
   return (
