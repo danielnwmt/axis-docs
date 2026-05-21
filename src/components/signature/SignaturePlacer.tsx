@@ -38,6 +38,10 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
   const [loading, setLoading] = useState(true);
   const [renderSize, setRenderSize] = useState({ w: 0, h: 0 });
   const dragRef = useRef<DragMode | null>(null);
+  const valueRef = useRef<SignaturePosition | null>(value);
+  const pageRef = useRef<number>(page);
+  useEffect(() => { valueRef.current = value; }, [value]);
+  useEffect(() => { pageRef.current = page; }, [page]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,45 +93,53 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
     hr = clamp(hr, MIN_H, 1);
     xr = clamp(xr, 0, 1 - wr);
     yr = clamp(yr, 0, 1 - hr);
-    onChange({ page, xRatio: xr, yRatio: yr, wRatio: wr, hRatio: hr });
+    const next = { page: pageRef.current, xRatio: xr, yRatio: yr, wRatio: wr, hRatio: hr };
+    valueRef.current = next;
+    onChange(next);
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (!renderSize.w) return;
+    e.preventDefault();
     const { x, y } = getRatio(e);
-    const w = value?.wRatio ?? DEFAULT_W;
-    const h = value?.hRatio ?? DEFAULT_H;
-    emit(x - w / 2, y - h / 2, w, h);
-    dragRef.current = { kind: "move", dx: w / 2, dy: h / 2 };
+    const w = valueRef.current?.wRatio ?? DEFAULT_W;
+    const h = valueRef.current?.hRatio ?? DEFAULT_H;
+    const xr = clamp(x - w / 2, 0, 1 - w);
+    const yr = clamp(y - h / 2, 0, 1 - h);
+    emit(xr, yr, w, h);
+    dragRef.current = { kind: "move", dx: x - xr, dy: y - yr };
     attachWindow();
   };
 
   const handleBoxMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!value) return;
+    e.preventDefault();
+    if (!valueRef.current) return;
     const { x, y } = getRatio(e);
-    dragRef.current = { kind: "move", dx: x - value.xRatio, dy: y - value.yRatio };
+    dragRef.current = { kind: "move", dx: x - valueRef.current.xRatio, dy: y - valueRef.current.yRatio };
     attachWindow();
   };
 
   const handleResizeMouseDown = (handle: "nw" | "ne" | "sw" | "se") => (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!value) return;
+    e.preventDefault();
+    const v = valueRef.current;
+    if (!v) return;
     const { x, y } = getRatio(e);
-    // anchor = opposite corner
-    const anchorX = handle === "nw" || handle === "sw" ? value.xRatio + value.wRatio : value.xRatio;
-    const anchorY = handle === "nw" || handle === "ne" ? value.yRatio + value.hRatio : value.yRatio;
-    dragRef.current = { kind: "resize", handle, startX: x, startY: y, startW: value.wRatio, startH: value.hRatio, anchorX, anchorY };
+    const anchorX = handle === "nw" || handle === "sw" ? v.xRatio + v.wRatio : v.xRatio;
+    const anchorY = handle === "nw" || handle === "ne" ? v.yRatio + v.hRatio : v.yRatio;
+    dragRef.current = { kind: "resize", handle, startX: x, startY: y, startW: v.wRatio, startH: v.hRatio, anchorX, anchorY };
     attachWindow();
   };
 
   const attachWindow = () => {
     const move = (ev: MouseEvent) => {
       const d = dragRef.current;
-      if (!d || !value) return;
+      const v = valueRef.current;
+      if (!d || !v) return;
       const { x, y } = getRatio(ev);
       if (d.kind === "move") {
-        emit(x - d.dx, y - d.dy, value.wRatio, value.hRatio);
+        emit(x - d.dx, y - d.dy, v.wRatio, v.hRatio);
       } else {
         const newW = Math.abs(x - d.anchorX);
         const newH = Math.abs(y - d.anchorY);
@@ -167,7 +179,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
         </div>
       </div>
 
-      <div ref={containerRef} className="relative border border-border rounded-lg overflow-auto bg-muted/30 max-h-[600px] flex justify-center">
+      <div ref={containerRef} className="relative border border-border rounded-lg overflow-auto bg-muted/30 max-h-[75vh] flex justify-center">
         {loading && (
           <div className="flex items-center gap-2 p-10 text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" /> Carregando PDF…
