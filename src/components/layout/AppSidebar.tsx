@@ -1,5 +1,5 @@
 import { 
-  LayoutDashboard, FileText, Upload, ScanText, Search, PenTool, Shield, Users, Settings, HelpCircle, LogOut, ShieldAlert
+  LayoutDashboard, FileText, Upload, ScanText, Search, PenTool, Shield, Users, Settings, HelpCircle, LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -17,7 +17,7 @@ const navItems = [
   { icon: Search, key: "search", path: "/search" },
   { icon: PenTool, key: "signature", path: "/signature" },
   { icon: Shield, key: "audit", path: "/audit" },
-  { icon: ShieldAlert, key: "lgpd", path: "/lgpd" },
+  
   { icon: Users, key: "users", path: "/users" },
   { icon: Settings, key: "settings", path: "/settings" },
 ];
@@ -43,7 +43,7 @@ export function AppSidebar() {
 
   const items = navItems.filter((it) => {
     if (it.key === "users") return role === "Administrador" || role === "Operador";
-    if (it.key === "lgpd") return role === "Administrador";
+    
     return true;
   });
 
