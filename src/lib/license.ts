@@ -156,7 +156,13 @@ async function validateLicenseDirect(): Promise<LicenseInfo> {
   try {
     const ctrl = new AbortController();
     const timeoutId = window.setTimeout(() => ctrl.abort(), 10000);
-    const resp = await fetch(normalizeLicenseServerUrl(config.server_url), {
+    // Em instalações locais (sem edge functions), usa proxy do Nginx para evitar CORS
+    const targetUrl = normalizeLicenseServerUrl(config.server_url);
+    const isLovableCloud = typeof window !== "undefined" && /\.lovable(project)?\.app$/.test(window.location.hostname);
+    const finalUrl = !isLovableCloud && targetUrl.startsWith("https://getlicence.lovable.app/")
+      ? targetUrl.replace("https://getlicence.lovable.app/", `${window.location.origin}/license-proxy/`)
+      : targetUrl;
+    const resp = await fetch(finalUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ license_key: config.license_key, hostname: config.hardware_id || "axisdocs" }),
