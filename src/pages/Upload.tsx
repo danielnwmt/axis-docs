@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Upload as UploadIcon, FileUp, X, PenTool, ShieldCheck, Eye, EyeOff, Download, FileText, Loader2 } from "lucide-react";
+import { Upload as UploadIcon, FileUp, X, PenTool, ShieldCheck, Eye, EyeOff, Download, FileText, Loader2, AlertCircle } from "lucide-react";
 import { SignaturePlacer, SignaturePosition } from "@/components/signature/SignaturePlacer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,7 @@ export default function Upload() {
   const [showPfxPassword, setShowPfxPassword] = useState(false);
   const [signaturePos, setSignaturePos] = useState<SignaturePosition | null>(null);
   const [certCN, setCertCN] = useState<string>("");
+  const [hasCert, setHasCert] = useState<boolean | null>(null);
   const [signedFiles, setSignedFiles] = useState<Set<string>>(new Set());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -87,7 +88,9 @@ export default function Upload() {
         .select("subject_cn")
         .eq("user_id", user.id)
         .maybeSingle();
-      if (data && (data as any).subject_cn) setCertCN((data as any).subject_cn);
+      const cn = data && (data as any).subject_cn;
+      if (cn) setCertCN(cn);
+      setHasCert(!!cn);
     })();
   }, [user]);
 
@@ -293,6 +296,12 @@ export default function Upload() {
     e.preventDefault();
     if (!user || (!editId && files.length === 0)) return;
 
+    if (!editId && hasCert === false) {
+      toast({ title: "Certificado obrigatório", description: "Cadastre um certificado digital antes de enviar documentos.", variant: "destructive" });
+      return;
+    }
+
+
     if (!editId && signDocument && hasPdf) {
       if (!pfxPassword) {
         toast({ title: "Senha obrigatória", description: "Digite a senha do seu certificado .pfx para assinar.", variant: "destructive" });
@@ -489,6 +498,21 @@ export default function Upload() {
     <AppLayout>
       <h1 className="font-display text-2xl font-bold text-foreground mb-6">{editId ? "Editar Documento" : "Upload de Documentos"}</h1>
 
+      {!editId && hasCert === false && (
+        <div className="bg-card rounded-xl border border-destructive/40 shadow-sm p-6 mb-6 flex items-start gap-4">
+          <AlertCircle className="w-6 h-6 text-destructive shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h2 className="font-display font-semibold text-foreground text-lg mb-1">Nenhum certificado cadastrado</h2>
+            <p className="text-sm text-muted-foreground mb-3">
+              Você precisa cadastrar um certificado digital ICP-Brasil A1 (.pfx) antes de enviar ou assinar documentos.
+            </p>
+            <Button type="button" onClick={() => navigate("/settings")} className="gap-2">
+              <ShieldCheck className="w-4 h-4" /> Cadastrar certificado
+            </Button>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-card rounded-xl border border-border shadow-sm p-6 space-y-4">
           <h2 className="font-display font-semibold text-foreground text-lg">Dados do Documento</h2>
@@ -684,7 +708,7 @@ export default function Upload() {
           )}
 
 
-          <Button type="submit" className="w-full gap-2" disabled={(!editId && files.length === 0) || loading}>
+          <Button type="submit" className="w-full gap-2" disabled={(!editId && files.length === 0) || loading || (!editId && hasCert === false)}>
             <UploadIcon className="w-4 h-4" />
             {loading ? "Salvando..." : editId ? "Salvar Alterações" : signDocument && hasPdf ? "Enviar e Assinar Documento" : "Enviar Documento"}
           </Button>
