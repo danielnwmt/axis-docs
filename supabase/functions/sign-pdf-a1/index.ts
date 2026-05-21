@@ -339,6 +339,23 @@ Deno.serve(async (req) => {
       if (upErr) throw upErr;
     }
 
+    // Remove o PDF original do Drive (mantém apenas o assinado)
+    if (filePath.startsWith("drive://")) {
+      try {
+        const oldDriveId = doc.drive_file_id || filePath.replace("drive://", "");
+        if (oldDriveId && oldDriveId !== newDriveFileId) {
+          const cfg = await loadDriveConfig(supabase);
+          const token = await getDriveAccessToken(cfg.serviceAccount);
+          await fetch(`https://www.googleapis.com/drive/v3/files/${oldDriveId}?supportsAllDrives=true`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        }
+      } catch (e) { console.warn("falha ao remover original do Drive:", e); }
+    } else {
+      try { await supabase.storage.from("documents").remove([filePath]); } catch {}
+    }
+
     const signTimestamp = new Date().toISOString();
     const certInfo = {
       provider: "Servidor local (PAdES)",
