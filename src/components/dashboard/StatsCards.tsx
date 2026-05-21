@@ -1,6 +1,7 @@
-import { FileText, ScanSearch, PenTool, AlertCircle, TrendingUp, TrendingDown } from "lucide-react";
+import { FileText, ScanSearch, PenTool, HardDrive, TrendingUp, TrendingDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getStorageQuota, formatBytes } from "@/lib/storageQuota";
 
 function computeStats(data: { ocr_status: string; sign_status: string; created_at: string }[]) {
   const totalDocs = data.length;
