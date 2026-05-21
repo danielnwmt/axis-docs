@@ -25,8 +25,18 @@ export function MyCertificateSection() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Alterar senha do certificado
+  const [changing, setChanging] = useState(false);
+  const [currentPwd, setCurrentPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const load = async () => {
     setLoading(true);
