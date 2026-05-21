@@ -217,14 +217,17 @@ Deno.serve(async (req) => {
         const dt = new Date().toUTCString().replace("GMT", "(UTC)");
         const shortHash = hashOriginal.substring(0, 32);
 
-        const headerH = hBox * 0.18;
+        const headerH = hBox * 0.16;
         const headerY = y + hBox - headerH;
-        page.drawText("DOCUMENTO ASSINADO POR:", {
-          x: x + wBox * 0.06, y: headerY + headerH * 0.3,
-          size: Math.max(5, hBox * 0.09), font: fontBold, color: green,
+        const headerText = "CERTIFICADO DIGITAL ICP-BRASIL";
+        const headerSize = Math.max(5, hBox * 0.09);
+        const headerW = fontBold.widthOfTextAtSize(headerText, headerSize);
+        page.drawText(headerText, {
+          x: x + (wBox - headerW) / 2, y: headerY + headerH * 0.3,
+          size: headerSize, font: fontBold, color: green,
         });
 
-        // Inner content area (cream, green border)
+        // Inner content area (green border)
         const innerPad = wBox * 0.05;
         const innerX = x + innerPad;
         const innerY = y + innerPad;
@@ -235,24 +238,31 @@ Deno.serve(async (req) => {
           borderColor: green, borderWidth: 0.6,
         });
 
+        const labelSize = Math.max(4.5, innerH * 0.1);
+        const valSize = Math.max(5, innerH * 0.11);
         const lineGap = innerH / 5.5;
         let cy = innerY + innerH - lineGap * 0.85;
-        page.drawText("ASSINADO DIGITALMENTE POR:", {
+
+        page.drawText("DADOS DO TITULAR:", {
           x: innerX + innerW * 0.05, y: cy,
-          size: Math.max(4.5, innerH * 0.11), font, color: grey,
+          size: Math.max(5, innerH * 0.11), font: fontBold, color: green,
         });
-        cy -= lineGap * 1.15;
-        page.drawText(cn.slice(0, 40), {
+        cy -= lineGap * 0.95;
+        page.drawText(`Nome (CN): ${cn.slice(0, 38)}`, {
           x: innerX + innerW * 0.05, y: cy,
-          size: Math.max(7, innerH * 0.2), font: fontBold, color: green,
-        });
-        cy -= lineGap * 0.9;
-        cy -= lineGap * 0.9;
-        page.drawText(dt, {
-          x: innerX + innerW * 0.05, y: cy,
-          size: Math.max(4.5, innerH * 0.1), font, color: grey,
+          size: valSize, font: fontBold, color: green,
         });
         cy -= lineGap * 0.9;
+        page.drawText(`Organização (O): ICP-Brasil`, {
+          x: innerX + innerW * 0.05, y: cy,
+          size: valSize, font, color: green,
+        });
+        cy -= lineGap * 0.9;
+        page.drawText(`Data: ${dt}`, {
+          x: innerX + innerW * 0.05, y: cy,
+          size: labelSize, font, color: grey,
+        });
+        cy -= lineGap * 0.85;
         page.drawText(`hash: ${shortHash}`, {
           x: innerX + innerW * 0.05, y: cy,
           size: Math.max(4, innerH * 0.09), font, color: grey,
