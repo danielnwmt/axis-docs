@@ -81,6 +81,8 @@ export function MyCertificateSection() {
 
   const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString("pt-BR") : "—";
   const expired = cert?.valid_to ? new Date(cert.valid_to) < new Date() : false;
+  const daysLeft = cert?.valid_to ? Math.ceil((new Date(cert.valid_to).getTime() - Date.now()) / 86400000) : null;
+  const expiringSoon = daysLeft !== null && daysLeft > 0 && daysLeft <= 30;
 
   if (loading) return <div className="text-sm text-muted-foreground">Carregando…</div>;
 
@@ -95,19 +97,38 @@ export function MyCertificateSection() {
       </div>
 
       {cert ? (
-        <div className={`rounded-xl border p-5 space-y-3 ${expired ? "border-destructive/40 bg-destructive/5" : "border-border bg-card"}`}>
+        <div className={`rounded-xl border p-5 space-y-4 ${expired ? "border-destructive/40 bg-destructive/5" : expiringSoon ? "border-warning/40 bg-warning/5" : "border-success/40 bg-success/5"}`}>
           <div className="flex items-center gap-2">
             <FileKey2 className="w-5 h-5 text-primary" />
-            <h3 className="font-display font-semibold text-foreground">Certificado ativo</h3>
-            {expired && <span className="ml-auto text-xs font-bold text-destructive">EXPIRADO</span>}
+            <h3 className="font-display font-semibold text-foreground">Meu Certificado</h3>
+            <span className={`ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+              expired ? "bg-destructive text-destructive-foreground" :
+              expiringSoon ? "bg-warning text-warning-foreground" :
+              "bg-success text-success-foreground"
+            }`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              {expired ? "EXPIRADO" : expiringSoon ? `EXPIRA EM ${daysLeft}D` : "ATIVO"}
+            </span>
           </div>
-          <div className="grid grid-cols-2 gap-3 text-sm">
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-border bg-background p-3">
+              <p className="text-muted-foreground text-xs mb-1">Data de emissão</p>
+              <p className="text-foreground font-semibold text-base">{fmtDate(cert.valid_from)}</p>
+            </div>
+            <div className="rounded-lg border border-border bg-background p-3">
+              <p className="text-muted-foreground text-xs mb-1">Data de expiração</p>
+              <p className={`font-semibold text-base ${expired ? "text-destructive" : expiringSoon ? "text-warning" : "text-foreground"}`}>{fmtDate(cert.valid_to)}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-sm pt-1">
             <div><p className="text-muted-foreground text-xs">Titular (CN)</p><p className="text-foreground font-medium">{cert.subject_cn || "—"}</p></div>
             <div><p className="text-muted-foreground text-xs">CPF</p><p className="text-foreground font-medium">{cert.cpf || "—"}</p></div>
-            <div><p className="text-muted-foreground text-xs">Emissor</p><p className="text-foreground font-medium">{cert.issuer || "—"}</p></div>
-            <div><p className="text-muted-foreground text-xs">Validade</p><p className="text-foreground font-medium">{fmtDate(cert.valid_from)} → {fmtDate(cert.valid_to)}</p></div>
+            <div className="col-span-2"><p className="text-muted-foreground text-xs">Emissor</p><p className="text-foreground font-medium">{cert.issuer || "—"}</p></div>
             <div className="col-span-2"><p className="text-muted-foreground text-xs">Fingerprint SHA-256</p><p className="font-mono text-xs break-all text-foreground">{cert.fingerprint_sha256}</p></div>
           </div>
+
           <div className="flex gap-2 pt-2">
             <Button variant="outline" onClick={() => setCert(null)}><Upload className="w-4 h-4 mr-2" /> Substituir</Button>
             <AlertDialog>
