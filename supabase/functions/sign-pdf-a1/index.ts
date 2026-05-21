@@ -259,6 +259,12 @@ Deno.serve(async (req) => {
         const cpfSize = Math.max(7, hBox * 0.18);
         const metaSize = Math.max(6, hBox * 0.13);
 
+        const formatCPF = (raw: string): string => {
+          const digits = raw.replace(/\D/g, "");
+          if (digits.length === 11) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+          return raw;
+        };
+
         // Split "NAME:CPF" pattern (ICP-Brasil CN format)
         const colonIdx = cn.lastIndexOf(":");
         let nameOnly = cn;
@@ -290,7 +296,7 @@ Deno.serve(async (req) => {
 
         if (cpfOnly) {
           cy -= cpfSize + gap;
-          page.drawText(`CPF: ${cpfOnly}`, {
+          page.drawText(`CPF: ${formatCPF(cpfOnly)}`, {
             x: textX, y: cy,
             size: cpfSize, font: fontBold, color: navyDark,
           });
