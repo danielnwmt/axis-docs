@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Users can delete own documents" ON public.documents;
