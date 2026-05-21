@@ -502,16 +502,16 @@ Deno.serve(async (req) => {
 
     if (filePath.startsWith("drive://")) {
       const cfg = await loadDriveConfig(supabase);
+      if (!cfg.folderId) throw new Error("ID da pasta raiz do Google Drive não configurado.");
       const token = await getDriveAccessToken(cfg.serviceAccount);
-      const metadata: any = { name: signedName };
-      if (cfg.folderId) metadata.parents = [cfg.folderId];
+      const metadata: any = { name: signedName, parents: [cfg.folderId] };
       const boundary = "----axisdocs" + Math.random().toString(36).slice(2);
       const body = new Blob([
         `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`,
         signedPdfBuf,
         `\r\n--${boundary}--`,
       ]);
-      const upRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true", {
+      const upRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&enforceSingleParent=true", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` },
         body,
