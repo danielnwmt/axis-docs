@@ -97,6 +97,19 @@ export default function Upload() {
   }, [user]);
 
   useEffect(() => {
+    (async () => {
+      try {
+        const { getStorageQuota, formatBytes } = await import("@/lib/storageQuota");
+        const q = await getStorageQuota();
+        if (q.hasLimit) {
+          setQuotaFull(q.usedBytes >= q.limitBytes);
+          setQuotaInfo({ limit: formatBytes(q.limitBytes), used: formatBytes(q.usedBytes) });
+        }
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
     if (!editId) return;
     const loadDoc = async () => {
       const { data } = await supabase
