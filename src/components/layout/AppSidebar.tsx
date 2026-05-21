@@ -26,8 +26,25 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { t } = useTranslation();
+  const [role, setRole] = useState<string | null>(null);
 
-  const items = navItems;
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+      setRole((data as any)?.role ?? null);
+    })();
+  }, [user?.id]);
+
+  const items = navItems.filter((it) => {
+    if (it.key === "users") return role === "Administrador" || role === "Operador";
+    return true;
+  });
+
 
 
   const handleSignOut = async () => {
