@@ -37,6 +37,18 @@ export default function Documents() {
   const [deleteDoc, setDeleteDoc] = useState<typeof documents[0] | null>(null);
   const { toast } = useToast();
 
+  const { data: currentProfile } = useQuery({
+    queryKey: ["current-profile-role"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+      return data;
+    },
+  });
+  const isAdmin = currentProfile?.role === "Administrador";
+
+
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ["documents"],
     queryFn: async () => {
@@ -283,13 +295,15 @@ export default function Documents() {
                       >
                         <Download className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => setDeleteDoc(doc)}
-                        className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
-                        title="Apagar"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => setDeleteDoc(doc)}
+                          className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
+                          title="Apagar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
