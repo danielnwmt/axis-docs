@@ -1,5 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Upload as UploadIcon, FileUp, X, PenTool, ShieldCheck, Eye, Download, FileText, Loader2 } from "lucide-react";
+import { Upload as UploadIcon, FileUp, X, PenTool, ShieldCheck, Eye, EyeOff, Download, FileText, Loader2 } from "lucide-react";
+import { SignaturePlacer, SignaturePosition } from "@/components/signature/SignaturePlacer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +44,10 @@ export default function Upload() {
   const [loading, setLoading] = useState(false);
   const [signDocument, setSignDocument] = useState(false);
   const [certType, setCertType] = useState("A1");
+  const [pfxPassword, setPfxPassword] = useState("");
+  const [showPfxPassword, setShowPfxPassword] = useState(false);
+  const [signaturePos, setSignaturePos] = useState<SignaturePosition | null>(null);
+  const [certCN, setCertCN] = useState<string>("");
   const [signedFiles, setSignedFiles] = useState<Set<string>>(new Set());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -73,6 +78,18 @@ export default function Upload() {
     };
     loadLists();
   }, [toast]);
+
+  useEffect(() => {
+    (async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("user_certificates" as any)
+        .select("subject_cn")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (data && (data as any).subject_cn) setCertCN((data as any).subject_cn);
+    })();
+  }, [user]);
 
   useEffect(() => {
     if (!editId) return;
@@ -276,6 +293,17 @@ export default function Upload() {
     e.preventDefault();
     if (!user || (!editId && files.length === 0)) return;
 
+    if (!editId && signDocument && hasPdf) {
+      if (!pfxPassword) {
+        toast({ title: "Senha obrigatória", description: "Digite a senha do seu certificado .pfx para assinar.", variant: "destructive" });
+        return;
+      }
+      if (!signaturePos) {
+        toast({ title: "Posicione a assinatura", description: "Clique no PDF para definir o local da assinatura visível.", variant: "destructive" });
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       // Edit mode — update metadata only
@@ -409,28 +437,29 @@ export default function Upload() {
           throw dbError;
         }
 
-        // Se marcou para assinar e é PDF, chamar edge function
+        // Se marcou para assinar e é PDF, chamar edge function A1 com posição + senha
         if (shouldSign && docData) {
           try {
-            const { data: signResult, error: signError } = await supabase.functions.invoke("sign-document", {
+            const { data: signResult, error: signError } = await supabase.functions.invoke("sign-pdf-a1", {
               body: {
                 documentId: docData.id,
                 filePath,
                 fileName: file.name,
-                certType,
+                password: pfxPassword,
+                position: signaturePos,
               },
             });
 
-            if (signError) {
-              console.warn("Assinatura pendente:", signError);
-            } else if (signResult?.signed) {
-              await supabase
-                .from("documents")
-                .update({ sign_status: "assinado" })
-                .eq("id", docData.id);
+            if (signError || (signResult as any)?.error) {
+              throw new Error((signResult as any)?.error || signError?.message || "Falha na assinatura");
             }
-          } catch (signErr) {
-            console.warn("Erro na assinatura, documento salvo como pendente:", signErr);
+            await supabase
+              .from("documents")
+              .update({ sign_status: "assinado" })
+              .eq("id", docData.id);
+          } catch (signErr: any) {
+            console.warn("Erro na assinatura:", signErr);
+            toast({ title: "Falha ao assinar", description: signErr.message, variant: "destructive" });
           }
         }
       }
@@ -546,20 +575,31 @@ export default function Upload() {
             )}
 
             {signDocument && (
-              <div className="ml-7 space-y-2">
-                <Label className="text-xs">Tipo de Certificado</Label>
-                <Select value={certType} onValueChange={setCertType}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="A1">Certificado A1 (arquivo digital)</SelectItem>
-                    <SelectItem value="A3">Certificado A3 (token/cartão)</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="ml-7 space-y-3">
+                <div className="space-y-2">
+                  <Label className="text-xs">Senha do certificado (.pfx)</Label>
+                  <div className="relative">
+                    <Input
+                      type={showPfxPassword ? "text" : "password"}
+                      value={pfxPassword}
+                      onChange={(e) => setPfxPassword(e.target.value)}
+                      placeholder="Senha do certificado A1"
+                      autoComplete="off"
+                      className="pr-10 h-9"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPfxPassword((v) => !v)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                      tabIndex={-1}
+                    >
+                      {showPfxPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
                 <div className="flex items-start gap-2 bg-info/10 rounded-lg p-2.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-info mt-0.5 shrink-0" />
-                  <p className="text-xs text-info">A assinatura será processada via ZapSign com certificado ICP-Brasil.</p>
+                  <p className="text-xs text-info">Posicione o carimbo no PDF ao lado e informe a senha. Assinatura PAdES ICP-Brasil A1.</p>
                 </div>
               </div>
             )}
@@ -628,6 +668,21 @@ export default function Upload() {
               ))}
             </div>
           )}
+
+          {signDocument && hasPdf && files.find((f) => f.type === "application/pdf") && (
+            <div className="bg-card rounded-xl border border-border shadow-sm p-4 space-y-2">
+              <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
+                <PenTool className="w-4 h-4 text-primary" /> Posicionar assinatura
+              </h3>
+              <SignaturePlacer
+                file={files.find((f) => f.type === "application/pdf")!}
+                signerLabel={certCN || user?.email?.split("@")[0] || "Assinatura"}
+                value={signaturePos}
+                onChange={setSignaturePos}
+              />
+            </div>
+          )}
+
 
           <Button type="submit" className="w-full gap-2" disabled={(!editId && files.length === 0) || loading}>
             <UploadIcon className="w-4 h-4" />
