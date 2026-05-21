@@ -273,3 +273,184 @@ CREATE POLICY "Admins insert license config" ON public.license_config
   FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'Administrador'));
 CREATE POLICY "Admins update license config" ON public.license_config
   FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'Administrador'));
+
+-- =====================================================
+-- LGPD: consents, data_requests, privacy_incidents
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS public.consents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  document_type text NOT NULL,
+  version text NOT NULL,
+  ip text,
+  user_agent text,
+  accepted_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.consents ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users read own or admin reads all consents" ON public.consents;
+DROP POLICY IF EXISTS "Users insert own consents" ON public.consents;
+DROP POLICY IF EXISTS "Block updates on consents" ON public.consents;
+DROP POLICY IF EXISTS "Block deletes on consents" ON public.consents;
+CREATE POLICY "Users read own or admin reads all consents" ON public.consents
+  FOR SELECT TO authenticated USING (auth.uid() = user_id OR has_role(auth.uid(), 'Administrador'));
+CREATE POLICY "Users insert own consents" ON public.consents
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Block updates on consents" ON public.consents AS RESTRICTIVE
+  FOR UPDATE TO anon, authenticated USING (false) WITH CHECK (false);
+CREATE POLICY "Block deletes on consents" ON public.consents AS RESTRICTIVE
+  FOR DELETE TO anon, authenticated USING (false);
+
+CREATE TABLE IF NOT EXISTS public.data_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  user_email text NOT NULL DEFAULT '',
+  type text NOT NULL,
+  status text NOT NULL DEFAULT 'pending',
+  payload jsonb,
+  notes text,
+  processed_by uuid,
+  processed_at timestamptz,
+  requested_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.data_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users read own or admin reads all data requests" ON public.data_requests;
+DROP POLICY IF EXISTS "Users insert own data requests" ON public.data_requests;
+DROP POLICY IF EXISTS "Admins update data requests" ON public.data_requests;
+DROP POLICY IF EXISTS "Block deletes on data requests" ON public.data_requests;
+CREATE POLICY "Users read own or admin reads all data requests" ON public.data_requests
+  FOR SELECT TO authenticated USING (auth.uid() = user_id OR has_role(auth.uid(), 'Administrador'));
+CREATE POLICY "Users insert own data requests" ON public.data_requests
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Admins update data requests" ON public.data_requests
+  FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'Administrador'))
+  WITH CHECK (has_role(auth.uid(), 'Administrador'));
+CREATE POLICY "Block deletes on data requests" ON public.data_requests AS RESTRICTIVE
+  FOR DELETE TO anon, authenticated USING (false);
+
+CREATE TABLE IF NOT EXISTS public.privacy_incidents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  description text NOT NULL,
+  severity text NOT NULL DEFAULT 'medium',
+  status text NOT NULL DEFAULT 'open',
+  affected_users_count integer NOT NULL DEFAULT 0,
+  reported_to_anpd_at timestamptz,
+  anpd_protocol text,
+  data_subjects_notified_at timestamptz,
+  resolution text DEFAULT '',
+  created_by uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.privacy_incidents ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admins read incidents" ON public.privacy_incidents;
+DROP POLICY IF EXISTS "Admins insert incidents" ON public.privacy_incidents;
+DROP POLICY IF EXISTS "Admins update incidents" ON public.privacy_incidents;
+CREATE POLICY "Admins read incidents" ON public.privacy_incidents
+  FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Administrador'));
+CREATE POLICY "Admins insert incidents" ON public.privacy_incidents
+  FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'Administrador') AND created_by = auth.uid());
+CREATE POLICY "Admins update incidents" ON public.privacy_incidents
+  FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'Administrador'));
+
+-- LGPD functions
+CREATE OR REPLACE FUNCTION public.record_consent(_document_type text, _version text, _ip text DEFAULT NULL, _user_agent text DEFAULT NULL)
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE _user_id uuid := auth.uid(); _id uuid;
+BEGIN
+  IF _user_id IS NULL THEN RAISE EXCEPTION 'Authentication required'; END IF;
+  IF _document_type NOT IN ('privacy_policy','terms_of_use','cookies') THEN RAISE EXCEPTION 'Invalid document_type'; END IF;
+  INSERT INTO public.consents (user_id, document_type, version, ip, user_agent)
+  VALUES (_user_id, _document_type, _version, _ip, _user_agent) RETURNING id INTO _id;
+  RETURN _id;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.request_data_action(_type text, _notes text DEFAULT NULL)
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE _user_id uuid := auth.uid(); _user_email text; _id uuid;
+BEGIN
+  IF _user_id IS NULL THEN RAISE EXCEPTION 'Authentication required'; END IF;
+  IF _type NOT IN ('export','delete','rectify','revoke_consent','access_history') THEN RAISE EXCEPTION 'Invalid request type'; END IF;
+  SELECT email INTO _user_email FROM auth.users WHERE id = _user_id;
+  INSERT INTO public.data_requests (user_id, user_email, type, notes)
+  VALUES (_user_id, COALESCE(_user_email,''), _type, _notes) RETURNING id INTO _id;
+  INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+  VALUES (_user_id, COALESCE(_user_email,''), 'Solicitação LGPD: ' || _type, 'other', _type, _notes);
+  RETURN _id;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.get_my_data_export()
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE _user_id uuid := auth.uid(); _result jsonb;
+BEGIN
+  IF _user_id IS NULL THEN RAISE EXCEPTION 'Authentication required'; END IF;
+  SELECT jsonb_build_object(
+    'profile', (SELECT to_jsonb(p) FROM public.profiles p WHERE p.id = _user_id),
+    'documents', (SELECT COALESCE(jsonb_agg(to_jsonb(d)),'[]'::jsonb) FROM public.documents d WHERE d.user_id = _user_id),
+    'consents', (SELECT COALESCE(jsonb_agg(to_jsonb(c)),'[]'::jsonb) FROM public.consents c WHERE c.user_id = _user_id),
+    'audit_logs', (SELECT COALESCE(jsonb_agg(to_jsonb(a)),'[]'::jsonb) FROM public.audit_logs a WHERE a.user_id = _user_id),
+    'data_requests', (SELECT COALESCE(jsonb_agg(to_jsonb(r)),'[]'::jsonb) FROM public.data_requests r WHERE r.user_id = _user_id),
+    'exported_at', now()
+  ) INTO _result;
+  RETURN _result;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.anonymize_user(_target uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE _hash text := substr(md5(_target::text || now()::text), 1, 12);
+BEGIN
+  IF NOT has_role(auth.uid(), 'Administrador') THEN RAISE EXCEPTION 'Admin required'; END IF;
+  UPDATE public.profiles SET email = 'anon_' || _hash || '@anonymized.local', active = false WHERE id = _target;
+  UPDATE public.audit_logs SET user_email = 'anon_' || _hash WHERE user_id = _target;
+  INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+  VALUES (auth.uid(), '', 'Anonimização LGPD', 'edit', _target::text, 'Usuário anonimizado conforme Art. 16 LGPD');
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.log_pii_access(_resource_type text, _resource_id text, _target_user_id uuid DEFAULT NULL, _reason text DEFAULT NULL)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE _uid uuid := auth.uid(); _email text;
+BEGIN
+  IF _uid IS NULL THEN RAISE EXCEPTION 'Authentication required'; END IF;
+  IF _target_user_id IS NOT NULL AND _target_user_id = _uid THEN RETURN; END IF;
+  SELECT email INTO _email FROM auth.users WHERE id = _uid;
+  INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+  VALUES (_uid, COALESCE(_email,''), 'Acesso a dado pessoal (' || _resource_type || ')', 'access', _resource_id,
+    COALESCE(_reason, 'Visualização administrativa') ||
+      CASE WHEN _target_user_id IS NOT NULL THEN ' | titular=' || _target_user_id::text ELSE '' END);
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.report_incident_anpd(_incident_id uuid, _protocol text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE _uid uuid := auth.uid(); _email text;
+BEGIN
+  IF NOT has_role(_uid, 'Administrador') THEN RAISE EXCEPTION 'Admin required'; END IF;
+  SELECT email INTO _email FROM auth.users WHERE id = _uid;
+  UPDATE public.privacy_incidents SET reported_to_anpd_at = now(), anpd_protocol = _protocol,
+    status = CASE WHEN status = 'open' THEN 'anpd_notified' ELSE status END, updated_at = now()
+   WHERE id = _incident_id;
+  INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+  VALUES (_uid, COALESCE(_email,''), 'Incidente reportado à ANPD', 'other', _incident_id::text, 'Protocolo: ' || COALESCE(_protocol,''));
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.resolve_incident(_incident_id uuid, _resolution text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE _uid uuid := auth.uid(); _email text;
+BEGIN
+  IF NOT has_role(_uid, 'Administrador') THEN RAISE EXCEPTION 'Admin required'; END IF;
+  SELECT email INTO _email FROM auth.users WHERE id = _uid;
+  UPDATE public.privacy_incidents SET status = 'resolved', resolution = COALESCE(_resolution,''), updated_at = now() WHERE id = _incident_id;
+  INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+  VALUES (_uid, COALESCE(_email,''), 'Incidente LGPD resolvido', 'other', _incident_id::text, _resolution);
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.notify_incident_subjects(_incident_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE _uid uuid := auth.uid(); _email text;
+BEGIN
+  IF NOT has_role(_uid, 'Administrador') THEN RAISE EXCEPTION 'Admin required'; END IF;
+  SELECT email INTO _email FROM auth.users WHERE id = _uid;
+  UPDATE public.privacy_incidents SET data_subjects_notified_at = now(), updated_at = now() WHERE id = _incident_id;
+  INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+  VALUES (_uid, COALESCE(_email,''), 'Titulares notificados sobre incidente LGPD', 'other', _incident_id::text, 'Art. 48 LGPD');
+END; $$;
