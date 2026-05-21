@@ -2,3 +2,9 @@ project_id = "pevufhsuhbfnvstfoulq"
 
 [functions.scheduled-license-check]
 verify_jwt = false
+
+[functions.purge-expired]
+verify_jwt = false
+
+[functions.backup-restore]
+verify_jwt = false
