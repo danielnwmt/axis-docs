@@ -52,7 +52,13 @@ export function normalizeLicenseServerUrl(server_url: string): string {
 function getHardwareId(): string {
   let id = localStorage.getItem("axis_hw_id");
   if (!id) {
-    id = crypto.randomUUID();
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      id = crypto.randomUUID();
+    } else {
+      // Fallback para contextos não-seguros (HTTP) onde crypto.randomUUID não existe
+      const rnd = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+      id = `${rnd(8)}-${rnd(4)}-4${rnd(3)}-${(8 + Math.floor(Math.random() * 4)).toString(16)}${rnd(3)}-${rnd(12)}`;
+    }
     localStorage.setItem("axis_hw_id", id);
   }
   return id;
