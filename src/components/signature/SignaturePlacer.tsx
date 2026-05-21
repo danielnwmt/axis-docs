@@ -192,35 +192,33 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
           {showBox && (
             <div
               onMouseDown={handleBoxMouseDown}
-              className="absolute shadow-sm overflow-hidden"
+              className="absolute overflow-hidden flex"
               style={{
                 left: `${value!.xRatio * 100}%`,
                 top: `${value!.yRatio * 100}%`,
                 width: `${value!.wRatio * 100}%`,
                 height: `${value!.hRatio * 100}%`,
                 cursor: "move",
-                background: "linear-gradient(135deg, #e8f0e4 0%, #d4e4d0 50%, #c8dcc4 100%)",
-                border: "2.5px solid #2d5a3d",
-                outline: "1px solid #2d5a3d",
-                outlineOffset: "-5px",
-                borderRadius: "6px",
+                background: "#ffffff",
+                border: "1px solid #1e3a5f",
+                borderRadius: "3px",
+                boxShadow: "0 1px 3px rgba(15,27,61,0.12)",
               }}
             >
-              <div className="px-2 pt-1.5 text-center text-[7px] font-bold tracking-wide leading-none" style={{ color: "#2d5a3d" }}>
-                CERTIFICADO DIGITAL ICP-BRASIL
-              </div>
-              <div className="mx-2 mt-1 mb-1.5 px-2 py-1.5 leading-tight" style={{ border: "1px solid #2d5a3d", background: "transparent", borderRadius: "4px", height: "calc(100% - 24px)" }}>
-                <div className="text-[6.5px] font-bold mb-0.5" style={{ color: "#2d5a3d" }}>DADOS DO TITULAR:</div>
-                <div className="text-[6px] truncate" style={{ color: "#2d5a3d" }}>
-                  <span className="font-semibold">Nome (CN):</span> <span className="font-bold">{signerLabel}</span>
+              <div style={{ width: "5px", background: "#1e3a5f", flexShrink: 0 }} />
+              <div className="flex-1 min-w-0 px-2 py-1.5 flex flex-col justify-center leading-tight">
+                <div className="text-[5.5px] font-semibold uppercase mb-0.5" style={{ color: "#1e3a5f", letterSpacing: "0.6px" }}>
+                  Assinado digitalmente por
                 </div>
-                <div className="text-[6px] truncate" style={{ color: "#2d5a3d" }}>
-                  <span className="font-semibold">Organização (O):</span> ICP-Brasil
+                <div className="text-[8px] font-bold truncate" style={{ color: "#0f1b3d" }}>
+                  {signerLabel}
                 </div>
-                <div className="text-[6px] truncate" style={{ color: "#2d5a3d" }}>
-                  <span className="font-semibold">Data:</span> {new Date().toUTCString().replace("GMT", "(UTC)")}
+                <div className="text-[5.5px] truncate mt-0.5" style={{ color: "#475569" }}>
+                  ICP-Brasil · A1 · {new Date().toISOString().slice(0,10)} {new Date().toISOString().slice(11,19)} UTC
                 </div>
-                <div className="text-[5.5px] truncate mt-0.5" style={{ color: "#3a4a3a" }}>hash: a1b2c3d4e5f6…</div>
+                <div className="text-[5px] truncate font-mono mt-px" style={{ color: "#64748b" }}>
+                  hash: a1b2c3d4e5f6…
+                </div>
               </div>
               <div onMouseDown={handleResizeMouseDown("nw")} className={handleStyle} style={{ left: -6, top: -6, cursor: "nwse-resize" }} />
               <div onMouseDown={handleResizeMouseDown("ne")} className={handleStyle} style={{ right: -6, top: -6, cursor: "nesw-resize" }} />

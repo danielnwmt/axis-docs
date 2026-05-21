@@ -197,76 +197,72 @@ Deno.serve(async (req) => {
 
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-        const green = rgb(0.18, 0.40, 0.25);
-        const bgGreen = rgb(0.82, 0.89, 0.80);
-        const grey = rgb(0.25, 0.30, 0.25);
+        const navy = rgb(0.12, 0.23, 0.37);
+        const navyDark = rgb(0.06, 0.11, 0.24);
+        const slate = rgb(0.28, 0.33, 0.41);
+        const slateLight = rgb(0.39, 0.45, 0.55);
+        const white = rgb(1, 1, 1);
 
-        // Outer ornate green border on pale green background
+        // Card background
         page.drawRectangle({
           x, y, width: wBox, height: hBox,
-          borderColor: green, borderWidth: 1.4,
-          color: bgGreen, opacity: 1,
+          color: white, opacity: 1,
+          borderColor: navy, borderWidth: 0.6,
         });
-        // Inner thin green line (double-border ornate look)
+        // Left accent bar
+        const barW = Math.max(2.5, wBox * 0.022);
         page.drawRectangle({
-          x: x + 2.2, y: y + 2.2, width: wBox - 4.4, height: hBox - 4.4,
-          borderColor: green, borderWidth: 0.4,
+          x, y, width: barW, height: hBox,
+          color: navy,
         });
 
         const cn = certRow.subject_cn || user.email || "Assinante";
-        const dt = new Date().toUTCString().replace("GMT", "(UTC)");
-        const shortHash = hashOriginal.substring(0, 32);
+        const now = new Date();
+        const dt = `${now.toISOString().slice(0,10)} ${now.toISOString().slice(11,19)} UTC`;
+        const shortHash = hashOriginal.substring(0, 40);
 
-        const headerH = hBox * 0.16;
-        const headerY = y + hBox - headerH;
-        const headerText = "CERTIFICADO DIGITAL ICP-BRASIL";
-        const headerSize = Math.max(5, hBox * 0.09);
-        const headerW = fontBold.widthOfTextAtSize(headerText, headerSize);
-        page.drawText(headerText, {
-          x: x + (wBox - headerW) / 2, y: headerY + headerH * 0.3,
-          size: headerSize, font: fontBold, color: green,
-        });
+        const padL = barW + wBox * 0.035;
+        const padR = wBox * 0.035;
+        const contentW = wBox - padL - padR;
 
-        // Inner content area (green border)
-        const innerPad = wBox * 0.05;
-        const innerX = x + innerPad;
-        const innerY = y + innerPad;
-        const innerW = wBox - innerPad * 2;
-        const innerH = hBox - headerH - innerPad;
-        page.drawRectangle({
-          x: innerX, y: innerY, width: innerW, height: innerH,
-          borderColor: green, borderWidth: 0.6,
-        });
+        // Line sizes proportional to box height
+        const labelSize = Math.max(4.5, hBox * 0.12);
+        const nameSize = Math.max(6, hBox * 0.20);
+        const metaSize = Math.max(4.2, hBox * 0.11);
+        const hashSize = Math.max(3.8, hBox * 0.10);
 
-        const labelSize = Math.max(4.5, innerH * 0.1);
-        const valSize = Math.max(5, innerH * 0.11);
-        const lineGap = innerH / 5.5;
-        let cy = innerY + innerH - lineGap * 0.85;
+        const totalH = labelSize + nameSize + metaSize + hashSize + hBox * 0.10;
+        let cy = y + (hBox + totalH) / 2 - labelSize;
 
-        page.drawText("DADOS DO TITULAR:", {
-          x: innerX + innerW * 0.05, y: cy,
-          size: Math.max(5, innerH * 0.11), font: fontBold, color: green,
+        page.drawText("ASSINADO DIGITALMENTE POR", {
+          x: x + padL, y: cy,
+          size: labelSize, font: fontBold, color: navy,
         });
-        cy -= lineGap * 0.95;
-        page.drawText(`Nome (CN): ${cn.slice(0, 38)}`, {
-          x: innerX + innerW * 0.05, y: cy,
-          size: valSize, font: fontBold, color: green,
+        cy -= nameSize + hBox * 0.02;
+
+        // Truncate name to fit width
+        let nameText = cn;
+        while (fontBold.widthOfTextAtSize(nameText, nameSize) > contentW && nameText.length > 4) {
+          nameText = nameText.slice(0, -2);
+        }
+        if (nameText !== cn) nameText = nameText.slice(0, -1) + "…";
+        page.drawText(nameText, {
+          x: x + padL, y: cy,
+          size: nameSize, font: fontBold, color: navyDark,
         });
-        cy -= lineGap * 0.9;
-        page.drawText(`Organização (O): ICP-Brasil`, {
-          x: innerX + innerW * 0.05, y: cy,
-          size: valSize, font, color: green,
+        cy -= metaSize + hBox * 0.04;
+
+        page.drawText(`ICP-Brasil  ·  A1  ·  ${dt}`, {
+          x: x + padL, y: cy,
+          size: metaSize, font, color: slate,
         });
-        cy -= lineGap * 0.9;
-        page.drawText(`Data: ${dt}`, {
-          x: innerX + innerW * 0.05, y: cy,
-          size: labelSize, font, color: grey,
-        });
-        cy -= lineGap * 0.85;
+        cy -= hashSize + hBox * 0.025;
+
         page.drawText(`hash: ${shortHash}`, {
-          x: innerX + innerW * 0.05, y: cy,
-          size: Math.max(4, innerH * 0.09), font, color: grey,
+          x: x + padL, y: cy,
+          size: hashSize, font, color: slateLight,
         });
+
       } catch (e) {
         console.error("draw stamp failed:", e);
       }
