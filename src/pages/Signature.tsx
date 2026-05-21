@@ -183,7 +183,7 @@ export default function Signature() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Assinatura Digital</h1>
-          <p className="text-sm text-muted-foreground mt-1">Assine documentos PDF com certificado ICP-Brasil</p>
+          <p className="text-sm text-muted-foreground mt-1">Assine documentos PDF com certificado Digital</p>
         </div>
       </div>
 
@@ -253,7 +253,7 @@ export default function Signature() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <ShieldCheck className="w-5 h-5 text-primary" />
-                Certificado ICP-Brasil A1
+                Certificado Digital
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
