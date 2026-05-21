@@ -183,7 +183,7 @@ export default function Signature() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Assinatura Digital</h1>
-          <p className="text-sm text-muted-foreground mt-1">Assine documentos PDF com certificado ICP-Brasil</p>
+          <p className="text-sm text-muted-foreground mt-1">Assine documentos PDF com certificado Digital</p>
         </div>
       </div>
 
