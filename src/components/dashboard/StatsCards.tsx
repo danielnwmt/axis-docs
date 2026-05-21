@@ -48,6 +48,12 @@ export function StatsCards() {
     },
   });
 
+  const { data: quota } = useQuery({
+    queryKey: ["dashboard-storage-quota"],
+    queryFn: getStorageQuota,
+    refetchInterval: 5 * 60 * 1000,
+  });
+
   const s = stats || { totalDocs: 0, ocrDocs: 0, signedDocs: 0, pendingOcr: 0, ocrError: 0, newToday: 0, monthGrowth: 0, ocrGrowth: 0, signGrowth: 0, pendingGrowth: 0 };
   const ocrPercent = s.totalDocs > 0 ? Math.round((s.ocrDocs / s.totalDocs) * 100) : 0;
   const signedPercent = s.totalDocs > 0 ? Math.round((s.signedDocs / s.totalDocs) * 100) : 0;
