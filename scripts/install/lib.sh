@@ -134,7 +134,8 @@ ADMINSQL
 
 wait_apt_lock() {
   local waited=0
-  local max_wait=600
+  local max_wait="${APT_LOCK_MAX_WAIT:-120}"
+  systemctl stop apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
   while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
      || fuser /var/lib/dpkg/lock >/dev/null 2>&1 \
      || fuser /var/lib/apt/lists/lock >/dev/null 2>&1 \
@@ -142,14 +143,23 @@ wait_apt_lock() {
      || pgrep -x apt >/dev/null 2>&1 \
      || pgrep -x apt-get >/dev/null 2>&1; do
     if [ "$waited" -ge "$max_wait" ]; then
-      echo "⚠ Tempo esgotado aguardando o apt. Parando unattended-upgrades para prosseguir."
-      systemctl stop unattended-upgrades >/dev/null 2>&1 || true
-      systemctl stop apt-daily.service apt-daily-upgrade.service >/dev/null 2>&1 || true
+      echo "⚠ O apt/dpkg continuou travado por ${max_wait}s. Tentando liberar atualizações automáticas."
+      systemctl stop unattended-upgrades apt-daily.service apt-daily-upgrade.service >/dev/null 2>&1 || true
+      pkill -TERM -x unattended-upgr >/dev/null 2>&1 || true
       sleep 2
-      break
+      if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
+        || fuser /var/lib/dpkg/lock >/dev/null 2>&1 \
+        || fuser /var/lib/apt/lists/lock >/dev/null 2>&1; then
+        echo "❌ O bloqueio do apt/dpkg ainda está ativo. Reinicie o servidor e rode novamente: sudo bash install.sh"
+        exit 1
+      fi
+      dpkg --configure -a >/dev/null 2>&1 || true
+      return
     fi
     if [ "$waited" -eq 0 ]; then
-      echo "⏳ Aguardando outro processo apt/dpkg liberar o lock (unattended-upgrades)..."
+      echo "⏳ Aguardando outro processo apt/dpkg liberar o lock (máx. ${max_wait}s)..."
+    elif [ $((waited % 30)) -eq 0 ]; then
+      echo "⏳ Ainda aguardando liberação do apt/dpkg... ${waited}s"
     fi
     sleep 5
     waited=$((waited + 5))
@@ -158,12 +168,12 @@ wait_apt_lock() {
 
 apt_install() {
   wait_apt_lock
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" "$@"
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq -o DPkg::Lock::Timeout=120 -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" "$@"
 }
 
 apt_update() {
   wait_apt_lock
-  DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq -o DPkg::Lock::Timeout=120
 }
 
 install_base_packages() {
