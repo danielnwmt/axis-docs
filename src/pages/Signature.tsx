@@ -12,6 +12,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { fetchDriveFileBlob } from "@/lib/driveFile";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SignaturePlacer, SignaturePosition } from "@/components/signature/SignaturePlacer";
 
 type SignatureStep = "upload" | "signing" | "done";
 
