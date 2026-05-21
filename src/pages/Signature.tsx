@@ -44,6 +44,19 @@ export default function Signature() {
     }
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("user_certificates" as any)
+        .select("subject_cn")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (data && (data as any).subject_cn) setCertCN((data as any).subject_cn);
+    })();
+  }, [user]);
+
+
   const loadFromStorage = async (filePath: string, fileName: string) => {
     try {
       let blob: Blob;
