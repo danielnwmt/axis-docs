@@ -212,6 +212,10 @@ export default function Users() {
     }
   };
 
+  if (roleLoaded && !isAdmin && !isOperator) {
+    return <Navigate to="/" replace />;
+  }
+
   return (
     <AppLayout>
       <div className="flex items-center justify-between mb-6">
@@ -219,10 +223,13 @@ export default function Users() {
           <UsersIcon className="w-7 h-7 text-primary" />
           <h1 className="font-display text-2xl font-bold text-foreground">Usuários e Permissões</h1>
         </div>
-        <Button className="gap-2" onClick={() => setOpen(true)}>
-          <Plus className="w-4 h-4" /> Novo Usuário
-        </Button>
+        {canCreate && (
+          <Button className="gap-2" onClick={() => { setRole(allowedRoles[allowedRoles.length - 1]); setOpen(true); }}>
+            <Plus className="w-4 h-4" /> Novo Usuário
+          </Button>
+        )}
       </div>
+
 
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
