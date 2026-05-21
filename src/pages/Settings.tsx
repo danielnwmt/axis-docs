@@ -1142,8 +1142,20 @@ function LicencaSection() {
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<Section>(null);
+  const { user } = useAuth();
+  const { data: profile } = useQuery({
+    queryKey: ["profile-role-settings", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("role").eq("id", user!.id).single();
+      return data;
+    },
+    enabled: !!user,
+  });
+  const isAdmin = profile?.role === "Administrador";
+  const visibleCards = sectionCards.filter((s) => isAdmin || !ADMIN_ONLY_SECTIONS.includes(s.id));
 
   const renderContent = () => {
+    if (activeSection && !isAdmin && ADMIN_ONLY_SECTIONS.includes(activeSection)) return null;
     switch (activeSection) {
       case "orgao": return <OrgaoSection />;
       case "categorias": return <ListManager itemLabel="Categoria" tableName="categories" />;
