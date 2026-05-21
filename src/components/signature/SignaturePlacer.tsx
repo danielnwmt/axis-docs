@@ -222,7 +222,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
                     {signerLabel}
                   </div>
                   <div className="text-[7px] truncate mt-0.5" style={{ color: "#475569" }}>
-                    {new Date().toISOString().slice(0,10)} {new Date().toISOString().slice(11,19)} UTC
+                    {now.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", hour12: false })}
                   </div>
                 </div>
               </div>
