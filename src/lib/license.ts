@@ -156,12 +156,19 @@ async function validateLicenseDirect(): Promise<LicenseInfo> {
   try {
     const ctrl = new AbortController();
     const timeoutId = window.setTimeout(() => ctrl.abort(), 10000);
-    // Em instalações locais (sem edge functions), usa proxy do Nginx para evitar CORS
+    // Aceita qualquer domínio. Em instalações locais sem edge functions, usa proxy
+    // Nginx genérico (/license-proxy/<host>/<path>) para evitar CORS.
     const targetUrl = normalizeLicenseServerUrl(config.server_url);
     const isLovableCloud = typeof window !== "undefined" && /\.lovable(project)?\.app$/.test(window.location.hostname);
-    const finalUrl = !isLovableCloud && targetUrl.startsWith("https://getlicence.lovable.app/")
-      ? targetUrl.replace("https://getlicence.lovable.app/", `${window.location.origin}/license-proxy/`)
-      : targetUrl;
+    let finalUrl = targetUrl;
+    if (!isLovableCloud) {
+      try {
+        const u = new URL(targetUrl);
+        finalUrl = `${window.location.origin}/license-proxy/${u.host}${u.pathname}${u.search}`;
+      } catch {
+        finalUrl = targetUrl;
+      }
+    }
     const resp = await fetch(finalUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
