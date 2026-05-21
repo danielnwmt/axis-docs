@@ -12,6 +12,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { fetchDriveFileBlob } from "@/lib/driveFile";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SignaturePlacer, SignaturePosition } from "@/components/signature/SignaturePlacer";
 
 type SignatureStep = "upload" | "signing" | "done";
 
@@ -24,6 +25,7 @@ export default function Signature() {
   const [existingDocId, setExistingDocId] = useState<string | null>(null);
   const [existingFilePath, setExistingFilePath] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [signaturePos, setSignaturePos] = useState<SignaturePosition | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -130,7 +132,7 @@ export default function Signature() {
 
       setProgress(60);
       const { data: signResult, error: signError } = await supabase.functions.invoke("sign-pdf-a1", {
-        body: { documentId: docId, filePath, fileName: file.name, password: pfxPassword },
+        body: { documentId: docId, filePath, fileName: file.name, password: pfxPassword, position: signaturePos },
       });
 
       setProgress(90);
@@ -158,6 +160,7 @@ export default function Signature() {
     setProgress(0);
     setExistingDocId(null);
     setExistingFilePath(null);
+    setSignaturePos(null);
   };
 
   return (
@@ -170,7 +173,7 @@ export default function Signature() {
       </div>
 
       {step === "upload" && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 max-w-[1400px]">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -198,8 +201,8 @@ export default function Signature() {
                   />
                 </div>
               ) : (
-                <div className="border border-border rounded-xl p-4 space-y-3">
-                  <div className="flex items-center gap-3">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 border border-border rounded-lg p-3">
                     <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                       <FileText className="w-5 h-5 text-primary" />
                     </div>
@@ -207,25 +210,31 @@ export default function Signature() {
                       <p className="text-sm font-medium text-foreground truncate">{file.name}</p>
                       <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
                     </div>
+                    {!existingDocId && (
+                      <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                        Trocar
+                      </Button>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
                   </div>
-                  {!existingDocId && (
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => fileInputRef.current?.click()}>
-                      Trocar arquivo
-                    </Button>
-                  )}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    onChange={handleFileSelect}
-                    className="hidden"
+                  <SignaturePlacer
+                    file={file}
+                    signerLabel={user?.email?.split("@")[0] || "Assinatura"}
+                    value={signaturePos}
+                    onChange={setSignaturePos}
                   />
                 </div>
               )}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="h-fit lg:sticky lg:top-4">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <ShieldCheck className="w-5 h-5 text-primary" />
@@ -248,7 +257,7 @@ export default function Signature() {
               <div className="bg-info/10 rounded-lg p-3 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-info mt-0.5 shrink-0" />
                 <p className="text-xs text-info">
-                  Assinatura PAdES local com seu certificado A1 ICP-Brasil. A senha é usada apenas para esta assinatura e não fica armazenada.
+                  Clique no PDF para definir o local da assinatura visível. A senha é usada apenas para esta assinatura e não fica armazenada.
                 </p>
               </div>
 

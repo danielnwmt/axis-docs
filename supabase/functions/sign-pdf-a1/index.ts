@@ -3,7 +3,7 @@ import forge from "npm:node-forge@1.3.1";
 import signpdf from "npm:@signpdf/signpdf@3.2.4";
 import { P12Signer } from "npm:@signpdf/signer-p12@3.2.4";
 import { pdflibAddPlaceholder } from "npm:@signpdf/placeholder-pdf-lib@3.2.4";
-import { PDFDocument } from "npm:pdf-lib@1.17.1";
+import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authErr } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authErr || !user) return new Response(JSON.stringify({ error: "Token inválido" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { documentId, filePath, fileName, password, reason } = await req.json();
+    const { documentId, filePath, fileName, password, reason, position } = await req.json();
     if (!documentId || !filePath || !fileName || !password) {
       return new Response(JSON.stringify({ error: "Dados incompletos (informe senha do certificado)" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -180,6 +180,46 @@ Deno.serve(async (req) => {
 
     // Add PAdES placeholder + sign
     const pdfDoc = await PDFDocument.load(pdfBytes);
+
+    // Draw visible signature stamp if position provided
+    if (position && typeof position.page === "number") {
+      try {
+        const pages = pdfDoc.getPages();
+        const pageIdx = Math.max(0, Math.min(pages.length - 1, position.page - 1));
+        const page = pages[pageIdx];
+        const { width: pw, height: ph } = page.getSize();
+        const x = (position.xRatio ?? 0) * pw;
+        const wBox = (position.wRatio ?? 0.28) * pw;
+        const hBox = (position.hRatio ?? 0.08) * ph;
+        // PDF coords: origin bottom-left. Position.y is from top of page.
+        const yTop = (position.yRatio ?? 0) * ph;
+        const y = ph - yTop - hBox;
+
+        const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+        const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+        page.drawRectangle({
+          x, y, width: wBox, height: hBox,
+          borderColor: rgb(0.05, 0.25, 0.55),
+          borderWidth: 1,
+          color: rgb(0.95, 0.97, 1),
+          opacity: 0.95,
+        });
+        const cn = certRow.subject_cn || user.email || "Assinante";
+        const cpf = certRow.cpf ? `CPF: ${certRow.cpf}` : "";
+        const dt = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+        const pad = 4;
+        let cy = y + hBox - 11;
+        page.drawText("Assinado digitalmente por:", { x: x + pad, y: cy, size: 7, font, color: rgb(0.2, 0.2, 0.2) });
+        cy -= 10;
+        page.drawText(cn.slice(0, 45), { x: x + pad, y: cy, size: 8, font: fontBold, color: rgb(0.05, 0.15, 0.4) });
+        if (cpf) { cy -= 9; page.drawText(cpf, { x: x + pad, y: cy, size: 7, font, color: rgb(0.2, 0.2, 0.2) }); }
+        cy -= 9; page.drawText(`Data: ${dt}`, { x: x + pad, y: cy, size: 6.5, font, color: rgb(0.3, 0.3, 0.3) });
+        cy -= 8; page.drawText("ICP-Brasil A1 (PAdES)", { x: x + pad, y: cy, size: 6.5, font: fontBold, color: rgb(0.05, 0.25, 0.55) });
+      } catch (e) {
+        console.error("draw stamp failed:", e);
+      }
+    }
+
     pdflibAddPlaceholder({
       pdfDoc,
       reason: reason || "Assinatura digital ICP-Brasil",
