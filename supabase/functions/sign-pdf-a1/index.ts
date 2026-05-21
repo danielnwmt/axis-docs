@@ -88,6 +88,48 @@ async function loadDriveConfig(supabase: any) {
   return JSON.parse(await cfgFile.text());
 }
 
+async function loadCertForUser(supabase: any, userId: string, password: string) {
+  const { data: certRow, error: certErr } = await supabase
+    .from("user_certificates")
+    .select("pfx_encrypted, pfx_iv, pfx_auth_tag, subject_cn, cpf, issuer, valid_to, fingerprint_sha256")
+    .eq("user_id", userId).maybeSingle();
+  if (certErr || !certRow) throw new Error("Você ainda não cadastrou seu certificado A1. Vá em Configurações → Meu Certificado.");
+  if (certRow.valid_to && new Date(certRow.valid_to) < new Date()) throw new Error("Certificado expirado. Cadastre um novo .pfx.");
+  const ct = fromPgHex(certRow.pfx_encrypted);
+  const iv = fromPgHex(certRow.pfx_iv);
+  const tag = fromPgHex(certRow.pfx_auth_tag);
+  let pfxBytes: Uint8Array;
+  try { pfxBytes = await aesGcmDecrypt(ct, iv, tag); }
+  catch { throw new Error("Falha ao descriptografar certificado (chave do servidor inválida)"); }
+  try {
+    const binStr = String.fromCharCode(...pfxBytes);
+    const p12Asn1 = forge.asn1.fromDer(binStr);
+    forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, password);
+  } catch { throw new Error("Senha do certificado incorreta"); }
+  return { certRow, pfxBytes };
+}
+
+async function uploadSignedToDrive(supabase: any, signedName: string, signedPdfBuf: Uint8Array) {
+  const cfg = await loadDriveConfig(supabase);
+  const token = await getDriveAccessToken(cfg.serviceAccount);
+  const metadata: any = { name: signedName };
+  if (cfg.folderId) metadata.parents = [cfg.folderId];
+  const boundary = "----axisdocs" + Math.random().toString(36).slice(2);
+  const body = new Blob([
+    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`,
+    signedPdfBuf,
+    `\r\n--${boundary}--`,
+  ]);
+  const upRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` },
+    body,
+  });
+  if (!upRes.ok) throw new Error(`Falha ao subir assinado no Drive: ${await upRes.text()}`);
+  const upJson = await upRes.json();
+  return { driveFileId: upJson.id as string, driveLink: `https://drive.google.com/file/d/${upJson.id}/view` };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -100,6 +142,118 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authErr } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authErr || !user) return new Response(JSON.stringify({ error: "Token inválido" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    const contentType = req.headers.get("content-type") || "";
+
+    // ========= MODE: multipart/form-data — assina o PDF SEM antes subir o original ao Drive =========
+    if (contentType.includes("multipart/form-data")) {
+      const form = await req.formData();
+      const file = form.get("file") as File | null;
+      const password = String(form.get("password") || "");
+      const fileName = String(form.get("fileName") || (file?.name ?? "documento.pdf"));
+      const positionRaw = form.get("position");
+      const position = positionRaw ? JSON.parse(String(positionRaw)) : null;
+      if (!file || !password) {
+        return new Response(JSON.stringify({ error: "Arquivo e senha são obrigatórios" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      let certRow: any, pfxBytes: Uint8Array;
+      try { ({ certRow, pfxBytes } = await loadCertForUser(supabase, user.id, password)); }
+      catch (e: any) {
+        return new Response(JSON.stringify({ error: e?.message || "Erro" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const pdfBytes = new Uint8Array(await file.arrayBuffer());
+      const hashOriginal = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", pdfBytes)))
+        .map((b) => b.toString(16).padStart(2, "0")).join("");
+
+      // Assina em memória usando o mesmo bloco existente abaixo (replicado de forma mínima)
+      const pdfDoc = await PDFDocument.load(pdfBytes);
+      if (position && typeof position.page === "number") {
+        try {
+          const pages = pdfDoc.getPages();
+          const pageIdx = Math.max(0, Math.min(pages.length - 1, position.page - 1));
+          const page = pages[pageIdx];
+          const { width: pw, height: ph } = page.getSize();
+          const x = (position.xRatio ?? 0) * pw;
+          const wBox = (position.wRatio ?? 0.28) * pw;
+          const hBox = (position.hRatio ?? 0.08) * ph;
+          const yTop = (position.yRatio ?? 0) * ph;
+          const y = ph - yTop - hBox;
+          const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+          const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+          const navy = rgb(0.12, 0.23, 0.37);
+          const navyDark = rgb(0.06, 0.11, 0.24);
+          const slate = rgb(0.28, 0.33, 0.41);
+          const white = rgb(1, 1, 1);
+          page.drawRectangle({ x, y, width: wBox, height: hBox, color: white, opacity: 1, borderColor: navy, borderWidth: 0.6 });
+          const barW = Math.max(2.5, wBox * 0.022);
+          page.drawRectangle({ x, y, width: barW, height: hBox, color: navy });
+          const cn = certRow.subject_cn || user.email || "Assinante";
+          const now = new Date();
+          const dt = `${now.toISOString().slice(0,10)} ${now.toISOString().slice(11,19)} UTC`;
+          const padL = barW + wBox * 0.035;
+          const padR = wBox * 0.035;
+          const textX = x + padL;
+          const contentW = wBox - padL - padR;
+          const labelSize = Math.max(6, hBox * 0.14);
+          const nameSize = Math.max(8, hBox * 0.22);
+          const cpfSize = Math.max(7, hBox * 0.18);
+          const metaSize = Math.max(6, hBox * 0.13);
+          const formatCPF = (raw: string): string => {
+            const digits = raw.replace(/\D/g, "");
+            if (digits.length === 11) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+            return raw;
+          };
+          const colonIdx = cn.lastIndexOf(":");
+          let nameOnly = cn, cpfOnly = "";
+          if (colonIdx > 0) { nameOnly = cn.slice(0, colonIdx).trim(); cpfOnly = cn.slice(colonIdx + 1).trim(); }
+          const gap = hBox * 0.04;
+          const totalH = labelSize + nameSize + (cpfOnly ? cpfSize + gap : 0) + metaSize + gap * 3;
+          let cy = y + (hBox + totalH) / 2 - labelSize;
+          page.drawText("ASSINADO DIGITALMENTE POR", { x: textX, y: cy, size: labelSize, font: fontBold, color: navy });
+          cy -= nameSize + gap;
+          let nameText = nameOnly;
+          while (fontBold.widthOfTextAtSize(nameText, nameSize) > contentW && nameText.length > 4) nameText = nameText.slice(0, -2);
+          if (nameText !== nameOnly) nameText = nameText.slice(0, -1) + "…";
+          page.drawText(nameText, { x: textX, y: cy, size: nameSize, font: fontBold, color: navyDark });
+          if (cpfOnly) {
+            cy -= cpfSize + gap;
+            page.drawText(`CPF: ${formatCPF(cpfOnly)}`, { x: textX, y: cy, size: cpfSize, font: fontBold, color: navyDark });
+          }
+          cy -= metaSize + gap;
+          page.drawText(dt, { x: textX, y: cy, size: metaSize, font, color: slate });
+        } catch (e) { console.error("draw stamp failed:", e); }
+      }
+      pdflibAddPlaceholder({
+        pdfDoc, reason: "Assinatura digital ICP-Brasil",
+        name: certRow.subject_cn || user.email || "Assinante",
+        location: "Brasil", contactInfo: user.email || "", signatureLength: 8192,
+      });
+      const pdfWithPlaceholder = await pdfDoc.save();
+      const signer = new P12Signer(pfxBytes, { passphrase: password });
+      const signedPdfBuf: Uint8Array = await new SignPdf().sign(pdfWithPlaceholder as any, signer);
+      const hashSigned = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", signedPdfBuf)))
+        .map((b) => b.toString(16).padStart(2, "0")).join("");
+
+      const signedName = fileName.replace(/\.pdf$/i, "") + "_assinado.pdf";
+      const { driveFileId, driveLink } = await uploadSignedToDrive(supabase, signedName, signedPdfBuf);
+      const signTimestamp = new Date().toISOString();
+      const certInfo = {
+        provider: "Servidor local (PAdES)", cert_type: "A1", standard: "ICP-Brasil", pades: true,
+        subject_cn: certRow.subject_cn, cpf: certRow.cpf, issuer: certRow.issuer,
+        fingerprint_sha256: certRow.fingerprint_sha256, signer_email: user.email,
+      };
+
+      return new Response(JSON.stringify({
+        signed: true, signedName, driveFileId, driveLink,
+        filePath: `drive://${driveFileId}`, fileSize: signedPdfBuf.byteLength,
+        fileHashOriginal: hashOriginal, fileHashSigned: hashSigned,
+        signTimestamp, certInfo, subjectCn: certRow.subject_cn,
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ========= MODE: JSON — assina documento já existente (fluxo legado) =========
     const { documentId, filePath, fileName, password, reason, position } = await req.json();
     if (!documentId || !filePath || !fileName || !password) {
       return new Response(JSON.stringify({ error: "Dados incompletos (informe senha do certificado)" }), {
