@@ -60,6 +60,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
   useEffect(() => {
     if (!pdf || !canvasRef.current) return;
     let cancelled = false;
+    let renderTask: any = null;
     (async () => {
       const p = await pdf.getPage(page);
       const containerW = containerRef.current?.clientWidth || 800;
@@ -72,10 +73,11 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
       canvas.height = viewport.height;
       canvas.style.width = `${viewport.width}px`;
       canvas.style.height = `${viewport.height}px`;
-      await p.render({ canvasContext: ctx, viewport }).promise;
+      renderTask = p.render({ canvasContext: ctx, viewport });
+      try { await renderTask.promise; } catch (e: any) { if (e?.name !== "RenderingCancelledException") throw e; }
       if (!cancelled) setRenderSize({ w: viewport.width, h: viewport.height });
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; try { renderTask?.cancel(); } catch {} };
   }, [pdf, page]);
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
@@ -198,15 +200,16 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
                 height: `${value!.hRatio * 100}%`,
                 cursor: "move",
                 background: "linear-gradient(135deg, #e8f0e4 0%, #d4e4d0 50%, #c8dcc4 100%)",
-                border: "2px solid #2d5a3d",
+                border: "2.5px solid #2d5a3d",
                 outline: "1px solid #2d5a3d",
-                outlineOffset: "-4px",
+                outlineOffset: "-5px",
+                borderRadius: "6px",
               }}
             >
               <div className="px-2 pt-1.5 text-center text-[7px] font-bold tracking-wide leading-none" style={{ color: "#2d5a3d" }}>
                 CERTIFICADO DIGITAL ICP-BRASIL
               </div>
-              <div className="mx-1.5 mt-1 mb-1 px-2 py-1.5 leading-tight" style={{ border: "1px solid #2d5a3d", background: "transparent", height: "calc(100% - 22px)" }}>
+              <div className="mx-2 mt-1 mb-1.5 px-2 py-1.5 leading-tight" style={{ border: "1px solid #2d5a3d", background: "transparent", borderRadius: "4px", height: "calc(100% - 24px)" }}>
                 <div className="text-[6.5px] font-bold mb-0.5" style={{ color: "#2d5a3d" }}>DADOS DO TITULAR:</div>
                 <div className="text-[6px] truncate" style={{ color: "#2d5a3d" }}>
                   <span className="font-semibold">Nome (CN):</span> <span className="font-bold">{signerLabel}</span>
