@@ -492,6 +492,21 @@ export default function Upload() {
     <AppLayout>
       <h1 className="font-display text-2xl font-bold text-foreground mb-6">{editId ? "Editar Documento" : "Upload de Documentos"}</h1>
 
+      {!editId && hasCert === false && (
+        <div className="bg-card rounded-xl border border-destructive/40 shadow-sm p-6 mb-6 flex items-start gap-4">
+          <AlertCircle className="w-6 h-6 text-destructive shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h2 className="font-display font-semibold text-foreground text-lg mb-1">Nenhum certificado cadastrado</h2>
+            <p className="text-sm text-muted-foreground mb-3">
+              Você precisa cadastrar um certificado digital ICP-Brasil A1 (.pfx) antes de enviar ou assinar documentos.
+            </p>
+            <Button type="button" onClick={() => navigate("/settings")} className="gap-2">
+              <ShieldCheck className="w-4 h-4" /> Cadastrar certificado
+            </Button>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-card rounded-xl border border-border shadow-sm p-6 space-y-4">
           <h2 className="font-display font-semibold text-foreground text-lg">Dados do Documento</h2>
