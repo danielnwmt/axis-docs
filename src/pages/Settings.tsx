@@ -1155,10 +1155,16 @@ export default function Settings() {
     enabled: !!user,
   });
   const isAdmin = profile?.role === "Administrador";
-  const visibleCards = sectionCards.filter((s) => isAdmin || !ADMIN_ONLY_SECTIONS.includes(s.id));
+  const isOperator = profile?.role === "Operador";
+  const canSee = (id: Section) => {
+    if (ADMIN_ONLY_SECTIONS.includes(id)) return isAdmin;
+    if (STAFF_SECTIONS.includes(id)) return isAdmin || isOperator;
+    return true;
+  };
+  const visibleCards = sectionCards.filter((s) => canSee(s.id));
 
   const renderContent = () => {
-    if (activeSection && !isAdmin && ADMIN_ONLY_SECTIONS.includes(activeSection)) return null;
+    if (activeSection && !canSee(activeSection)) return null;
     switch (activeSection) {
       case "orgao": return <OrgaoSection />;
       case "categorias": return <ListManager itemLabel="Categoria" tableName="categories" />;
