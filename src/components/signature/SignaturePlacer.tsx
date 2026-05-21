@@ -178,7 +178,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
           {showBox && (
             <div
               onMouseDown={handleBoxMouseDown}
-              className="absolute border-2 border-primary bg-primary/15 flex flex-col items-start justify-center text-[9px] font-semibold text-primary px-1.5 leading-tight overflow-hidden"
+              className="absolute bg-white border border-border shadow-sm overflow-hidden"
               style={{
                 left: `${value!.xRatio * 100}%`,
                 top: `${value!.yRatio * 100}%`,
@@ -187,8 +187,16 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
                 cursor: "move",
               }}
             >
-              <span className="opacity-70">Assinado por:</span>
-              <span className="truncate w-full font-bold">{signerLabel}</span>
+              <div className="px-1.5 pt-1 text-[7px] font-bold text-muted-foreground tracking-wide leading-none">
+                DOCUMENTO DE TESTE ASSINADO POR:
+              </div>
+              <div className="mx-1 mt-1 mb-1 border rounded-sm px-1.5 py-1 leading-tight" style={{ borderColor: "hsl(210 80% 45%)", background: "hsl(210 100% 97%)", height: "calc(100% - 18px)" }}>
+                <div className="text-[6px] text-muted-foreground font-medium">ASSINADO DIGITALMENTE POR:</div>
+                <div className="text-[10px] font-bold truncate" style={{ color: "hsl(210 80% 35%)" }}>{signerLabel}</div>
+                <div className="text-[6px] text-muted-foreground italic">(Ambiente de Homologação)</div>
+                <div className="text-[6px] text-muted-foreground">{new Date().toUTCString().replace("GMT", "(UTC)")}</div>
+                <div className="text-[5.5px] text-muted-foreground truncate">hash: a1b2c3d4e5f6…</div>
+              </div>
               <div onMouseDown={handleResizeMouseDown("nw")} className={handleStyle} style={{ left: -6, top: -6, cursor: "nwse-resize" }} />
               <div onMouseDown={handleResizeMouseDown("ne")} className={handleStyle} style={{ right: -6, top: -6, cursor: "nesw-resize" }} />
               <div onMouseDown={handleResizeMouseDown("sw")} className={handleStyle} style={{ left: -6, bottom: -6, cursor: "nesw-resize" }} />
