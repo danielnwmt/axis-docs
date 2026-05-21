@@ -198,20 +198,19 @@ Deno.serve(async (req) => {
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
         const green = rgb(0.18, 0.40, 0.25);
-        const cream = rgb(0.96, 0.93, 0.82);
+        const bgGreen = rgb(0.82, 0.89, 0.80);
         const grey = rgb(0.25, 0.30, 0.25);
 
-        // Outer ornate green border on cream background
+        // Outer ornate green border on pale green background
         page.drawRectangle({
           x, y, width: wBox, height: hBox,
           borderColor: green, borderWidth: 1.4,
-          color: cream, opacity: 1,
+          color: bgGreen, opacity: 1,
         });
         // Inner thin green line (double-border ornate look)
         page.drawRectangle({
           x: x + 2.2, y: y + 2.2, width: wBox - 4.4, height: hBox - 4.4,
           borderColor: green, borderWidth: 0.4,
-          color: cream, opacity: 1,
         });
 
         const cn = certRow.subject_cn || user.email || "Assinante";
@@ -234,7 +233,6 @@ Deno.serve(async (req) => {
         page.drawRectangle({
           x: innerX, y: innerY, width: innerW, height: innerH,
           borderColor: green, borderWidth: 0.6,
-          color: cream, opacity: 1,
         });
 
         const lineGap = innerH / 5.5;
