@@ -179,7 +179,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
         </div>
       </div>
 
-      <div ref={containerRef} className="relative border border-border rounded-lg overflow-auto bg-muted/30 max-h-[600px] flex justify-center">
+      <div ref={containerRef} className="relative border border-border rounded-lg overflow-auto bg-muted/30 max-h-[75vh] flex justify-center">
         {loading && (
           <div className="flex items-center gap-2 p-10 text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" /> Carregando PDF…
