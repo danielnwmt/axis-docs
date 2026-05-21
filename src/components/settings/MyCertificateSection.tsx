@@ -89,6 +89,33 @@ export function MyCertificateSection() {
     setCert(null);
   };
 
+  const handleChangePassword = async () => {
+    if (!currentPwd || !newPwd) {
+      toast({ title: "Preencha todos os campos", variant: "destructive" }); return;
+    }
+    if (newPwd.length < 4) {
+      toast({ title: "Senha muito curta", description: "Mínimo 4 caracteres.", variant: "destructive" }); return;
+    }
+    if (newPwd !== confirmPwd) {
+      toast({ title: "Senhas não coincidem", variant: "destructive" }); return;
+    }
+    setChanging(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("change-certificate-password", {
+        body: { currentPassword: currentPwd, newPassword: newPwd },
+      });
+      if (error || (data as any)?.error) {
+        throw new Error((data as any)?.error || error?.message || "Falha ao alterar senha");
+      }
+      toast({ title: "Senha alterada!", description: "Use a nova senha nas próximas assinaturas." });
+      setCurrentPwd(""); setNewPwd(""); setConfirmPwd("");
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setChanging(false);
+    }
+  };
+
   const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString("pt-BR") : "—";
   const expired = cert?.valid_to ? new Date(cert.valid_to) < new Date() : false;
   const daysLeft = cert?.valid_to ? Math.ceil((new Date(cert.valid_to).getTime() - Date.now()) / 86400000) : null;
