@@ -16,7 +16,10 @@ import { useQuery } from "@tanstack/react-query";
 
 type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | null;
 
-const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "backup", "licenca"];
+// Apenas Administrador
+const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "licenca"];
+// Administrador + Operador (escondidas apenas para Usuário)
+const STAFF_SECTIONS: Section[] = ["backup"];
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
@@ -1152,10 +1155,16 @@ export default function Settings() {
     enabled: !!user,
   });
   const isAdmin = profile?.role === "Administrador";
-  const visibleCards = sectionCards.filter((s) => isAdmin || !ADMIN_ONLY_SECTIONS.includes(s.id));
+  const isOperator = profile?.role === "Operador";
+  const canSee = (id: Section) => {
+    if (ADMIN_ONLY_SECTIONS.includes(id)) return isAdmin;
+    if (STAFF_SECTIONS.includes(id)) return isAdmin || isOperator;
+    return true;
+  };
+  const visibleCards = sectionCards.filter((s) => canSee(s.id));
 
   const renderContent = () => {
-    if (activeSection && !isAdmin && ADMIN_ONLY_SECTIONS.includes(activeSection)) return null;
+    if (activeSection && !canSee(activeSection)) return null;
     switch (activeSection) {
       case "orgao": return <OrgaoSection />;
       case "categorias": return <ListManager itemLabel="Categoria" tableName="categories" />;
