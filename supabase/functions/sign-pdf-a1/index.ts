@@ -254,30 +254,49 @@ Deno.serve(async (req) => {
         const textX = x + padL + logoW;
         const contentW = wBox - padL - padR - logoW;
 
-        const labelSize = Math.max(6, hBox * 0.16);
-        const nameSize = Math.max(8, hBox * 0.26);
-        const metaSize = Math.max(6, hBox * 0.15);
+        const labelSize = Math.max(6, hBox * 0.14);
+        const nameSize = Math.max(8, hBox * 0.22);
+        const cpfSize = Math.max(7, hBox * 0.18);
+        const metaSize = Math.max(6, hBox * 0.13);
 
-        const totalH = labelSize + nameSize + metaSize + hBox * 0.08;
+        // Split "NAME:CPF" pattern (ICP-Brasil CN format)
+        const colonIdx = cn.lastIndexOf(":");
+        let nameOnly = cn;
+        let cpfOnly = "";
+        if (colonIdx > 0) {
+          nameOnly = cn.slice(0, colonIdx).trim();
+          cpfOnly = cn.slice(colonIdx + 1).trim();
+        }
+
+        const gap = hBox * 0.04;
+        const totalH = labelSize + nameSize + (cpfOnly ? cpfSize + gap : 0) + metaSize + gap * 3;
         let cy = y + (hBox + totalH) / 2 - labelSize;
 
         page.drawText("ASSINADO DIGITALMENTE POR", {
           x: textX, y: cy,
           size: labelSize, font: fontBold, color: navy,
         });
-        cy -= nameSize + hBox * 0.02;
+        cy -= nameSize + gap;
 
-        let nameText = cn;
+        let nameText = nameOnly;
         while (fontBold.widthOfTextAtSize(nameText, nameSize) > contentW && nameText.length > 4) {
           nameText = nameText.slice(0, -2);
         }
-        if (nameText !== cn) nameText = nameText.slice(0, -1) + "…";
+        if (nameText !== nameOnly) nameText = nameText.slice(0, -1) + "…";
         page.drawText(nameText, {
           x: textX, y: cy,
           size: nameSize, font: fontBold, color: navyDark,
         });
-        cy -= metaSize + hBox * 0.04;
 
+        if (cpfOnly) {
+          cy -= cpfSize + gap;
+          page.drawText(`CPF: ${cpfOnly}`, {
+            x: textX, y: cy,
+            size: cpfSize, font: fontBold, color: navyDark,
+          });
+        }
+
+        cy -= metaSize + gap;
         page.drawText(dt, {
           x: textX, y: cy,
           size: metaSize, font, color: slate,

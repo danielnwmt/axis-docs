@@ -218,9 +218,23 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
                   <div className="text-[7px] font-semibold uppercase mb-0.5" style={{ color: "#1e3a5f", letterSpacing: "0.5px" }}>
                     Assinado digitalmente por
                   </div>
-                  <div className="text-[10px] font-bold truncate" style={{ color: "#0f1b3d" }}>
-                    {signerLabel}
-                  </div>
+                  {(() => {
+                    const idx = signerLabel.lastIndexOf(":");
+                    const nameOnly = idx > 0 ? signerLabel.slice(0, idx).trim() : signerLabel;
+                    const cpfOnly = idx > 0 ? signerLabel.slice(idx + 1).trim() : "";
+                    return (
+                      <>
+                        <div className="text-[10px] font-bold truncate" style={{ color: "#0f1b3d" }}>
+                          {nameOnly}
+                        </div>
+                        {cpfOnly && (
+                          <div className="text-[9px] font-semibold truncate" style={{ color: "#0f1b3d" }}>
+                            CPF: {cpfOnly}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                   <div className="text-[7px] truncate mt-0.5" style={{ color: "#475569" }}>
                     {now.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", hour12: false })}
                   </div>
