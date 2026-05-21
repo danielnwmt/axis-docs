@@ -669,6 +669,21 @@ export default function Upload() {
             </div>
           )}
 
+          {signDocument && hasPdf && files.find((f) => f.type === "application/pdf") && (
+            <div className="bg-card rounded-xl border border-border shadow-sm p-4 space-y-2">
+              <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
+                <PenTool className="w-4 h-4 text-primary" /> Posicionar assinatura
+              </h3>
+              <SignaturePlacer
+                file={files.find((f) => f.type === "application/pdf")!}
+                signerLabel={certCN || user?.email?.split("@")[0] || "Assinatura"}
+                value={signaturePos}
+                onChange={setSignaturePos}
+              />
+            </div>
+          )}
+
+
           <Button type="submit" className="w-full gap-2" disabled={(!editId && files.length === 0) || loading}>
             <UploadIcon className="w-4 h-4" />
             {loading ? "Salvando..." : editId ? "Salvar Alterações" : signDocument && hasPdf ? "Enviar e Assinar Documento" : "Enviar Documento"}
