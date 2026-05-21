@@ -1,10 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export interface StorageQuota {
-  limitBytes: number;       // 0 = sem limite definido
+  limitBytes: number;
   usedBytes: number;
   remainingBytes: number;
-  percent: number;          // 0-100
+  percent: number;
   level: "ok" | "warn" | "full";
   hasLimit: boolean;
 }
@@ -31,11 +31,13 @@ export async function getStorageQuota(): Promise<StorageQuota> {
   const limitGb = Number(cfg?.storage_limit_gb || 0);
   const limitBytes = limitGb > 0 ? Math.floor(limitGb * GB) : 0;
 
-  // Recompute live from documents to stay accurate even between cron runs
+  // Compute live usage from the Drive root folder
   let usedBytes = Number(cfg?.storage_used_bytes || 0);
   try {
-    const { data: docs } = await supabase.from("documents").select("file_size");
-    if (docs) usedBytes = docs.reduce((s: number, d: any) => s + (Number(d.file_size) || 0), 0);
+    const { data, error } = await supabase.functions.invoke("get-drive-usage");
+    if (!error && data && typeof data.usedBytes === "number") {
+      usedBytes = data.usedBytes;
+    }
   } catch {}
 
   const remainingBytes = limitBytes > 0 ? Math.max(0, limitBytes - usedBytes) : 0;
