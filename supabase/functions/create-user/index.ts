@@ -39,15 +39,28 @@ Deno.serve(async (req) => {
       .select("role, active")
       .eq("id", callerData.user.id)
       .maybeSingle();
-    if (!callerProfile || callerProfile.role !== "Administrador" || !callerProfile.active) {
+    if (!callerProfile || !callerProfile.active) {
       return new Response(JSON.stringify({ error: "Permissão negada" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const isAdmin = callerProfile.role === "Administrador";
+    const isOperator = callerProfile.role === "Operador";
 
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
+
+    // Operador can only create users; everything else is admin-only
+    if (!isAdmin) {
+      if (!(isOperator && action === "create")) {
+        return new Response(JSON.stringify({ error: "Permissão negada" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
 
     if (req.method === "POST" && action === "create") {
       const { email, password, role, unit, full_name, cpf } = await req.json();
