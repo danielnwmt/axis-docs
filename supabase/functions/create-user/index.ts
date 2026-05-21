@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from("profiles").insert({
         id: userData.user.id,
         email,
-        role: role || "Usuário",
+        role: requestedRole,
         unit: unit || "",
         full_name: full_name || "",
         cpf: cpf || "",
