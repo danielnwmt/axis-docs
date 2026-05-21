@@ -87,19 +87,22 @@ export function StatsCards() {
       iconColor: "text-success",
     },
     {
-      label: "Pendências OCR",
-      value: s.pendingOcr,
-      subtitle: s.ocrError > 0 ? `${s.ocrError} com erro` : "Sem erros",
-      trend: s.pendingGrowth,
-      icon: AlertCircle,
-      iconBg: "bg-warning/10",
-      iconColor: "text-warning",
+      label: "Armazenamento",
+      value: formatBytes(quota?.usedBytes ?? 0),
+      subtitle: quota?.hasLimit
+        ? `de ${(quota.limitBytes / (1024 ** 3)).toFixed(0)} GB · ${(quota.percent ?? 0).toFixed(1)}% usado`
+        : "Sem limite definido",
+      trend: 0,
+      icon: HardDrive,
+      iconBg: quota && quota.percent >= 90 ? "bg-destructive/10" : quota && quota.percent >= 75 ? "bg-warning/10" : "bg-info/10",
+      iconColor: quota && quota.percent >= 90 ? "text-destructive" : quota && quota.percent >= 75 ? "text-warning" : "text-info",
+      isStorage: true,
     },
   ];
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {cards.map((stat) => (
+      {cards.map((stat: any) => (
         <div
           key={stat.label}
           className="bg-card rounded-xl px-5 py-4 border border-border shadow-sm animate-fade-in"
@@ -111,10 +114,18 @@ export function StatsCards() {
             </div>
           </div>
           <p className="text-3xl font-bold font-display text-foreground leading-none">
-            {stat.value.toLocaleString("pt-BR")}
+            {typeof stat.value === "number" ? stat.value.toLocaleString("pt-BR") : stat.value}
           </p>
           <p className="text-xs text-muted-foreground mt-1.5">{stat.subtitle}</p>
-          {stat.trend !== 0 && (
+          {stat.isStorage && quota?.hasLimit && (
+            <div className="h-1.5 rounded-full bg-secondary overflow-hidden mt-2">
+              <div
+                className={`h-full transition-all ${quota.percent >= 90 ? "bg-destructive" : quota.percent >= 75 ? "bg-warning" : "bg-primary"}`}
+                style={{ width: `${Math.min(quota.percent, 100)}%` }}
+              />
+            </div>
+          )}
+          {!stat.isStorage && stat.trend !== 0 && (
             <p className={`text-xs mt-1 flex items-center gap-1 font-medium ${
               stat.trend > 0 ? "text-success" : "text-destructive"
             }`}>
@@ -131,3 +142,4 @@ export function StatsCards() {
     </div>
   );
 }
+
