@@ -1758,7 +1758,7 @@ install_ssl_packages() {
   fi
 
   log "Instalando pacotes de SSL"
-  apt-get install -y -qq certbot python3-certbot-nginx
+  apt_install certbot python3-certbot-nginx
   success "Pacotes de SSL instalados"
 }
 
