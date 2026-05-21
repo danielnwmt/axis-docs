@@ -1,14 +1,17 @@
-import { Search, Bell, Mail, Settings, FileText, Download, Eye } from "lucide-react";
+import { Search, Bell, Mail, HardDrive, FileText, Download, Eye, ShieldAlert, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PdfPreview } from "@/components/documents/PdfPreview";
 import { Button } from "@/components/ui/button";
 import { fetchDriveFileBlob } from "@/lib/driveFile";
 import { LanguageSelector } from "@/components/LanguageSelector";
+import { getStorageQuota, formatBytes } from "@/lib/storageQuota";
 
 interface SearchResult {
   id: string;
