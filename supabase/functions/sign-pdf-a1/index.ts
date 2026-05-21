@@ -233,7 +233,6 @@ Deno.serve(async (req) => {
         page.drawRectangle({
           x: innerX, y: innerY, width: innerW, height: innerH,
           borderColor: green, borderWidth: 0.6,
-          color: cream, opacity: 1,
         });
 
         const lineGap = innerH / 5.5;
