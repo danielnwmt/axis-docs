@@ -193,7 +193,27 @@ export default function Signature() {
         </div>
       </div>
 
-      {step === "upload" && (
+      {step === "upload" && hasCert === false && (
+        <Card className="max-w-2xl">
+          <CardContent className="py-10 text-center space-y-4">
+            <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
+              <AlertCircle className="w-7 h-7 text-destructive" />
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-foreground">Nenhum certificado cadastrado</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Para enviar e assinar documentos é necessário cadastrar um certificado digital A1 (.pfx) nas configurações.
+              </p>
+            </div>
+            <Button onClick={() => navigate("/settings")} className="gap-2">
+              <ShieldCheck className="w-4 h-4" />
+              Cadastrar certificado
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {step === "upload" && hasCert === true && (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 max-w-[1400px]">
           <Card>
             <CardHeader>
