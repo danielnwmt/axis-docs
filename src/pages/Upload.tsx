@@ -575,20 +575,31 @@ export default function Upload() {
             )}
 
             {signDocument && (
-              <div className="ml-7 space-y-2">
-                <Label className="text-xs">Tipo de Certificado</Label>
-                <Select value={certType} onValueChange={setCertType}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="A1">Certificado A1 (arquivo digital)</SelectItem>
-                    <SelectItem value="A3">Certificado A3 (token/cartão)</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="ml-7 space-y-3">
+                <div className="space-y-2">
+                  <Label className="text-xs">Senha do certificado (.pfx)</Label>
+                  <div className="relative">
+                    <Input
+                      type={showPfxPassword ? "text" : "password"}
+                      value={pfxPassword}
+                      onChange={(e) => setPfxPassword(e.target.value)}
+                      placeholder="Senha do certificado A1"
+                      autoComplete="off"
+                      className="pr-10 h-9"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPfxPassword((v) => !v)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                      tabIndex={-1}
+                    >
+                      {showPfxPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
                 <div className="flex items-start gap-2 bg-info/10 rounded-lg p-2.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-info mt-0.5 shrink-0" />
-                  <p className="text-xs text-info">A assinatura será processada via ZapSign com certificado ICP-Brasil.</p>
+                  <p className="text-xs text-info">Posicione o carimbo no PDF ao lado e informe a senha. Assinatura PAdES ICP-Brasil A1.</p>
                 </div>
               </div>
             )}
