@@ -261,7 +261,8 @@ export default function Users() {
                   </Badge>
                 </td>
                 <td className="px-5 py-3">
-                  {user.id !== currentUser?.id && (
+                  {canManageRow && user.id !== currentUser?.id && (
+
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button className="p-1 hover:bg-secondary rounded-lg transition-colors">
