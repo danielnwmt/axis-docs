@@ -158,7 +158,25 @@ export default function Signature() {
 
       setProgress(90);
       if (signError || (signResult as any)?.error) {
-        throw new Error((signResult as any)?.error || signError?.message || "Falha na assinatura");
+        let msg = (signResult as any)?.error || signError?.message || "Falha na assinatura";
+        try {
+          const ctx: any = (signError as any)?.context;
+          if (ctx?.json) {
+            const j = await ctx.json();
+            if (j?.error) msg = j.error;
+          } else if (ctx?.text) {
+            const t = await ctx.text();
+            const j = JSON.parse(t);
+            if (j?.error) msg = j.error;
+          }
+        } catch {}
+        if (/senha.*incorret/i.test(msg)) {
+          toast({ title: "Senha incorreta", description: "A senha do certificado está incorreta. Tente novamente.", variant: "destructive" });
+          setSigning(false);
+          setStep("upload");
+          return;
+        }
+        throw new Error(msg);
       }
 
       toast({ title: "Documento assinado!", description: "Assinatura PAdES ICP-Brasil A1 aplicada com sucesso." });
