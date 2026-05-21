@@ -239,7 +239,7 @@ export default function Signature() {
                   </div>
                   <SignaturePlacer
                     file={file}
-                    signerLabel={user?.email?.split("@")[0] || "Assinatura"}
+                    signerLabel={certCN || user?.email?.split("@")[0] || "Assinatura"}
                     value={signaturePos}
                     onChange={setSignaturePos}
                   />
