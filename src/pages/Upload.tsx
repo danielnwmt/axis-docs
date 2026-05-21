@@ -670,8 +670,8 @@ export default function Upload() {
                   <UploadIcon className="w-8 h-8 text-accent" />
                 </div>
                 <div className="text-center">
-                  <p className="font-semibold text-foreground">{blocked ? "Upload bloqueado" : editId ? "Adicionar novos arquivos" : "Arraste arquivos aqui"}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{blocked ? "Cadastre um certificado digital para enviar arquivos" : "ou clique para selecionar"}</p>
+                  <p className="font-semibold text-foreground">{blocked ? (quotaFull ? "Limite de armazenamento atingido" : "Upload bloqueado") : editId ? "Adicionar novos arquivos" : "Arraste arquivos aqui"}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{blocked ? (quotaFull && quotaInfo ? `Sua licença permite ${quotaInfo.limit} (usado ${quotaInfo.used}). Contate o administrador.` : "Cadastre um certificado digital para enviar arquivos") : "ou clique para selecionar"}</p>
                   <p className="text-xs text-muted-foreground mt-2">PDF, JPG, PNG, DOCX, XLSX</p>
                 </div>
                 <input id="file-input" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" className="hidden" onChange={handleFileSelect} disabled={blocked} />
