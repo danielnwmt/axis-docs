@@ -26,6 +26,7 @@ export default function Signature() {
   const [existingFilePath, setExistingFilePath] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [signaturePos, setSignaturePos] = useState<SignaturePosition | null>(null);
+  const [certCN, setCertCN] = useState<string>("");
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -42,6 +43,19 @@ export default function Signature() {
       loadFromStorage(paramFilePath, paramFileName || "document.pdf");
     }
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("user_certificates" as any)
+        .select("subject_cn")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (data && (data as any).subject_cn) setCertCN((data as any).subject_cn);
+    })();
+  }, [user]);
+
 
   const loadFromStorage = async (filePath: string, fileName: string) => {
     try {
@@ -225,7 +239,7 @@ export default function Signature() {
                   </div>
                   <SignaturePlacer
                     file={file}
-                    signerLabel={user?.email?.split("@")[0] || "Assinatura"}
+                    signerLabel={certCN || user?.email?.split("@")[0] || "Assinatura"}
                     value={signaturePos}
                     onChange={setSignaturePos}
                   />
