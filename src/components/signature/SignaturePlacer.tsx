@@ -209,7 +209,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
               <div className="px-2 pt-1.5 text-center text-[7px] font-bold tracking-wide leading-none" style={{ color: "#2d5a3d" }}>
                 CERTIFICADO DIGITAL ICP-BRASIL
               </div>
-              <div className="mx-1.5 mt-1 mb-1 px-2 py-1.5 leading-tight" style={{ border: "1px solid #2d5a3d", background: "transparent", height: "calc(100% - 22px)" }}>
+              <div className="mx-2 mt-1 mb-1.5 px-2 py-1.5 leading-tight" style={{ border: "1px solid #2d5a3d", background: "transparent", borderRadius: "4px", height: "calc(100% - 24px)" }}>
                 <div className="text-[6.5px] font-bold mb-0.5" style={{ color: "#2d5a3d" }}>DADOS DO TITULAR:</div>
                 <div className="text-[6px] truncate" style={{ color: "#2d5a3d" }}>
                   <span className="font-semibold">Nome (CN):</span> <span className="font-bold">{signerLabel}</span>
