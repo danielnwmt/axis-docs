@@ -207,18 +207,18 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
               }}
             >
               <div style={{ width: "5px", background: "#1e3a5f", flexShrink: 0 }} />
-              <div className="flex-1 min-w-0 px-2 py-1.5 flex flex-col justify-center leading-tight">
-                <div className="text-[5.5px] font-semibold uppercase mb-0.5" style={{ color: "#1e3a5f", letterSpacing: "0.6px" }}>
-                  Assinado digitalmente por
-                </div>
-                <div className="text-[8px] font-bold truncate" style={{ color: "#0f1b3d" }}>
-                  {signerLabel}
-                </div>
-                <div className="text-[5.5px] truncate mt-0.5" style={{ color: "#475569" }}>
-                  ICP-Brasil · A1 · {new Date().toISOString().slice(0,10)} {new Date().toISOString().slice(11,19)} UTC
-                </div>
-                <div className="text-[5px] truncate font-mono mt-px" style={{ color: "#64748b" }}>
-                  hash: a1b2c3d4e5f6…
+              <div className="flex-1 min-w-0 px-2 py-1.5 flex items-center gap-2 leading-tight">
+                <img src={axisLogo} alt="" className="h-full max-h-[80%] w-auto object-contain flex-shrink-0" style={{ maxWidth: "22%" }} />
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                  <div className="text-[7px] font-semibold uppercase mb-0.5" style={{ color: "#1e3a5f", letterSpacing: "0.5px" }}>
+                    Assinado digitalmente por
+                  </div>
+                  <div className="text-[10px] font-bold truncate" style={{ color: "#0f1b3d" }}>
+                    {signerLabel}
+                  </div>
+                  <div className="text-[7px] truncate mt-0.5" style={{ color: "#475569" }}>
+                    {new Date().toISOString().slice(0,10)} {new Date().toISOString().slice(11,19)} UTC
+                  </div>
                 </div>
               </div>
               <div onMouseDown={handleResizeMouseDown("nw")} className={handleStyle} style={{ left: -6, top: -6, cursor: "nwse-resize" }} />
