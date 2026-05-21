@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Upload as UploadIcon, FileUp, X, PenTool, ShieldCheck, Eye, EyeOff, Download, FileText, Loader2 } from "lucide-react";
+import { Upload as UploadIcon, FileUp, X, PenTool, ShieldCheck, Eye, EyeOff, Download, FileText, Loader2, AlertCircle } from "lucide-react";
 import { SignaturePlacer, SignaturePosition } from "@/components/signature/SignaturePlacer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
