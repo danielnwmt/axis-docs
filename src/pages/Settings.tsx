@@ -11,8 +11,12 @@ import { fetchManagedList } from "@/lib/adminLookups";
 import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, unlockTemporary, normalizeLicenseServerUrl, type LicenseInfo } from "@/lib/license";
 import { getStorageQuota, formatBytes, type StorageQuota } from "@/lib/storageQuota";
 import { MyCertificateSection } from "@/components/settings/MyCertificateSection";
+import { useAuth } from "@/contexts/AuthContext";
+import { useQuery } from "@tanstack/react-query";
 
 type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | null;
+
+const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "backup", "licenca"];
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
@@ -1138,8 +1142,20 @@ function LicencaSection() {
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<Section>(null);
+  const { user } = useAuth();
+  const { data: profile } = useQuery({
+    queryKey: ["profile-role-settings", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("role").eq("id", user!.id).single();
+      return data;
+    },
+    enabled: !!user,
+  });
+  const isAdmin = profile?.role === "Administrador";
+  const visibleCards = sectionCards.filter((s) => isAdmin || !ADMIN_ONLY_SECTIONS.includes(s.id));
 
   const renderContent = () => {
+    if (activeSection && !isAdmin && ADMIN_ONLY_SECTIONS.includes(activeSection)) return null;
     switch (activeSection) {
       case "orgao": return <OrgaoSection />;
       case "categorias": return <ListManager itemLabel="Categoria" tableName="categories" />;
@@ -1173,7 +1189,7 @@ export default function Settings() {
 
       {!activeSection ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {sectionCards.map((section) => (
+          {visibleCards.map((section) => (
             <div
               key={section.id}
               onClick={() => setActiveSection(section.id)}
