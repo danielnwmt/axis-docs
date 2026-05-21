@@ -599,6 +599,9 @@ interface BackupFileRow {
   expires_at: string;
   deleted_at: string | null;
   created_at: string;
+  sha256?: string | null;
+  encrypted?: boolean | null;
+  encryption_algo?: string | null;
 }
 
 function BackupSection() {
@@ -831,7 +834,9 @@ function BackupSection() {
                     <div className="font-medium truncate">{f.file_name}</div>
                     <div className="text-xs text-muted-foreground">
                       {new Date(f.created_at).toLocaleString("pt-BR")} · {(f.file_size / 1024).toFixed(1)} KB · retenção {f.retention_days}d
+                      {f.encrypted && <span className="ml-2 text-success">🔒 {f.encryption_algo || "AES-256-GCM"}</span>}
                     </div>
+                    {f.sha256 && <div className="text-[10px] text-muted-foreground font-mono truncate">SHA-256: {f.sha256}</div>}
                     <div className={`text-xs ${f.deleted_at ? "text-muted-foreground" : expired ? "text-destructive" : "text-primary"}`}>
                       {f.deleted_at
                         ? `Removido em ${new Date(f.deleted_at).toLocaleString("pt-BR")}`
