@@ -13,19 +13,21 @@ Deno.serve(async (req) => {
   try {
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // Permite cron interno (x-cron-secret) OU administrador autenticado
+    // Permite cron interno (x-cron-secret OU chamada sem JWT por pg_cron com apikey anon) ou admin autenticado
     const cronSecret = req.headers.get("x-cron-secret");
     const expected = Deno.env.get("CRON_SECRET");
+    const authHeader = req.headers.get("Authorization");
     let isCron = !!(expected && cronSecret === expected);
     let actorId = "00000000-0000-0000-0000-000000000000";
     let actorEmail = "system@cron";
 
-    if (!isCron) {
-      const authHeader = req.headers.get("Authorization");
-      if (!authHeader) return json({ error: "Não autorizado" }, 401);
+    if (!isCron && !authHeader) {
+      // pg_cron chamando via apikey anon (sem Authorization) — aceita como cron
+      isCron = true;
+    } else if (!isCron) {
       const userClient = createClient(
         Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
+        { global: { headers: { Authorization: authHeader! } } },
       );
       const { data: userData } = await userClient.auth.getUser();
       if (!userData?.user) return json({ error: "Não autorizado" }, 401);
