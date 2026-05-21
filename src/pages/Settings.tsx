@@ -1189,7 +1189,7 @@ export default function Settings() {
 
       {!activeSection ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {sectionCards.map((section) => (
+          {visibleCards.map((section) => (
             <div
               key={section.id}
               onClick={() => setActiveSection(section.id)}
