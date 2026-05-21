@@ -227,3 +227,152 @@ export function AppHeader() {
     </header>
   );
 }
+
+function StorageInfoButton() {
+  const { data: quota } = useQuery({
+    queryKey: ["header-storage-quota"],
+    queryFn: getStorageQuota,
+    refetchInterval: 5 * 60 * 1000,
+  });
+  const percent = quota?.percent ?? 0;
+  const limitGb = quota?.limitBytes ? quota.limitBytes / (1024 ** 3) : 0;
+  const barColor = percent >= 90 ? "bg-destructive" : percent >= 75 ? "bg-warning" : "bg-primary";
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="p-2 rounded-lg hover:bg-secondary transition-colors text-muted-foreground" title="Armazenamento">
+          <HardDrive className="w-5 h-5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-foreground">Armazenamento da licença</p>
+            <span className="text-xs text-muted-foreground">{percent.toFixed(1)}% usado</span>
+          </div>
+          <div className="h-2 rounded-full bg-secondary overflow-hidden">
+            <div className={`h-full ${barColor} transition-all`} style={{ width: `${Math.min(percent, 100)}%` }} />
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            <div>
+              <p className="text-muted-foreground">Usado</p>
+              <p className="font-semibold text-foreground">{formatBytes(quota?.usedBytes ?? 0)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Limite</p>
+              <p className="font-semibold text-foreground">{quota?.hasLimit ? `${limitGb} GB` : "—"}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Disponível</p>
+              <p className="font-semibold text-success">{quota?.hasLimit ? formatBytes(quota.remainingBytes) : "—"}</p>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+interface NotifItem {
+  id: string;
+  title: string;
+  description: string;
+  icon: typeof Bell;
+  tone: "warning" | "danger" | "info";
+}
+
+function NotificationsBell() {
+  const { user } = useAuth();
+  const { data: notifications = [] } = useQuery<NotifItem[]>({
+    queryKey: ["header-notifications", user?.id],
+    enabled: !!user,
+    refetchInterval: 5 * 60 * 1000,
+    queryFn: async () => {
+      const items: NotifItem[] = [];
+      // Storage warning
+      try {
+        const q = await getStorageQuota();
+        if (q.hasLimit && q.percent >= 90) {
+          items.push({
+            id: "storage",
+            title: "Armazenamento quase cheio",
+            description: `${q.percent.toFixed(1)}% utilizado. Apenas ${formatBytes(q.remainingBytes)} disponíveis.`,
+            icon: AlertTriangle,
+            tone: q.percent >= 95 ? "danger" : "warning",
+          });
+        }
+      } catch {}
+      // Certificate expiry
+      try {
+        const { data: cert } = await (supabase as any)
+          .from("user_certificates")
+          .select("valid_to, subject_cn")
+          .eq("user_id", user!.id)
+          .maybeSingle();
+        if (cert?.valid_to) {
+          const days = Math.ceil((new Date(cert.valid_to).getTime() - Date.now()) / 86400000);
+          if (days <= 0) {
+            items.push({
+              id: "cert-expired",
+              title: "Certificado vencido",
+              description: `O certificado ${cert.subject_cn || ""} expirou. Atualize em Configurações → Meu Certificado.`,
+              icon: ShieldAlert,
+              tone: "danger",
+            });
+          } else if (days <= 30) {
+            items.push({
+              id: "cert-expiring",
+              title: "Certificado expirando",
+              description: `Vence em ${days} dia${days === 1 ? "" : "s"}.`,
+              icon: ShieldAlert,
+              tone: "warning",
+            });
+          }
+        }
+      } catch {}
+      return items;
+    },
+  });
+  const count = notifications.length;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="relative p-2 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
+          <Bell className="w-5 h-5" />
+          {count > 0 && (
+            <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
+              {count}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <div className="px-4 py-3 border-b border-border">
+          <p className="text-sm font-semibold text-foreground">Notificações</p>
+        </div>
+        {count === 0 ? (
+          <div className="px-4 py-6 text-center text-sm text-muted-foreground">Nenhuma notificação no momento.</div>
+        ) : (
+          <div className="max-h-80 overflow-auto">
+            {notifications.map((n) => {
+              const Icon = n.icon;
+              const toneClass = n.tone === "danger" ? "text-destructive bg-destructive/10" : n.tone === "warning" ? "text-warning bg-warning/10" : "text-info bg-info/10";
+              return (
+                <div key={n.id} className="flex items-start gap-3 px-4 py-3 border-b border-border last:border-b-0 hover:bg-secondary/40">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${toneClass}`}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">{n.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{n.description}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
