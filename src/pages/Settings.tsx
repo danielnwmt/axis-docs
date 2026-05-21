@@ -16,7 +16,10 @@ import { useQuery } from "@tanstack/react-query";
 
 type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | null;
 
-const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "backup", "licenca"];
+// Apenas Administrador
+const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "licenca"];
+// Administrador + Operador (escondidas apenas para Usuário)
+const STAFF_SECTIONS: Section[] = ["backup"];
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
