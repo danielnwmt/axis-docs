@@ -80,7 +80,18 @@ export default function Upload() {
   }, [toast]);
 
   useEffect(() => {
-    if (!editId) return;
+    (async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("user_certificates" as any)
+        .select("subject_cn")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (data && (data as any).subject_cn) setCertCN((data as any).subject_cn);
+    })();
+  }, [user]);
+
+  useEffect(() => {
     const loadDoc = async () => {
       const { data } = await supabase
         .from("documents")
