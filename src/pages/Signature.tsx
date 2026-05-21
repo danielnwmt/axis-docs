@@ -54,7 +54,12 @@ export default function Signature() {
         .select("subject_cn")
         .eq("user_id", user.id)
         .maybeSingle();
-      if (data && (data as any).subject_cn) setCertCN((data as any).subject_cn);
+      if (data && (data as any).subject_cn) {
+        setCertCN((data as any).subject_cn);
+        setHasCert(true);
+      } else {
+        setHasCert(false);
+      }
     })();
   }, [user]);
 
