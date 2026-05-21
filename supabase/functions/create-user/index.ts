@@ -72,6 +72,18 @@ Deno.serve(async (req) => {
         });
       }
 
+      const requestedRole = role || "Usuário";
+      const allowedRoles = isAdmin
+        ? ["Administrador", "Operador", "Usuário"]
+        : ["Operador", "Usuário"];
+      if (!allowedRoles.includes(requestedRole)) {
+        return new Response(JSON.stringify({ error: "Perfil não permitido para o seu nível de acesso" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+
       const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
