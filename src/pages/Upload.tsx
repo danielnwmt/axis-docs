@@ -92,6 +92,7 @@ export default function Upload() {
   }, [user]);
 
   useEffect(() => {
+    if (!editId) return;
     const loadDoc = async () => {
       const { data } = await supabase
         .from("documents")
