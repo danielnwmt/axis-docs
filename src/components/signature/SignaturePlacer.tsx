@@ -222,6 +222,11 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
                     const idx = signerLabel.lastIndexOf(":");
                     const nameOnly = idx > 0 ? signerLabel.slice(0, idx).trim() : signerLabel;
                     const cpfOnly = idx > 0 ? signerLabel.slice(idx + 1).trim() : "";
+                    const formatCPF = (raw: string) => {
+                      const digits = raw.replace(/\D/g, "");
+                      if (digits.length === 11) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+                      return raw;
+                    };
                     return (
                       <>
                         <div className="text-[10px] font-bold truncate" style={{ color: "#0f1b3d" }}>
@@ -229,7 +234,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
                         </div>
                         {cpfOnly && (
                           <div className="text-[9px] font-semibold truncate" style={{ color: "#0f1b3d" }}>
-                            CPF: {cpfOnly}
+                            CPF: {formatCPF(cpfOnly)}
                           </div>
                         )}
                       </>
