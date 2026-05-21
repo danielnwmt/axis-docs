@@ -391,85 +391,96 @@ export default function Upload() {
           return;
         }
 
-
-
-
-
         let driveFileId: string | null = null;
         let driveLink: string | null = null;
+        let finalFileName = file.name;
+        let finalFileSize = file.size;
+        let signedMeta: any = null;
 
-        try {
-          // Send file directly to edge function via FormData
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("fileName", file.name);
-          formData.append("unitName", unit);
+        if (shouldSign) {
+          // Assina ANTES de qualquer upload — o arquivo sem assinatura nunca vai para o Drive.
+          try {
+            const fd = new FormData();
+            fd.append("file", file);
+            fd.append("fileName", file.name);
+            fd.append("password", pfxPassword);
+            if (signaturePos) fd.append("position", JSON.stringify(signaturePos));
 
-          const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", {
-            body: formData,
-          });
+            const { data: signRes, error: signErr } = await supabase.functions.invoke("sign-pdf-a1", { body: fd });
 
-          if (driveError || !driveResult?.success || !driveResult?.driveFileId) {
-            throw new Error(driveError?.message || driveResult?.error || "Falha ao enviar para o Google Drive.");
+            if (signErr || (signRes as any)?.error) {
+              let msg = (signRes as any)?.error || signErr?.message || "Falha na assinatura";
+              try {
+                const ctx: any = (signErr as any)?.context;
+                if (ctx?.json) { const j = await ctx.json(); if (j?.error) msg = j.error; }
+                else if (ctx?.text) { const t = await ctx.text(); const j = JSON.parse(t); if (j?.error) msg = j.error; }
+              } catch {}
+              if (/senha.*incorret/i.test(msg)) {
+                toast({ title: "Senha incorreta", description: "A senha do certificado está incorreta. Tente novamente.", variant: "destructive" });
+                setLoading(false);
+                return;
+              }
+              throw new Error(msg);
+            }
+
+            driveFileId = (signRes as any).driveFileId;
+            driveLink = (signRes as any).driveLink;
+            finalFileName = (signRes as any).signedName || file.name;
+            finalFileSize = (signRes as any).fileSize || file.size;
+            signedMeta = signRes;
+          } catch (e: any) {
+            throw new Error(e?.message || "Falha ao assinar o documento.");
           }
-
-          console.log("Arquivo enviado ao Google Drive:", driveResult.driveLink);
-          driveFileId = driveResult.driveFileId;
-          driveLink = driveResult.driveLink || null;
-        } catch (driveErr: any) {
-          throw new Error(driveErr?.message || "Não foi possível armazenar o arquivo no Google Drive.");
+        } else {
+          // Já assinado com ICP-Brasil: pode ir direto ao Drive.
+          try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("fileName", file.name);
+            formData.append("unitName", unit);
+            const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", { body: formData });
+            if (driveError || !driveResult?.success || !driveResult?.driveFileId) {
+              throw new Error(driveError?.message || driveResult?.error || "Falha ao enviar para o Google Drive.");
+            }
+            driveFileId = driveResult.driveFileId;
+            driveLink = driveResult.driveLink || null;
+          } catch (driveErr: any) {
+            throw new Error(driveErr?.message || "Não foi possível armazenar o arquivo no Google Drive.");
+          }
         }
 
         const filePath = `drive://${driveFileId}`;
-
         const signedNote = alreadyIcp ? `${notes}\n[Documento já assinado digitalmente — detectado no upload]` : notes;
 
-        const { data: docData, error: dbError } = await supabase.from("documents").insert({
+        const insertPayload: any = {
           user_id: user.id,
-          title: title || file.name,
+          title: title || finalFileName,
           category,
           unit,
           subject,
           keywords,
-          notes: shouldSign ? `${notes}\nCertificado: ${certType}` : signedNote,
-          file_name: file.name,
+          notes: shouldSign
+            ? `PAdES ICP-Brasil A1 | CN: ${signedMeta?.subjectCn || certCN} | SHA-256 assinado: ${(signedMeta?.fileHashSigned || "").substring(0, 16)}...`
+            : signedNote,
+          file_name: finalFileName,
           file_path: filePath,
-          file_size: file.size,
-          file_type: file.type,
+          file_size: finalFileSize,
+          file_type: "application/pdf",
           drive_file_id: driveFileId,
           drive_link: driveLink,
-          sign_status: alreadyIcp ? "assinado" : "pendente",
-        } as any).select().single();
+          sign_status: (shouldSign || alreadyIcp) ? "assinado" : "pendente",
+        };
+        if (shouldSign && signedMeta) {
+          insertPayload.sign_timestamp = signedMeta.signTimestamp;
+          insertPayload.sign_certificate_info = signedMeta.certInfo;
+          insertPayload.file_hash_original = signedMeta.fileHashOriginal;
+          insertPayload.file_hash_signed = signedMeta.fileHashSigned;
+        }
 
+        const { error: dbError } = await supabase.from("documents").insert(insertPayload);
         if (dbError) {
           await cleanupDriveFile(driveFileId);
           throw dbError;
-        }
-
-        // Se marcou para assinar e é PDF, chamar edge function A1 com posição + senha
-        if (shouldSign && docData) {
-          try {
-            const { data: signResult, error: signError } = await supabase.functions.invoke("sign-pdf-a1", {
-              body: {
-                documentId: docData.id,
-                filePath,
-                fileName: file.name,
-                password: pfxPassword,
-                position: signaturePos,
-              },
-            });
-
-            if (signError || (signResult as any)?.error) {
-              throw new Error((signResult as any)?.error || signError?.message || "Falha na assinatura");
-            }
-            await supabase
-              .from("documents")
-              .update({ sign_status: "assinado" })
-              .eq("id", docData.id);
-          } catch (signErr: any) {
-            console.warn("Erro na assinatura:", signErr);
-            toast({ title: "Falha ao assinar", description: signErr.message, variant: "destructive" });
-          }
         }
       }
 
