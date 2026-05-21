@@ -160,6 +160,50 @@ async function buildBackupJson(admin: any) {
   };
 }
 
+// ===== LGPD: AES-256-GCM + SHA-256 =====
+async function getBackupKey(): Promise<CryptoKey> {
+  const secret = Deno.env.get("CERT_ENCRYPTION_KEY") || "";
+  if (!secret) throw new Error("CERT_ENCRYPTION_KEY não configurado.");
+  const raw = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+function toB64(buf: ArrayBuffer | Uint8Array): string {
+  const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  let s = ""; for (const c of b) s += String.fromCharCode(c);
+  return btoa(s);
+}
+function fromB64(s: string): Uint8Array {
+  const bin = atob(s); const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function sha256Hex(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function encryptBackup(plain: string): Promise<{ envelope: string; sha256: string }> {
+  const key = await getBackupKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plain));
+  const sha256 = await sha256Hex(plain);
+  const envelope = JSON.stringify({
+    axisdocs_backup: true, encrypted: true, algo: "AES-256-GCM",
+    iv: toB64(iv), data: toB64(ct), sha256, generated_at: new Date().toISOString(),
+  }, null, 2);
+  return { envelope, sha256 };
+}
+async function decryptBackupIfNeeded(input: any): Promise<any> {
+  if (!input || typeof input !== "object") throw new Error("Backup inválido");
+  if (!input.encrypted) return input;
+  if (input.algo !== "AES-256-GCM") throw new Error("Algoritmo não suportado: " + input.algo);
+  const key = await getBackupKey();
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromB64(input.iv) }, key, fromB64(input.data));
+  const plain = new TextDecoder().decode(pt);
+  const hash = await sha256Hex(plain);
+  if (input.sha256 && input.sha256 !== hash) throw new Error("Integridade falhou: hash SHA-256 não confere.");
+  return JSON.parse(plain);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -196,12 +240,14 @@ Deno.serve(async (req) => {
 
     if (req.method === "POST" && action === "export") {
       const backup = await buildBackupJson(admin);
+      const plain = JSON.stringify(backup);
+      const { envelope, sha256 } = await encryptBackup(plain);
       await admin.from("audit_logs").insert({
         user_id: userData.user.id, user_email: userData.user.email || "",
-        action: "Backup exportado", action_type: "backup", target: "sistema",
-        details: `${backup.profiles.length} perfis, ${backup.documents.length} documentos`,
+        action: "Backup exportado (cifrado)", action_type: "backup", target: "sistema",
+        details: `${backup.profiles.length} perfis, ${backup.documents.length} documentos. SHA-256=${sha256.slice(0,16)}…`,
       });
-      return json(backup, 200);
+      return new Response(envelope, { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (req.method === "POST" && action === "export-to-drive") {
@@ -216,30 +262,34 @@ Deno.serve(async (req) => {
       }
       const backup = await buildBackupJson(admin);
       const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-      const fileName = `axisdocs-backup-${ts}.json`;
-      const jsonStr = JSON.stringify(backup, null, 2);
-      const driveFile = await uploadJsonToDrive(token, backupsFolderId, fileName, jsonStr);
+      const fileName = `axisdocs-backup-${ts}.enc.json`;
+      const plain = JSON.stringify(backup);
+      const { envelope, sha256 } = await encryptBackup(plain);
+      const driveFile = await uploadJsonToDrive(token, backupsFolderId, fileName, envelope);
       const expiresAt = new Date(Date.now() + retentionDays * 24 * 60 * 60 * 1000).toISOString();
       const { data: row } = await admin.from("backup_files").insert({
         drive_file_id: driveFile.id,
         drive_link: driveFile.webViewLink,
         file_name: driveFile.name,
-        file_size: Number(driveFile.size || jsonStr.length),
+        file_size: Number(driveFile.size || envelope.length),
         retention_days: retentionDays,
         expires_at: expiresAt,
         created_by: userData.user.id,
+        sha256, encrypted: true, encryption_algo: "AES-256-GCM",
       }).select().single();
       await admin.from("audit_logs").insert({
         user_id: userData.user.id, user_email: userData.user.email || "",
-        action: "Backup enviado ao Google Drive", action_type: "backup", target: fileName,
-        details: `Retenção: ${retentionDays} dias. Expira em ${new Date(expiresAt).toLocaleString("pt-BR")}.`,
+        action: "Backup cifrado enviado ao Google Drive", action_type: "backup", target: fileName,
+        details: `Retenção: ${retentionDays} dias. SHA-256=${sha256.slice(0,16)}…`,
       });
       return json({ success: true, file: row }, 200);
     }
 
     if (req.method === "POST" && action === "import") {
       const body = await req.json();
-      const backup = body?.backup;
+      let backup = body?.backup;
+      try { backup = await decryptBackupIfNeeded(backup); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
       if (!backup || typeof backup !== "object") return json({ error: "Backup inválido" }, 400);
       const stats = { profiles: 0, audit_logs: 0, documents: 0, categories: 0, units: 0, backup_settings: 0, backup_files: 0, license_config: 0, settings_files: 0 };
       const upsertAll = async (rows: any[], table: string, key: keyof typeof stats) => {
@@ -253,7 +303,6 @@ Deno.serve(async (req) => {
       await upsertAll(backup.backup_settings, "backup_settings", "backup_settings");
       await upsertAll(backup.backup_files, "backup_files", "backup_files");
       await upsertAll(backup.license_config, "license_config", "license_config");
-      // Restore settings storage files (Drive config, signature config, etc.)
       if (Array.isArray(backup.settings_files)) {
         for (const f of backup.settings_files) {
           try {
@@ -270,6 +319,7 @@ Deno.serve(async (req) => {
       });
       return json({ success: true, stats }, 200);
     }
+
 
     if (req.method === "POST" && action === "cleanup-now") {
       return await runCleanup(admin, userData.user.id, userData.user.email || "");
@@ -344,18 +394,20 @@ async function performDriveBackup(admin: any, settings: any, createdBy: string) 
   }
   const backup = await buildBackupJson(admin);
   const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-  const fileName = `axisdocs-backup-${ts}.json`;
-  const jsonStr = JSON.stringify(backup, null, 2);
-  const driveFile = await uploadJsonToDrive(token, backupsFolderId, fileName, jsonStr);
+  const fileName = `axisdocs-backup-${ts}.enc.json`;
+  const plain = JSON.stringify(backup);
+  const { envelope, sha256 } = await encryptBackup(plain);
+  const driveFile = await uploadJsonToDrive(token, backupsFolderId, fileName, envelope);
   const expiresAt = new Date(Date.now() + retentionDays * 24 * 60 * 60 * 1000).toISOString();
   const { data: row } = await admin.from("backup_files").insert({
     drive_file_id: driveFile.id,
     drive_link: driveFile.webViewLink,
     file_name: driveFile.name,
-    file_size: Number(driveFile.size || jsonStr.length),
+    file_size: Number(driveFile.size || envelope.length),
     retention_days: retentionDays,
     expires_at: expiresAt,
     created_by: createdBy,
+    sha256, encrypted: true, encryption_algo: "AES-256-GCM",
   }).select().single();
   return { row, fileName, retentionDays, expiresAt };
 }

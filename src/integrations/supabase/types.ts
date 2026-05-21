@@ -54,11 +54,14 @@ export type Database = {
           deleted_at: string | null
           drive_file_id: string
           drive_link: string | null
+          encrypted: boolean
+          encryption_algo: string | null
           expires_at: string
           file_name: string
           file_size: number | null
           id: string
           retention_days: number
+          sha256: string | null
         }
         Insert: {
           created_at?: string
@@ -66,11 +69,14 @@ export type Database = {
           deleted_at?: string | null
           drive_file_id: string
           drive_link?: string | null
+          encrypted?: boolean
+          encryption_algo?: string | null
           expires_at: string
           file_name: string
           file_size?: number | null
           id?: string
           retention_days?: number
+          sha256?: string | null
         }
         Update: {
           created_at?: string
@@ -78,11 +84,14 @@ export type Database = {
           deleted_at?: string | null
           drive_file_id?: string
           drive_link?: string | null
+          encrypted?: boolean
+          encryption_algo?: string | null
           expires_at?: string
           file_name?: string
           file_size?: number | null
           id?: string
           retention_days?: number
+          sha256?: string | null
         }
         Relationships: []
       }
@@ -389,33 +398,45 @@ export type Database = {
           anpd_protocol: string | null
           created_at: string
           created_by: string
+          data_subjects_notified_at: string | null
           description: string
           id: string
           reported_to_anpd_at: string | null
+          resolution: string | null
           severity: string
+          status: string
           title: string
+          updated_at: string
         }
         Insert: {
           affected_users_count?: number
           anpd_protocol?: string | null
           created_at?: string
           created_by: string
+          data_subjects_notified_at?: string | null
           description: string
           id?: string
           reported_to_anpd_at?: string | null
+          resolution?: string | null
           severity?: string
+          status?: string
           title: string
+          updated_at?: string
         }
         Update: {
           affected_users_count?: number
           anpd_protocol?: string | null
           created_at?: string
           created_by?: string
+          data_subjects_notified_at?: string | null
           description?: string
           id?: string
           reported_to_anpd_at?: string | null
+          resolution?: string | null
           severity?: string
+          status?: string
           title?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -578,6 +599,19 @@ export type Database = {
         }
         Returns: undefined
       }
+      log_pii_access: {
+        Args: {
+          _reason?: string
+          _resource_id: string
+          _resource_type: string
+          _target_user_id?: string
+        }
+        Returns: undefined
+      }
+      notify_incident_subjects: {
+        Args: { _incident_id: string }
+        Returns: undefined
+      }
       record_consent: {
         Args: {
           _document_type: string
@@ -587,9 +621,17 @@ export type Database = {
         }
         Returns: string
       }
+      report_incident_anpd: {
+        Args: { _incident_id: string; _protocol: string }
+        Returns: undefined
+      }
       request_data_action: {
         Args: { _notes?: string; _type: string }
         Returns: string
+      }
+      resolve_incident: {
+        Args: { _incident_id: string; _resolution: string }
+        Returns: undefined
       }
     }
     Enums: {

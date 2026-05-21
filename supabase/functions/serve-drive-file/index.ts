@@ -138,6 +138,20 @@ Deno.serve(async (req) => {
       });
     }
 
+    // LGPD: log de acesso a dado pessoal de terceiros
+    if (doc.user_id !== user.id) {
+      try {
+        await supabase.from("audit_logs").insert({
+          user_id: user.id,
+          user_email: user.email || "",
+          action: "Acesso a documento de terceiros",
+          action_type: "access",
+          target: driveFileId,
+          details: `titular=${doc.user_id} | acesso administrativo via serve-drive-file`,
+        });
+      } catch (_) { /* ignore audit failure */ }
+    }
+
     // Load Google Drive config
     const { data: configData, error: configError } = await supabase.storage
       .from("settings")
