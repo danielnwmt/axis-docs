@@ -88,7 +88,9 @@ export default function Upload() {
         .select("subject_cn")
         .eq("user_id", user.id)
         .maybeSingle();
-      if (data && (data as any).subject_cn) setCertCN((data as any).subject_cn);
+      const cn = data && (data as any).subject_cn;
+      if (cn) setCertCN(cn);
+      setHasCert(!!cn);
     })();
   }, [user]);
 
