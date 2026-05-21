@@ -216,7 +216,7 @@ Deno.serve(async (req) => {
         const headerH = hBox * 0.18;
         const headerY = y + hBox - headerH;
         // Header label
-        page.drawText("DOCUMENTO DE TESTE ASSINADO POR:", {
+        page.drawText("DOCUMENTO ASSINADO POR:", {
           x: x + wBox * 0.04, y: headerY + headerH * 0.3,
           size: Math.max(5, hBox * 0.09), font: fontBold, color: grey,
         });
@@ -245,10 +245,6 @@ Deno.serve(async (req) => {
           size: Math.max(7, innerH * 0.2), font: fontBold, color: blue,
         });
         cy -= lineGap * 0.9;
-        page.drawText("(Ambiente de Homologação)", {
-          x: innerX + innerW * 0.05, y: cy,
-          size: Math.max(4.5, innerH * 0.1), font, color: grey,
-        });
         cy -= lineGap * 0.9;
         page.drawText(dt, {
           x: innerX + innerW * 0.05, y: cy,
