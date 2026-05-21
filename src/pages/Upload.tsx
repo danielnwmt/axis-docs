@@ -293,6 +293,17 @@ export default function Upload() {
     e.preventDefault();
     if (!user || (!editId && files.length === 0)) return;
 
+    if (!editId && signDocument && hasPdf) {
+      if (!pfxPassword) {
+        toast({ title: "Senha obrigatória", description: "Digite a senha do seu certificado .pfx para assinar.", variant: "destructive" });
+        return;
+      }
+      if (!signaturePos) {
+        toast({ title: "Posicione a assinatura", description: "Clique no PDF para definir o local da assinatura visível.", variant: "destructive" });
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       // Edit mode — update metadata only
