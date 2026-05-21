@@ -11,8 +11,12 @@ import { fetchManagedList } from "@/lib/adminLookups";
 import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, unlockTemporary, normalizeLicenseServerUrl, type LicenseInfo } from "@/lib/license";
 import { getStorageQuota, formatBytes, type StorageQuota } from "@/lib/storageQuota";
 import { MyCertificateSection } from "@/components/settings/MyCertificateSection";
+import { useAuth } from "@/contexts/AuthContext";
+import { useQuery } from "@tanstack/react-query";
 
 type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | null;
+
+const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "backup", "licenca"];
 
 const sectionCards = [
   { id: "orgao" as Section, icon: Building, title: "Dados do Órgão", description: "Nome, CNPJ e informações institucionais" },
