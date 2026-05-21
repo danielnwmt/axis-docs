@@ -57,6 +57,8 @@ export default function Upload() {
   const [previewTitle, setPreviewTitle] = useState("");
   const [categorias, setCategorias] = useState<string[]>([]);
   const [unidades, setUnidades] = useState<string[]>([]);
+  const [quotaFull, setQuotaFull] = useState(false);
+  const [quotaInfo, setQuotaInfo] = useState<{ limit: string; used: string } | null>(null);
   const { toast } = useToast();
   const { t } = useTranslation();
   const { user } = useAuth();
