@@ -236,9 +236,7 @@ export function MyCertificateSection() {
         </div>
       )}
 
-      {/* placeholder marker */}
-      <div className="hidden">end</div>
-      ) : (
+      {!cert && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <h3 className="font-display font-semibold text-foreground flex items-center gap-2">
             <Upload className="w-5 h-5 text-primary" /> Enviar certificado .pfx
