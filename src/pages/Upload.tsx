@@ -57,6 +57,8 @@ export default function Upload() {
   const [previewTitle, setPreviewTitle] = useState("");
   const [categorias, setCategorias] = useState<string[]>([]);
   const [unidades, setUnidades] = useState<string[]>([]);
+  const [quotaFull, setQuotaFull] = useState(false);
+  const [quotaInfo, setQuotaInfo] = useState<{ limit: string; used: string } | null>(null);
   const { toast } = useToast();
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -93,6 +95,19 @@ export default function Upload() {
       setHasCert(!!cn);
     })();
   }, [user]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { getStorageQuota, formatBytes } = await import("@/lib/storageQuota");
+        const q = await getStorageQuota();
+        if (q.hasLimit) {
+          setQuotaFull(q.usedBytes >= q.limitBytes);
+          setQuotaInfo({ limit: formatBytes(q.limitBytes), used: formatBytes(q.usedBytes) });
+        }
+      } catch {}
+    })();
+  }, []);
 
   useEffect(() => {
     if (!editId) return;
@@ -643,7 +658,7 @@ export default function Upload() {
 
         <div className="space-y-4">
           {(() => {
-            const blocked = !editId && hasCert === false;
+            const blocked = !editId && (hasCert === false || quotaFull);
             return (
               <div
                 onDrop={blocked ? (e) => e.preventDefault() : handleDrop}
@@ -655,8 +670,8 @@ export default function Upload() {
                   <UploadIcon className="w-8 h-8 text-accent" />
                 </div>
                 <div className="text-center">
-                  <p className="font-semibold text-foreground">{blocked ? "Upload bloqueado" : editId ? "Adicionar novos arquivos" : "Arraste arquivos aqui"}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{blocked ? "Cadastre um certificado digital para enviar arquivos" : "ou clique para selecionar"}</p>
+                  <p className="font-semibold text-foreground">{blocked ? (quotaFull ? "Limite de armazenamento atingido" : "Upload bloqueado") : editId ? "Adicionar novos arquivos" : "Arraste arquivos aqui"}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{blocked ? (quotaFull && quotaInfo ? `Sua licença permite ${quotaInfo.limit} (usado ${quotaInfo.used}). Contate o administrador.` : "Cadastre um certificado digital para enviar arquivos") : "ou clique para selecionar"}</p>
                   <p className="text-xs text-muted-foreground mt-2">PDF, JPG, PNG, DOCX, XLSX</p>
                 </div>
                 <input id="file-input" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" className="hidden" onChange={handleFileSelect} disabled={blocked} />
@@ -724,7 +739,7 @@ export default function Upload() {
           )}
 
 
-          <Button type="submit" className="w-full gap-2" disabled={(!editId && files.length === 0) || loading || (!editId && hasCert === false)}>
+          <Button type="submit" className="w-full gap-2" disabled={(!editId && files.length === 0) || loading || (!editId && hasCert === false) || (!editId && quotaFull)}>
             <UploadIcon className="w-4 h-4" />
             {loading ? "Salvando..." : editId ? "Salvar Alterações" : signDocument && hasPdf ? "Enviar e Assinar Documento" : "Enviar Documento"}
           </Button>
