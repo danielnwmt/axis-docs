@@ -219,48 +219,68 @@ Deno.serve(async (req) => {
         const cn = certRow.subject_cn || user.email || "Assinante";
         const now = new Date();
         const dt = `${now.toISOString().slice(0,10)} ${now.toISOString().slice(11,19)} UTC`;
-        const shortHash = hashOriginal.substring(0, 40);
+
+        // Try to embed Axis logo
+        let logoImg: any = null;
+        try {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+          const projectRef = supabaseUrl.replace("https://", "").split(".")[0];
+          const logoUrl = `https://${projectRef}.lovable.app/axis-logo-transparent.png`;
+          const logoResp = await fetch(logoUrl);
+          if (logoResp.ok) {
+            const logoBytes = new Uint8Array(await logoResp.arrayBuffer());
+            logoImg = await pdfDoc.embedPng(logoBytes);
+          }
+        } catch (e) { console.warn("logo embed failed:", e); }
 
         const padL = barW + wBox * 0.035;
         const padR = wBox * 0.035;
-        const contentW = wBox - padL - padR;
 
-        // Line sizes proportional to box height
-        const labelSize = Math.max(4.5, hBox * 0.12);
-        const nameSize = Math.max(6, hBox * 0.20);
-        const metaSize = Math.max(4.2, hBox * 0.11);
-        const hashSize = Math.max(3.8, hBox * 0.10);
+        // Logo area
+        let logoW = 0;
+        if (logoImg) {
+          const maxLogoH = hBox * 0.7;
+          const maxLogoW = wBox * 0.22;
+          const ratio = logoImg.width / logoImg.height;
+          let lh = maxLogoH;
+          let lw = lh * ratio;
+          if (lw > maxLogoW) { lw = maxLogoW; lh = lw / ratio; }
+          const lx = x + padL;
+          const ly = y + (hBox - lh) / 2;
+          page.drawImage(logoImg, { x: lx, y: ly, width: lw, height: lh });
+          logoW = lw + wBox * 0.025;
+        }
 
-        const totalH = labelSize + nameSize + metaSize + hashSize + hBox * 0.10;
+        const textX = x + padL + logoW;
+        const contentW = wBox - padL - padR - logoW;
+
+        const labelSize = Math.max(6, hBox * 0.16);
+        const nameSize = Math.max(8, hBox * 0.26);
+        const metaSize = Math.max(6, hBox * 0.15);
+
+        const totalH = labelSize + nameSize + metaSize + hBox * 0.08;
         let cy = y + (hBox + totalH) / 2 - labelSize;
 
         page.drawText("ASSINADO DIGITALMENTE POR", {
-          x: x + padL, y: cy,
+          x: textX, y: cy,
           size: labelSize, font: fontBold, color: navy,
         });
         cy -= nameSize + hBox * 0.02;
 
-        // Truncate name to fit width
         let nameText = cn;
         while (fontBold.widthOfTextAtSize(nameText, nameSize) > contentW && nameText.length > 4) {
           nameText = nameText.slice(0, -2);
         }
         if (nameText !== cn) nameText = nameText.slice(0, -1) + "…";
         page.drawText(nameText, {
-          x: x + padL, y: cy,
+          x: textX, y: cy,
           size: nameSize, font: fontBold, color: navyDark,
         });
         cy -= metaSize + hBox * 0.04;
 
-        page.drawText(`ICP-Brasil  ·  A1  ·  ${dt}`, {
-          x: x + padL, y: cy,
+        page.drawText(dt, {
+          x: textX, y: cy,
           size: metaSize, font, color: slate,
-        });
-        cy -= hashSize + hBox * 0.025;
-
-        page.drawText(`hash: ${shortHash}`, {
-          x: x + padL, y: cy,
-          size: hashSize, font, color: slateLight,
         });
 
       } catch (e) {
