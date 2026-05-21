@@ -185,6 +185,59 @@ export function MyCertificateSection() {
             </AlertDialog>
           </div>
         </div>
+      )}
+
+      {cert && (
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <h3 className="font-display font-semibold text-foreground flex items-center gap-2">
+            <KeyRound className="w-5 h-5 text-primary" /> Alterar senha do certificado
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Re-encripta o seu .pfx com uma nova senha. A senha anterior é necessária para validar.
+          </p>
+
+          {[
+            { label: "Senha atual", value: currentPwd, set: setCurrentPwd, show: showCurrent, toggle: setShowCurrent, ph: "Senha atual do .pfx" },
+            { label: "Nova senha", value: newPwd, set: setNewPwd, show: showNew, toggle: setShowNew, ph: "Nova senha (mín. 4 caracteres)" },
+            { label: "Confirmar nova senha", value: confirmPwd, set: setConfirmPwd, show: showConfirm, toggle: setShowConfirm, ph: "Repita a nova senha" },
+          ].map((f, i) => (
+            <div key={i} className="space-y-2">
+              <Label>{f.label}</Label>
+              <div className="relative">
+                <Input
+                  type={f.show ? "text" : "password"}
+                  value={f.value}
+                  onChange={(e) => f.set(e.target.value)}
+                  placeholder={f.ph}
+                  autoComplete="off"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => f.toggle((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                  aria-label={f.show ? "Ocultar senha" : "Mostrar senha"}
+                  tabIndex={-1}
+                >
+                  {f.show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <Button
+            onClick={handleChangePassword}
+            disabled={changing || !currentPwd || !newPwd || !confirmPwd}
+            className="w-full"
+          >
+            {changing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <KeyRound className="w-4 h-4 mr-2" />}
+            {changing ? "Alterando senha…" : "Alterar senha"}
+          </Button>
+        </div>
+      )}
+
+      {/* placeholder marker */}
+      <div className="hidden">end</div>
       ) : (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <h3 className="font-display font-semibold text-foreground flex items-center gap-2">
