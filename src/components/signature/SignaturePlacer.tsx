@@ -203,14 +203,21 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
                 outlineOffset: "-4px",
               }}
             >
-              <div className="px-2 pt-1 text-[7px] font-bold tracking-wide leading-none" style={{ color: "#2d5a3d" }}>
-                DOCUMENTO ASSINADO POR:
+              <div className="px-2 pt-1.5 text-center text-[7px] font-bold tracking-wide leading-none" style={{ color: "#2d5a3d" }}>
+                CERTIFICADO DIGITAL ICP-BRASIL
               </div>
-              <div className="mx-1.5 mt-1 mb-1 px-1.5 py-1 leading-tight" style={{ border: "1px solid #2d5a3d", background: "transparent", height: "calc(100% - 18px)" }}>
-                <div className="text-[6px] font-medium" style={{ color: "#2d5a3d" }}>ASSINADO DIGITALMENTE POR:</div>
-                <div className="text-[10px] font-bold truncate" style={{ color: "#2d5a3d" }}>{signerLabel}</div>
-                <div className="text-[6px]" style={{ color: "#3a4a3a" }}>{new Date().toUTCString().replace("GMT", "(UTC)")}</div>
-                <div className="text-[5.5px] truncate" style={{ color: "#3a4a3a" }}>hash: a1b2c3d4e5f6…</div>
+              <div className="mx-1.5 mt-1 mb-1 px-2 py-1.5 leading-tight" style={{ border: "1px solid #2d5a3d", background: "transparent", height: "calc(100% - 22px)" }}>
+                <div className="text-[6.5px] font-bold mb-0.5" style={{ color: "#2d5a3d" }}>DADOS DO TITULAR:</div>
+                <div className="text-[6px] truncate" style={{ color: "#2d5a3d" }}>
+                  <span className="font-semibold">Nome (CN):</span> <span className="font-bold">{signerLabel}</span>
+                </div>
+                <div className="text-[6px] truncate" style={{ color: "#2d5a3d" }}>
+                  <span className="font-semibold">Organização (O):</span> ICP-Brasil
+                </div>
+                <div className="text-[6px] truncate" style={{ color: "#2d5a3d" }}>
+                  <span className="font-semibold">Data:</span> {new Date().toUTCString().replace("GMT", "(UTC)")}
+                </div>
+                <div className="text-[5.5px] truncate mt-0.5" style={{ color: "#3a4a3a" }}>hash: a1b2c3d4e5f6…</div>
               </div>
               <div onMouseDown={handleResizeMouseDown("nw")} className={handleStyle} style={{ left: -6, top: -6, cursor: "nwse-resize" }} />
               <div onMouseDown={handleResizeMouseDown("ne")} className={handleStyle} style={{ right: -6, top: -6, cursor: "nesw-resize" }} />
