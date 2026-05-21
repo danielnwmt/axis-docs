@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useState, useRef, useEffect } from "react";
-import { FileText, Upload, PenTool, CheckCircle, Loader2, AlertCircle, ShieldCheck } from "lucide-react";
+import { FileText, Upload, PenTool, CheckCircle, Loader2, AlertCircle, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -20,6 +20,7 @@ export default function Signature() {
   const [step, setStep] = useState<SignatureStep>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [pfxPassword, setPfxPassword] = useState<string>("");
+  const [showPfxPassword, setShowPfxPassword] = useState(false);
   const [signing, setSigning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [existingDocId, setExistingDocId] = useState<string | null>(null);
@@ -258,14 +259,25 @@ export default function Signature() {
             <CardContent className="space-y-4">
               <div>
                 <Label className="text-sm font-medium">Senha do seu certificado (.pfx)</Label>
-                <Input
-                  type="password"
-                  value={pfxPassword}
-                  onChange={(e) => setPfxPassword(e.target.value)}
-                  placeholder="Senha do certificado A1"
-                  autoComplete="off"
-                  className="mt-2"
-                />
+                <div className="relative mt-2">
+                  <Input
+                    type={showPfxPassword ? "text" : "password"}
+                    value={pfxPassword}
+                    onChange={(e) => setPfxPassword(e.target.value)}
+                    placeholder="Senha do certificado A1"
+                    autoComplete="off"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPfxPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label={showPfxPassword ? "Ocultar senha" : "Mostrar senha"}
+                    tabIndex={-1}
+                  >
+                    {showPfxPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div className="bg-info/10 rounded-lg p-3 flex items-start gap-2">

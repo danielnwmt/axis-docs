@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { ShieldCheck, Upload, Trash2, AlertCircle, Loader2, FileKey2 } from "lucide-react";
+import { ShieldCheck, Upload, Trash2, AlertCircle, Loader2, FileKey2, KeyRound, Eye, EyeOff } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -25,8 +25,18 @@ export function MyCertificateSection() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Alterar senha do certificado
+  const [changing, setChanging] = useState(false);
+  const [currentPwd, setCurrentPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -79,6 +89,33 @@ export function MyCertificateSection() {
     setCert(null);
   };
 
+  const handleChangePassword = async () => {
+    if (!currentPwd || !newPwd) {
+      toast({ title: "Preencha todos os campos", variant: "destructive" }); return;
+    }
+    if (newPwd.length < 4) {
+      toast({ title: "Senha muito curta", description: "Mínimo 4 caracteres.", variant: "destructive" }); return;
+    }
+    if (newPwd !== confirmPwd) {
+      toast({ title: "Senhas não coincidem", variant: "destructive" }); return;
+    }
+    setChanging(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("change-certificate-password", {
+        body: { currentPassword: currentPwd, newPassword: newPwd },
+      });
+      if (error || (data as any)?.error) {
+        throw new Error((data as any)?.error || error?.message || "Falha ao alterar senha");
+      }
+      toast({ title: "Senha alterada!", description: "Use a nova senha nas próximas assinaturas." });
+      setCurrentPwd(""); setNewPwd(""); setConfirmPwd("");
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setChanging(false);
+    }
+  };
+
   const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString("pt-BR") : "—";
   const expired = cert?.valid_to ? new Date(cert.valid_to) < new Date() : false;
   const daysLeft = cert?.valid_to ? Math.ceil((new Date(cert.valid_to).getTime() - Date.now()) / 86400000) : null;
@@ -96,7 +133,7 @@ export function MyCertificateSection() {
         </div>
       </div>
 
-      {cert ? (
+      {cert && (
         <div className={`rounded-xl border p-5 space-y-4 ${expired ? "border-destructive/40 bg-destructive/5" : expiringSoon ? "border-warning/40 bg-warning/5" : "border-success/40 bg-success/5"}`}>
           <div className="flex items-center gap-2">
             <FileKey2 className="w-5 h-5 text-primary" />
@@ -148,7 +185,58 @@ export function MyCertificateSection() {
             </AlertDialog>
           </div>
         </div>
-      ) : (
+      )}
+
+      {cert && (
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <h3 className="font-display font-semibold text-foreground flex items-center gap-2">
+            <KeyRound className="w-5 h-5 text-primary" /> Alterar senha do certificado
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Re-encripta o seu .pfx com uma nova senha. A senha anterior é necessária para validar.
+          </p>
+
+          {[
+            { label: "Senha atual", value: currentPwd, set: setCurrentPwd, show: showCurrent, toggle: setShowCurrent, ph: "Senha atual do .pfx" },
+            { label: "Nova senha", value: newPwd, set: setNewPwd, show: showNew, toggle: setShowNew, ph: "Nova senha (mín. 4 caracteres)" },
+            { label: "Confirmar nova senha", value: confirmPwd, set: setConfirmPwd, show: showConfirm, toggle: setShowConfirm, ph: "Repita a nova senha" },
+          ].map((f, i) => (
+            <div key={i} className="space-y-2">
+              <Label>{f.label}</Label>
+              <div className="relative">
+                <Input
+                  type={f.show ? "text" : "password"}
+                  value={f.value}
+                  onChange={(e) => f.set(e.target.value)}
+                  placeholder={f.ph}
+                  autoComplete="off"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => f.toggle((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                  aria-label={f.show ? "Ocultar senha" : "Mostrar senha"}
+                  tabIndex={-1}
+                >
+                  {f.show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <Button
+            onClick={handleChangePassword}
+            disabled={changing || !currentPwd || !newPwd || !confirmPwd}
+            className="w-full"
+          >
+            {changing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <KeyRound className="w-4 h-4 mr-2" />}
+            {changing ? "Alterando senha…" : "Alterar senha"}
+          </Button>
+        </div>
+      )}
+
+      {!cert && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <h3 className="font-display font-semibold text-foreground flex items-center gap-2">
             <Upload className="w-5 h-5 text-primary" /> Enviar certificado .pfx
@@ -159,7 +247,25 @@ export function MyCertificateSection() {
           </div>
           <div className="space-y-2">
             <Label>Senha do certificado</Label>
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha do .pfx" autoComplete="off" />
+            <div className="relative">
+              <Input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Senha do .pfx"
+                autoComplete="off"
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
             <p className="text-xs text-muted-foreground flex items-start gap-1.5">
               <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
               A senha é usada apenas para validar e extrair os metadados. Não fica salva.
