@@ -196,7 +196,25 @@ export function MyCertificateSection() {
           </div>
           <div className="space-y-2">
             <Label>Senha do certificado</Label>
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha do .pfx" autoComplete="off" />
+            <div className="relative">
+              <Input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Senha do .pfx"
+                autoComplete="off"
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
             <p className="text-xs text-muted-foreground flex items-start gap-1.5">
               <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
               A senha é usada apenas para validar e extrair os metadados. Não fica salva.
