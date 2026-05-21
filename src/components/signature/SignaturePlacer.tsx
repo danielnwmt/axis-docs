@@ -60,7 +60,6 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
   useEffect(() => {
     if (!pdf || !canvasRef.current) return;
     let cancelled = false;
-    let cancelled = false;
     let renderTask: any = null;
     (async () => {
       const p = await pdf.getPage(page);
