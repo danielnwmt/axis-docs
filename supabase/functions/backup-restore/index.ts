@@ -160,6 +160,50 @@ async function buildBackupJson(admin: any) {
   };
 }
 
+// ===== LGPD: AES-256-GCM + SHA-256 =====
+async function getBackupKey(): Promise<CryptoKey> {
+  const secret = Deno.env.get("CERT_ENCRYPTION_KEY") || "";
+  if (!secret) throw new Error("CERT_ENCRYPTION_KEY não configurado.");
+  const raw = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+function toB64(buf: ArrayBuffer | Uint8Array): string {
+  const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  let s = ""; for (const c of b) s += String.fromCharCode(c);
+  return btoa(s);
+}
+function fromB64(s: string): Uint8Array {
+  const bin = atob(s); const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function sha256Hex(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function encryptBackup(plain: string): Promise<{ envelope: string; sha256: string }> {
+  const key = await getBackupKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plain));
+  const sha256 = await sha256Hex(plain);
+  const envelope = JSON.stringify({
+    axisdocs_backup: true, encrypted: true, algo: "AES-256-GCM",
+    iv: toB64(iv), data: toB64(ct), sha256, generated_at: new Date().toISOString(),
+  }, null, 2);
+  return { envelope, sha256 };
+}
+async function decryptBackupIfNeeded(input: any): Promise<any> {
+  if (!input || typeof input !== "object") throw new Error("Backup inválido");
+  if (!input.encrypted) return input;
+  if (input.algo !== "AES-256-GCM") throw new Error("Algoritmo não suportado: " + input.algo);
+  const key = await getBackupKey();
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromB64(input.iv) }, key, fromB64(input.data));
+  const plain = new TextDecoder().decode(pt);
+  const hash = await sha256Hex(plain);
+  if (input.sha256 && input.sha256 !== hash) throw new Error("Integridade falhou: hash SHA-256 não confere.");
+  return JSON.parse(plain);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
