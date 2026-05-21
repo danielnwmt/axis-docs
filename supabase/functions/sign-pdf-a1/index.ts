@@ -197,16 +197,21 @@ Deno.serve(async (req) => {
 
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-        const blue = rgb(0.05, 0.35, 0.75);
-        const grey = rgb(0.35, 0.35, 0.35);
+        const green = rgb(0.18, 0.40, 0.25);
+        const cream = rgb(0.96, 0.93, 0.82);
+        const grey = rgb(0.25, 0.30, 0.25);
 
-        // Outer container (white with subtle border)
+        // Outer ornate green border on cream background
         page.drawRectangle({
           x, y, width: wBox, height: hBox,
-          borderColor: rgb(0.75, 0.78, 0.82),
-          borderWidth: 0.6,
-          color: rgb(1, 1, 1),
-          opacity: 1,
+          borderColor: green, borderWidth: 1.4,
+          color: cream, opacity: 1,
+        });
+        // Inner thin green line (double-border ornate look)
+        page.drawRectangle({
+          x: x + 2.2, y: y + 2.2, width: wBox - 4.4, height: hBox - 4.4,
+          borderColor: green, borderWidth: 0.4,
+          color: cream, opacity: 1,
         });
 
         const cn = certRow.subject_cn || user.email || "Assinante";
@@ -215,22 +220,21 @@ Deno.serve(async (req) => {
 
         const headerH = hBox * 0.18;
         const headerY = y + hBox - headerH;
-        // Header label
         page.drawText("DOCUMENTO ASSINADO POR:", {
-          x: x + wBox * 0.04, y: headerY + headerH * 0.3,
-          size: Math.max(5, hBox * 0.09), font: fontBold, color: grey,
+          x: x + wBox * 0.06, y: headerY + headerH * 0.3,
+          size: Math.max(5, hBox * 0.09), font: fontBold, color: green,
         });
 
-        // Inner blue box
-        const innerPad = wBox * 0.04;
+        // Inner content area (cream, green border)
+        const innerPad = wBox * 0.05;
         const innerX = x + innerPad;
         const innerY = y + innerPad;
         const innerW = wBox - innerPad * 2;
         const innerH = hBox - headerH - innerPad;
         page.drawRectangle({
           x: innerX, y: innerY, width: innerW, height: innerH,
-          borderColor: blue, borderWidth: 1,
-          color: rgb(0.93, 0.96, 1), opacity: 1,
+          borderColor: green, borderWidth: 0.6,
+          color: cream, opacity: 1,
         });
 
         const lineGap = innerH / 5.5;
@@ -242,7 +246,7 @@ Deno.serve(async (req) => {
         cy -= lineGap * 1.15;
         page.drawText(cn.slice(0, 40), {
           x: innerX + innerW * 0.05, y: cy,
-          size: Math.max(7, innerH * 0.2), font: fontBold, color: blue,
+          size: Math.max(7, innerH * 0.2), font: fontBold, color: green,
         });
         cy -= lineGap * 0.9;
         cy -= lineGap * 0.9;
