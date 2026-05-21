@@ -658,7 +658,7 @@ export default function Upload() {
 
         <div className="space-y-4">
           {(() => {
-            const blocked = !editId && hasCert === false;
+            const blocked = !editId && (hasCert === false || quotaFull);
             return (
               <div
                 onDrop={blocked ? (e) => e.preventDefault() : handleDrop}
