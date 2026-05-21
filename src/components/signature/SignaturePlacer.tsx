@@ -7,9 +7,9 @@ import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
 export type SignaturePosition = {
-  page: number;        // 1-based
-  xRatio: number;      // 0..1 (left)
-  yRatio: number;      // 0..1 (top, from top of page)
+  page: number;
+  xRatio: number;
+  yRatio: number;
   wRatio: number;
   hRatio: number;
 };
@@ -21,8 +21,14 @@ type Props = {
   onChange: (pos: SignaturePosition) => void;
 };
 
-const BOX_W = 0.28; // fraction of page width
-const BOX_H = 0.08; // fraction of page height
+const DEFAULT_W = 0.28;
+const DEFAULT_H = 0.08;
+const MIN_W = 0.08;
+const MIN_H = 0.03;
+
+type DragMode =
+  | { kind: "move"; dx: number; dy: number }
+  | { kind: "resize"; handle: "nw" | "ne" | "sw" | "se"; startX: number; startY: number; startW: number; startH: number; anchorX: number; anchorY: number };
 
 export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -31,6 +37,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [renderSize, setRenderSize] = useState({ w: 0, h: 0 });
+  const dragRef = useRef<DragMode | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,48 +74,70 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
     return () => { cancelled = true; };
   }, [pdf, page]);
 
-  // Drag state
-  const dragOffset = useRef<{ dx: number; dy: number } | null>(null);
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
-  const clampPos = (xRatio: number, yRatio: number, wRatio: number, hRatio: number) => ({
-    xRatio: Math.max(0, Math.min(1 - wRatio, xRatio)),
-    yRatio: Math.max(0, Math.min(1 - hRatio, yRatio)),
-    wRatio, hRatio,
-  });
-
-  const setFromMouse = (e: React.MouseEvent | MouseEvent, centered: boolean) => {
-    if (!renderSize.w) return;
-    const target = canvasRef.current!.getBoundingClientRect();
-    const x = (e.clientX - target.left) / renderSize.w;
-    const y = (e.clientY - target.top) / renderSize.h;
-    const w = value?.wRatio ?? BOX_W;
-    const h = value?.hRatio ?? BOX_H;
-    const off = dragOffset.current && !centered ? dragOffset.current : { dx: w / 2, dy: h / 2 };
-    const c = clampPos(x - off.dx, y - off.dy, w, h);
-    onChange({ page, ...c });
-  };
-
-  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    dragOffset.current = null;
-    setFromMouse(e, true);
-    const move = (ev: MouseEvent) => setFromMouse(ev, false);
-    const up = () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
+  const getRatio = (e: MouseEvent | React.MouseEvent) => {
+    const r = canvasRef.current!.getBoundingClientRect();
+    return {
+      x: clamp((e.clientX - r.left) / r.width, 0, 1),
+      y: clamp((e.clientY - r.top) / r.height, 0, 1),
     };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
   };
 
-  const handleBoxMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  const emit = (xr: number, yr: number, wr: number, hr: number) => {
+    wr = clamp(wr, MIN_W, 1);
+    hr = clamp(hr, MIN_H, 1);
+    xr = clamp(xr, 0, 1 - wr);
+    yr = clamp(yr, 0, 1 - hr);
+    onChange({ page, xRatio: xr, yRatio: yr, wRatio: wr, hRatio: hr });
+  };
+
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    if (!renderSize.w) return;
+    const { x, y } = getRatio(e);
+    const w = value?.wRatio ?? DEFAULT_W;
+    const h = value?.hRatio ?? DEFAULT_H;
+    emit(x - w / 2, y - h / 2, w, h);
+    dragRef.current = { kind: "move", dx: w / 2, dy: h / 2 };
+    attachWindow();
+  };
+
+  const handleBoxMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!value || !renderSize.w) return;
-    const target = canvasRef.current!.getBoundingClientRect();
-    const x = (e.clientX - target.left) / renderSize.w;
-    const y = (e.clientY - target.top) / renderSize.h;
-    dragOffset.current = { dx: x - value.xRatio, dy: y - value.yRatio };
-    const move = (ev: MouseEvent) => setFromMouse(ev, false);
+    if (!value) return;
+    const { x, y } = getRatio(e);
+    dragRef.current = { kind: "move", dx: x - value.xRatio, dy: y - value.yRatio };
+    attachWindow();
+  };
+
+  const handleResizeMouseDown = (handle: "nw" | "ne" | "sw" | "se") => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!value) return;
+    const { x, y } = getRatio(e);
+    // anchor = opposite corner
+    const anchorX = handle === "nw" || handle === "sw" ? value.xRatio + value.wRatio : value.xRatio;
+    const anchorY = handle === "nw" || handle === "ne" ? value.yRatio + value.hRatio : value.yRatio;
+    dragRef.current = { kind: "resize", handle, startX: x, startY: y, startW: value.wRatio, startH: value.hRatio, anchorX, anchorY };
+    attachWindow();
+  };
+
+  const attachWindow = () => {
+    const move = (ev: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d || !value) return;
+      const { x, y } = getRatio(ev);
+      if (d.kind === "move") {
+        emit(x - d.dx, y - d.dy, value.wRatio, value.hRatio);
+      } else {
+        const newW = Math.abs(x - d.anchorX);
+        const newH = Math.abs(y - d.anchorY);
+        const newX = Math.min(x, d.anchorX);
+        const newY = Math.min(y, d.anchorY);
+        emit(newX, newY, newW, newH);
+      }
+    };
     const up = () => {
+      dragRef.current = null;
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
     };
@@ -119,29 +148,26 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
   const totalPages = pdf?.numPages || 0;
   const showBox = value && value.page === page;
 
+  const handleStyle = "absolute w-3 h-3 bg-primary border-2 border-background rounded-sm";
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div className="text-xs text-muted-foreground">
-          Clique e arraste para posicionar a assinatura
+          Clique no PDF para posicionar. Arraste para mover. Use os cantos para redimensionar.
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <span className="text-xs font-medium tabular-nums">
-            {page} / {totalPages || "—"}
-          </span>
+          <span className="text-xs font-medium tabular-nums">{page} / {totalPages || "—"}</span>
           <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
-      <div
-        ref={containerRef}
-        className="relative border border-border rounded-lg overflow-auto bg-muted/30 max-h-[600px] flex justify-center"
-      >
+      <div ref={containerRef} className="relative border border-border rounded-lg overflow-auto bg-muted/30 max-h-[600px] flex justify-center">
         {loading && (
           <div className="flex items-center gap-2 p-10 text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" /> Carregando PDF…
@@ -152,7 +178,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
           {showBox && (
             <div
               onMouseDown={handleBoxMouseDown}
-              className="absolute border-2 border-primary bg-primary/15 rounded-sm flex flex-col items-start justify-center text-[9px] font-semibold text-primary px-1.5 leading-tight overflow-hidden"
+              className="absolute border-2 border-primary bg-primary/15 flex flex-col items-start justify-center text-[9px] font-semibold text-primary px-1.5 leading-tight overflow-hidden"
               style={{
                 left: `${value!.xRatio * 100}%`,
                 top: `${value!.yRatio * 100}%`,
@@ -163,19 +189,20 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
             >
               <span className="opacity-70">Assinado por:</span>
               <span className="truncate w-full font-bold">{signerLabel}</span>
+              <div onMouseDown={handleResizeMouseDown("nw")} className={handleStyle} style={{ left: -6, top: -6, cursor: "nwse-resize" }} />
+              <div onMouseDown={handleResizeMouseDown("ne")} className={handleStyle} style={{ right: -6, top: -6, cursor: "nesw-resize" }} />
+              <div onMouseDown={handleResizeMouseDown("sw")} className={handleStyle} style={{ left: -6, bottom: -6, cursor: "nesw-resize" }} />
+              <div onMouseDown={handleResizeMouseDown("se")} className={handleStyle} style={{ right: -6, bottom: -6, cursor: "nwse-resize" }} />
             </div>
           )}
         </div>
       </div>
 
       {value ? (
-        <p className="text-xs text-success">
-          ✓ Posição definida na página {value.page}. Arraste a caixa para ajustar.
-        </p>
+        <p className="text-xs text-success">✓ Pág. {value.page} · {Math.round(value.wRatio * 100)}% × {Math.round(value.hRatio * 100)}%</p>
       ) : (
-        <p className="text-xs text-warning">⚠ Clique no PDF para posicionar a assinatura visível.</p>
+        <p className="text-xs text-warning">⚠ Clique no PDF para posicionar a assinatura.</p>
       )}
     </div>
   );
 }
-

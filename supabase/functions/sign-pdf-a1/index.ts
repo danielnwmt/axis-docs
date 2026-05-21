@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
 import forge from "npm:node-forge@1.3.1";
-import signpdf from "npm:@signpdf/signpdf@3.2.4";
+import { SignPdf } from "npm:@signpdf/signpdf@3.2.4";
 import { P12Signer } from "npm:@signpdf/signer-p12@3.2.4";
 import { pdflibAddPlaceholder } from "npm:@signpdf/placeholder-pdf-lib@3.2.4";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
     const pdfWithPlaceholder = await pdfDoc.save();
 
     const signer = new P12Signer(pfxBytes, { passphrase: password });
-    const signedPdfBuf: Uint8Array = await signpdf.sign(pdfWithPlaceholder, signer);
+    const signedPdfBuf: Uint8Array = await new SignPdf().sign(pdfWithPlaceholder as any, signer);
 
     const hashSigned = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", signedPdfBuf)))
       .map((b) => b.toString(16).padStart(2, "0")).join("");
