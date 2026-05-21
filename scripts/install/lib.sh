@@ -1919,6 +1919,21 @@ server {
         client_max_body_size 100M;
     }
 
+    # License server proxy (evita bloqueio de CORS no browser)
+    location /license-proxy/ {
+        proxy_pass https://getlicence.lovable.app/;
+        proxy_ssl_server_name on;
+        proxy_set_header Host getlicence.lovable.app;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 15s;
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
+        if (\$request_method = OPTIONS) { return 204; }
+    }
+
     # Frontend SPA
     location / {
         try_files \$uri \$uri/ /index.html;
