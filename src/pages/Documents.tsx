@@ -37,6 +37,18 @@ export default function Documents() {
   const [deleteDoc, setDeleteDoc] = useState<typeof documents[0] | null>(null);
   const { toast } = useToast();
 
+  const { data: currentProfile } = useQuery({
+    queryKey: ["current-profile-role"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+      return data;
+    },
+  });
+  const isAdmin = currentProfile?.role === "Administrador";
+
+
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ["documents"],
     queryFn: async () => {
