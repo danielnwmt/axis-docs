@@ -17,7 +17,7 @@ const navItems = [
   { icon: Search, key: "search", path: "/search" },
   { icon: PenTool, key: "signature", path: "/signature" },
   { icon: Shield, key: "audit", path: "/audit" },
-  { icon: ShieldAlert, key: "lgpd", path: "/lgpd", label: "LGPD" },
+  { icon: ShieldAlert, key: "lgpd", path: "/lgpd" },
   { icon: Users, key: "users", path: "/users" },
   { icon: Settings, key: "settings", path: "/settings" },
 ];
@@ -83,7 +83,7 @@ export function AppSidebar() {
               )}
             >
               <item.icon className="w-[18px] h-[18px] shrink-0" />
-              <span>{(item as any).label || t(`nav.${item.key}`)}</span>
+              <span>{t(`nav.${item.key}`)}</span>
             </button>
           );
         })}
