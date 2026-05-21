@@ -322,10 +322,11 @@ export default function Users() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Administrador">Administrador</SelectItem>
-                  <SelectItem value="Operador">Operador</SelectItem>
-                  <SelectItem value="Usuário">Usuário</SelectItem>
+                  {allowedRoles.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
                 </SelectContent>
+
               </Select>
             </div>
             <div className="space-y-2">
