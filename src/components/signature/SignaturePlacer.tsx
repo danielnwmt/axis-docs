@@ -190,23 +190,27 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
           {showBox && (
             <div
               onMouseDown={handleBoxMouseDown}
-              className="absolute bg-white border border-border shadow-sm overflow-hidden"
+              className="absolute shadow-sm overflow-hidden"
               style={{
                 left: `${value!.xRatio * 100}%`,
                 top: `${value!.yRatio * 100}%`,
                 width: `${value!.wRatio * 100}%`,
                 height: `${value!.hRatio * 100}%`,
                 cursor: "move",
+                background: "#f5ecd0",
+                border: "2px solid #2d5a3d",
+                outline: "1px solid #2d5a3d",
+                outlineOffset: "-4px",
               }}
             >
-              <div className="px-1.5 pt-1 text-[7px] font-bold text-muted-foreground tracking-wide leading-none">
+              <div className="px-2 pt-1 text-[7px] font-bold tracking-wide leading-none" style={{ color: "#2d5a3d" }}>
                 DOCUMENTO ASSINADO POR:
               </div>
-              <div className="mx-1 mt-1 mb-1 border rounded-sm px-1.5 py-1 leading-tight" style={{ borderColor: "hsl(210 80% 45%)", background: "hsl(210 100% 97%)", height: "calc(100% - 18px)" }}>
-                <div className="text-[6px] text-muted-foreground font-medium">ASSINADO DIGITALMENTE POR:</div>
-                <div className="text-[10px] font-bold truncate" style={{ color: "hsl(210 80% 35%)" }}>{signerLabel}</div>
-                <div className="text-[6px] text-muted-foreground">{new Date().toUTCString().replace("GMT", "(UTC)")}</div>
-                <div className="text-[5.5px] text-muted-foreground truncate">hash: a1b2c3d4e5f6…</div>
+              <div className="mx-1.5 mt-1 mb-1 px-1.5 py-1 leading-tight" style={{ border: "1px solid #2d5a3d", background: "#f5ecd0", height: "calc(100% - 18px)" }}>
+                <div className="text-[6px] font-medium" style={{ color: "#2d5a3d" }}>ASSINADO DIGITALMENTE POR:</div>
+                <div className="text-[10px] font-bold truncate" style={{ color: "#2d5a3d" }}>{signerLabel}</div>
+                <div className="text-[6px]" style={{ color: "#3a4a3a" }}>{new Date().toUTCString().replace("GMT", "(UTC)")}</div>
+                <div className="text-[5.5px] truncate" style={{ color: "#3a4a3a" }}>hash: a1b2c3d4e5f6…</div>
               </div>
               <div onMouseDown={handleResizeMouseDown("nw")} className={handleStyle} style={{ left: -6, top: -6, cursor: "nwse-resize" }} />
               <div onMouseDown={handleResizeMouseDown("ne")} className={handleStyle} style={{ right: -6, top: -6, cursor: "nesw-resize" }} />
