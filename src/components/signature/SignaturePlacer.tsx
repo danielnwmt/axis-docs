@@ -197,7 +197,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
                 width: `${value!.wRatio * 100}%`,
                 height: `${value!.hRatio * 100}%`,
                 cursor: "move",
-                background: "#f5ecd0",
+                background: "linear-gradient(135deg, #e8f0e4 0%, #d4e4d0 50%, #c8dcc4 100%)",
                 border: "2px solid #2d5a3d",
                 outline: "1px solid #2d5a3d",
                 outlineOffset: "-4px",
@@ -206,7 +206,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
               <div className="px-2 pt-1 text-[7px] font-bold tracking-wide leading-none" style={{ color: "#2d5a3d" }}>
                 DOCUMENTO ASSINADO POR:
               </div>
-              <div className="mx-1.5 mt-1 mb-1 px-1.5 py-1 leading-tight" style={{ border: "1px solid #2d5a3d", background: "#f5ecd0", height: "calc(100% - 18px)" }}>
+              <div className="mx-1.5 mt-1 mb-1 px-1.5 py-1 leading-tight" style={{ border: "1px solid #2d5a3d", background: "transparent", height: "calc(100% - 18px)" }}>
                 <div className="text-[6px] font-medium" style={{ color: "#2d5a3d" }}>ASSINADO DIGITALMENTE POR:</div>
                 <div className="text-[10px] font-bold truncate" style={{ color: "#2d5a3d" }}>{signerLabel}</div>
                 <div className="text-[6px]" style={{ color: "#3a4a3a" }}>{new Date().toUTCString().replace("GMT", "(UTC)")}</div>
