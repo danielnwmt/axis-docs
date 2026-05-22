@@ -212,12 +212,77 @@ Deno.serve(async (req) => {
       parseStorageGb(serverData.storage) ||
       0;
 
-    // Compute current storage usage from documents table
+    // Compute current storage usage: prefer Google Drive (real total), fallback to documents table
     let storageUsedBytes = 0;
+    let driveOk = false;
     try {
-      const { data: docs } = await admin.from("documents").select("file_size");
-      storageUsedBytes = (docs || []).reduce((sum: number, d: any) => sum + (Number(d.file_size) || 0), 0);
+      const { data: cfgFile } = await admin.storage.from("settings").download("google-drive-config.json");
+      if (cfgFile) {
+        const driveCfg: any = JSON.parse(await cfgFile.text());
+        const rootInput = String(driveCfg.rootFolderId || "");
+        const fm = rootInput.match(/folders\/([a-zA-Z0-9_-]+)/);
+        const rootId = fm ? fm[1] : rootInput.trim();
+        const sa = driveCfg.serviceAccount;
+        if (rootId && sa?.client_email && sa?.private_key && sa?.token_uri) {
+          const b64u = (s: string) => btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+          const b64uBuf = (b: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+          const nowSec = Math.floor(Date.now() / 1000);
+          const header = b64u(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+          const payload = b64u(JSON.stringify({
+            iss: sa.client_email,
+            scope: "https://www.googleapis.com/auth/drive.readonly",
+            aud: sa.token_uri,
+            iat: nowSec,
+            exp: nowSec + 3600,
+          }));
+          const pem = String(sa.private_key).replace(/-----BEGIN PRIVATE KEY-----/, "").replace(/-----END PRIVATE KEY-----/, "").replace(/\n/g, "");
+          const bin = Uint8Array.from(atob(pem), (c) => c.charCodeAt(0));
+          const key = await crypto.subtle.importKey("pkcs8", bin, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+          const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(`${header}.${payload}`));
+          const jwt = `${header}.${payload}.${b64uBuf(sig)}`;
+          const tokRes = await fetch(sa.token_uri, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+          });
+          if (tokRes.ok) {
+            const accessToken = (await tokRes.json()).access_token;
+            const FOLDER_MIME = "application/vnd.google-apps.folder";
+            const stack: string[] = [rootId];
+            let total = 0;
+            while (stack.length) {
+              const current = stack.pop()!;
+              let pageToken: string | undefined;
+              do {
+                const url = new URL("https://www.googleapis.com/drive/v3/files");
+                url.searchParams.set("q", `'${current}' in parents and trashed=false`);
+                url.searchParams.set("fields", "nextPageToken, files(id,mimeType,size)");
+                url.searchParams.set("pageSize", "1000");
+                url.searchParams.set("supportsAllDrives", "true");
+                url.searchParams.set("includeItemsFromAllDrives", "true");
+                if (pageToken) url.searchParams.set("pageToken", pageToken);
+                const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+                if (!res.ok) break;
+                const data = await res.json();
+                for (const f of (data.files || [])) {
+                  if (f.mimeType === FOLDER_MIME) stack.push(f.id);
+                  else total += Number(f.size || 0);
+                }
+                pageToken = data.nextPageToken;
+              } while (pageToken);
+            }
+            storageUsedBytes = total;
+            driveOk = true;
+          }
+        }
+      }
     } catch {}
+    if (!driveOk) {
+      try {
+        const { data: docs } = await admin.from("documents").select("file_size");
+        storageUsedBytes = (docs || []).reduce((sum: number, d: any) => sum + (Number(d.file_size) || 0), 0);
+      } catch {}
+    }
 
     // Extrai cpf/cnpj e nome de várias formas que o servidor pode retornar
     const cust = (typeof serverData.customer === "object" && serverData.customer) ? serverData.customer : {};
