@@ -256,17 +256,18 @@ Deno.serve(async (req) => {
               do {
                 const url = new URL("https://www.googleapis.com/drive/v3/files");
                 url.searchParams.set("q", `'${current}' in parents and trashed=false`);
-                url.searchParams.set("fields", "nextPageToken, files(id,mimeType,size)");
+                url.searchParams.set("fields", "nextPageToken, files(id,mimeType,size,quotaBytesUsed)");
                 url.searchParams.set("pageSize", "1000");
                 url.searchParams.set("supportsAllDrives", "true");
                 url.searchParams.set("includeItemsFromAllDrives", "true");
+                url.searchParams.set("corpora", "allDrives");
                 if (pageToken) url.searchParams.set("pageToken", pageToken);
                 const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
                 if (!res.ok) break;
                 const data = await res.json();
                 for (const f of (data.files || [])) {
                   if (f.mimeType === FOLDER_MIME) stack.push(f.id);
-                  else total += Number(f.size || 0);
+                  else total += Number(f.quotaBytesUsed || f.size || 0);
                 }
                 pageToken = data.nextPageToken;
               } while (pageToken);
