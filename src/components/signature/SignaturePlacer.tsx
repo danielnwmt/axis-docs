@@ -39,6 +39,7 @@ const DEFAULT_W = 0.28;
 const DEFAULT_H = 0.08;
 const MIN_W = 0.08;
 const MIN_H = 0.03;
+const PREVIEW_Y_OFFSET_CM = 7;
 
 type DragMode =
   | { kind: "move"; dx: number; dy: number }
@@ -142,22 +143,21 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
     onChange(next);
   };
 
-  const computeDefaultSize = () => {
+  const getPreviewYOffsetRatio = () => {
     const vp = viewportRef.current;
     const size = renderSizeRef.current;
-    let w = DEFAULT_W;
-    let h = DEFAULT_H;
     if (vp?.convertToPdfPoint && size.w && size.h) {
       const p0 = vp.convertToPdfPoint(0, 0) as [number, number];
       const p1 = vp.convertToPdfPoint(size.w, size.h) as [number, number];
-      const pageWpt = Math.abs(p1[0] - p0[0]);
       const pageHpt = Math.abs(p1[1] - p0[1]);
-      const targetWpt = (5 / 2.54) * 72; // 5 cm em pontos PDF
-      const targetHpt = targetWpt / 3.5; // mantém proporção do carimbo
-      if (pageWpt > 0) w = clamp(targetWpt / pageWpt, MIN_W, 1);
-      if (pageHpt > 0) h = clamp(targetHpt / pageHpt, MIN_H, 1);
+      const offsetPt = (PREVIEW_Y_OFFSET_CM / 2.54) * 72;
+      return pageHpt > 0 ? offsetPt / pageHpt : 0;
     }
-    return { w, h };
+    return 0;
+  };
+
+  const computeDefaultSize = () => {
+    return { w: DEFAULT_W, h: DEFAULT_H };
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
@@ -179,7 +179,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
     e.preventDefault();
     if (!valueRef.current) return;
     const { x, y } = getRatio(e);
-    dragRef.current = { kind: "move", dx: x - valueRef.current.xRatio, dy: y - valueRef.current.yRatio };
+    dragRef.current = { kind: "move", dx: x - valueRef.current.xRatio, dy: y - (valueRef.current.yRatio + getPreviewYOffsetRatio()) };
     attachWindow();
   };
 
@@ -189,8 +189,9 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
     const v = valueRef.current;
     if (!v) return;
     const { x, y } = getRatio(e);
+    const previewYOffset = getPreviewYOffsetRatio();
     const anchorX = handle === "nw" || handle === "sw" ? v.xRatio + v.wRatio : v.xRatio;
-    const anchorY = handle === "nw" || handle === "ne" ? v.yRatio + v.hRatio : v.yRatio;
+    const anchorY = handle === "nw" || handle === "ne" ? v.yRatio + previewYOffset + v.hRatio : v.yRatio + previewYOffset;
     dragRef.current = { kind: "resize", handle, startX: x, startY: y, startW: v.wRatio, startH: v.hRatio, anchorX, anchorY };
     attachWindow();
   };
@@ -202,12 +203,12 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
       if (!d || !v) return;
       const { x, y } = getRatio(ev);
       if (d.kind === "move") {
-        emit(x - d.dx, y - d.dy, v.wRatio, v.hRatio);
+        emit(x - d.dx, y - d.dy - getPreviewYOffsetRatio(), v.wRatio, v.hRatio);
       } else {
         const newW = Math.abs(x - d.anchorX);
         const newH = Math.abs(y - d.anchorY);
         const newX = Math.min(x, d.anchorX);
-        const newY = Math.min(y, d.anchorY);
+        const newY = Math.min(y, d.anchorY) - getPreviewYOffsetRatio();
         emit(newX, newY, newW, newH);
       }
     };
@@ -222,6 +223,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
 
   const totalPages = pdf?.numPages || 0;
   const showBox = value && value.page === page;
+  const previewTopRatio = value ? clamp(value.yRatio + getPreviewYOffsetRatio(), 0, 1 - value.hRatio) : 0;
 
   const handleStyle = "absolute w-3 h-3 bg-primary border-2 border-background rounded-sm";
 
@@ -256,7 +258,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
               className="absolute overflow-hidden flex"
               style={{
                 left: `${value!.xRatio * 100}%`,
-                top: `${value!.yRatio * 100}%`,
+                top: `${previewTopRatio * 100}%`,
                 width: `${value!.wRatio * 100}%`,
                 height: `${value!.hRatio * 100}%`,
                 cursor: "move",
