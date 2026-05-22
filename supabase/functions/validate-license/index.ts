@@ -215,12 +215,34 @@ Deno.serve(async (req) => {
       storageUsedBytes = (docs || []).reduce((sum: number, d: any) => sum + (Number(d.file_size) || 0), 0);
     } catch {}
 
+    // Extrai cpf/cnpj e nome de várias formas que o servidor pode retornar
+    const cust = (typeof serverData.customer === "object" && serverData.customer) ? serverData.customer : {};
+    const rawCpfCnpj = String(
+      serverData.cpf_cnpj ?? serverData.cpfCnpj ?? serverData.cpf ?? serverData.cnpj ??
+      cust.cpf_cnpj ?? cust.cpfCnpj ?? cust.cpf ?? cust.cnpj ?? ""
+    ).replace(/\D/g, "");
+    const rawName = String(
+      serverData.customer_name ?? serverData.customerName ?? serverData.full_name ?? serverData.name ??
+      (typeof serverData.customer === "string" ? serverData.customer : "") ??
+      cust.full_name ?? cust.name ?? ""
+    ).trim();
+
+    // Preserva cpf_cnpj anterior se o servidor não retornar
+    let prevParsed: any = {};
+    try { prevParsed = JSON.parse(config.customer_name || "{}"); } catch {}
+    const finalCpfCnpj = rawCpfCnpj || String(prevParsed?.cpf_cnpj || "").replace(/\D/g, "");
+    const finalName = rawName || prevParsed?.full_name || prevParsed?.name || "";
+
+    const customerJson = (finalCpfCnpj || finalName)
+      ? JSON.stringify({ cpf_cnpj: finalCpfCnpj, full_name: finalName })
+      : (config.customer_name || "");
+
     const updates: Record<string, any> = {
       status: serverStatus,
       last_check: new Date().toISOString(),
       server_url: normalizeLicenseServerUrl(config.server_url),
       message: serverData.reason || serverData.message || errorMessage || "",
-      customer_name: serverData.customer_name || serverData.customer || config.customer_name || "",
+      customer_name: customerJson,
       expires_at: serverData.expires_at || serverData.expiresAt || config.expires_at,
       storage_limit_gb: storageLimitGb || config.storage_limit_gb || 0,
       storage_used_bytes: storageUsedBytes,
