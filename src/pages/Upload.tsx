@@ -423,6 +423,8 @@ export default function Upload() {
             fd.append("file", file);
             fd.append("fileName", file.name);
             fd.append("password", pfxPassword);
+            fd.append("unitName", unit);
+            fd.append("categoryName", category);
             if (signaturePos) fd.append("position", JSON.stringify(signaturePos));
 
             const { data: signRes, error: signErr } = await supabase.functions.invoke("sign-pdf-a1", { body: fd });
