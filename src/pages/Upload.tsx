@@ -89,12 +89,14 @@ export default function Upload() {
       if (!user) return;
       const { data } = await supabase
         .from("user_certificates" as any)
-        .select("subject_cn")
+        .select("subject_cn, signature_logo, signature_logo_size_pct")
         .eq("user_id", user.id)
         .maybeSingle();
       const cn = data && (data as any).subject_cn;
       if (cn) setCertCN(cn);
       setHasCert(!!cn);
+      setSigLogo((data as any)?.signature_logo ?? null);
+      setSigLogoSize((data as any)?.signature_logo_size_pct ?? 22);
     })();
   }, [user]);
 
