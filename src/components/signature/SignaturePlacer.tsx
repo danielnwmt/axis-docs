@@ -145,11 +145,9 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
     const { x, y } = getRatio(e);
     const w = valueRef.current?.wRatio ?? DEFAULT_W;
     const h = valueRef.current?.hRatio ?? DEFAULT_H;
-    const xr = clamp(x, 0, 1 - w);
-    const yr = clamp(y, 0, 1 - h);
+    const xr = clamp(x - w / 2, 0, 1 - w);
+    const yr = clamp(y - h / 2, 0, 1 - h);
     emit(xr, yr, w, h);
-    dragRef.current = { kind: "move", dx: 0, dy: 0 };
-    attachWindow();
   };
 
   const handleBoxMouseDown = (e: React.MouseEvent) => {
