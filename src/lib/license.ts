@@ -34,12 +34,22 @@ const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1h
 const LICENSE_CHECK_PATH = "/api/public/license/check";
 
 export function normalizeLicenseServerUrl(server_url: string): string {
-  const trimmed = server_url.trim().replace(/\/+$/, "");
+  let trimmed = server_url.trim().replace(/\/+$/, "");
   if (!trimmed) return "";
+
+  // Auto-correção de typos comuns no path
+  trimmed = trimmed
+    .replace(/\/ap\/public\/license\/check$/i, LICENSE_CHECK_PATH)
+    .replace(/\/api\/public\/licence\/check$/i, LICENSE_CHECK_PATH)
+    .replace(/\/api\/public\/license\/chek$/i, LICENSE_CHECK_PATH);
 
   try {
     const url = new URL(trimmed);
-    if (url.pathname === "" || url.pathname === "/") {
+    if (url.pathname === "" || url.pathname === "/" || url.pathname === "/admin") {
+      return `${url.origin}${LICENSE_CHECK_PATH}`;
+    }
+    // Se o path contém "license" mas não termina com o caminho correto, normaliza
+    if (/\/(ap|api)\/public\/licen[cs]e/i.test(url.pathname) && url.pathname !== LICENSE_CHECK_PATH) {
       return `${url.origin}${LICENSE_CHECK_PATH}`;
     }
   } catch {
