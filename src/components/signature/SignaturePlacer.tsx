@@ -13,6 +13,7 @@ export type SignaturePosition = {
   yRatio: number;
   wRatio: number;
   hRatio: number;
+  pdfRect?: { x: number; y: number; width: number; height: number };
   pdfX?: number;
   pdfY?: number;
   pdfW?: number;
@@ -122,6 +123,21 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
     xr = clamp(xr, 0, 1 - wr);
     yr = clamp(yr, 0, 1 - hr);
     const next: SignaturePosition = { page: pageRef.current, xRatio: xr, yRatio: yr, wRatio: wr, hRatio: hr };
+    const viewport = viewportRef.current;
+    const size = renderSizeRef.current;
+    if (viewport?.convertToPdfPoint && size.w && size.h) {
+      const tl = viewport.convertToPdfPoint(xr * size.w, yr * size.h) as [number, number];
+      const br = viewport.convertToPdfPoint((xr + wr) * size.w, (yr + hr) * size.h) as [number, number];
+      const x1 = Math.min(tl[0], br[0]);
+      const x2 = Math.max(tl[0], br[0]);
+      const y1 = Math.min(tl[1], br[1]);
+      const y2 = Math.max(tl[1], br[1]);
+      next.pdfRect = { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+      next.pdfX = x1;
+      next.pdfY = y1;
+      next.pdfW = x2 - x1;
+      next.pdfH = y2 - y1;
+    }
     valueRef.current = next;
     onChange(next);
   };
