@@ -11,7 +11,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SIGNED_PDF_Y_CORRECTION_CM = 5;
+const SIGNED_PDF_Y_CORRECTION_CM = 9;
 const PDF_POINTS_PER_CM = 72 / 2.54;
 
 function getEncKey(): Uint8Array {
