@@ -8,12 +8,20 @@ const corsHeaders = {
 const LICENSE_CHECK_PATH = "/api/public/license/check";
 
 function normalizeLicenseServerUrl(serverUrl: string) {
-  const trimmed = String(serverUrl || "").trim().replace(/\/+$/, "");
+  let trimmed = String(serverUrl || "").trim().replace(/\/+$/, "");
   if (!trimmed) return "";
+
+  trimmed = trimmed
+    .replace(/\/ap\/public\/license\/check$/i, LICENSE_CHECK_PATH)
+    .replace(/\/api\/public\/licence\/check$/i, LICENSE_CHECK_PATH)
+    .replace(/\/api\/public\/license\/chek$/i, LICENSE_CHECK_PATH);
 
   try {
     const url = new URL(trimmed);
     if (url.pathname === "" || url.pathname === "/" || url.pathname === "/admin") {
+      return `${url.origin}${LICENSE_CHECK_PATH}`;
+    }
+    if (/\/(ap|api)\/public\/licen[cs]e/i.test(url.pathname) && url.pathname !== LICENSE_CHECK_PATH) {
       return `${url.origin}${LICENSE_CHECK_PATH}`;
     }
   } catch {
