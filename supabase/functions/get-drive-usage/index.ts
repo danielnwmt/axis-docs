@@ -59,17 +59,18 @@ async function sumFolder(token: string, folderId: string): Promise<number> {
       const q = `'${current}' in parents and trashed=false`;
       const url = new URL("https://www.googleapis.com/drive/v3/files");
       url.searchParams.set("q", q);
-      url.searchParams.set("fields", "nextPageToken, files(id,mimeType,size)");
+      url.searchParams.set("fields", "nextPageToken, files(id,mimeType,size,quotaBytesUsed)");
       url.searchParams.set("pageSize", "1000");
       url.searchParams.set("supportsAllDrives", "true");
       url.searchParams.set("includeItemsFromAllDrives", "true");
+      url.searchParams.set("corpora", "allDrives");
       if (pageToken) url.searchParams.set("pageToken", pageToken);
       const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error(`Drive list error: ${await res.text()}`);
       const data = await res.json();
       for (const f of (data.files || [])) {
         if (f.mimeType === FOLDER_MIME) stack.push(f.id);
-        else total += Number(f.size || 0);
+        else total += Number(f.quotaBytesUsed || f.size || 0);
       }
       pageToken = data.nextPageToken;
     } while (pageToken);
