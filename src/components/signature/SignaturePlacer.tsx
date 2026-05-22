@@ -33,7 +33,9 @@ type DragMode =
   | { kind: "move"; dx: number; dy: number }
   | { kind: "resize"; handle: "nw" | "ne" | "sw" | "se"; startX: number; startY: number; startW: number; startH: number; anchorX: number; anchorY: number };
 
-export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
+export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, logoSizePct }: Props) {
+  const effectiveLogo = logoUrl || axisLogo;
+  const effectiveLogoMaxPct = Math.min(50, Math.max(5, logoSizePct ?? 22));
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [pdf, setPdf] = useState<any>(null);
