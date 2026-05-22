@@ -69,31 +69,11 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    // Temporary unlock takes precedence (admin entered an unlock code)
-    if (config?.temp_unlock_until && new Date(config.temp_unlock_until).getTime() > Date.now()) {
-      const tempMsg = `Desbloqueio temporário ativo até ${new Date(config.temp_unlock_until).toLocaleString("pt-BR")}`;
-      const nowIso = new Date().toISOString();
-      // Persiste status=active para que a UI (que lê do banco) reflita imediatamente
-      await admin.from("license_config").update({
-        status: "active",
-        last_check: nowIso,
-        message: tempMsg,
-        updated_at: nowIso,
-        updated_by: userData.user.id,
-      }).eq("id", config.id);
+    // Desbloqueio temporário mantém o sistema "active", mas seguimos consultando o servidor
+    // para atualizar customer_name, cpf_cnpj, expires_at, storage etc.
+    const tempUnlockActive = !!(config?.temp_unlock_until && new Date(config.temp_unlock_until).getTime() > Date.now());
 
-      return new Response(
-        JSON.stringify({
-          status: "active",
-          customer_name: config.customer_name || "",
-          expires_at: config.expires_at,
-          message: tempMsg,
-          last_check: nowIso,
-          temp_unlock_until: config.temp_unlock_until,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+
 
     if (!config || !config.server_url || !config.license_key) {
       return new Response(
@@ -237,11 +217,17 @@ Deno.serve(async (req) => {
       ? JSON.stringify({ cpf_cnpj: finalCpfCnpj, full_name: finalName })
       : (config.customer_name || "");
 
+    // Se desbloqueio temporário ativo, força status active e mensagem específica
+    const effectiveStatus = tempUnlockActive ? "active" : serverStatus;
+    const effectiveMessage = tempUnlockActive
+      ? `Desbloqueio temporário ativo até ${new Date(config.temp_unlock_until).toLocaleString("pt-BR")}`
+      : (serverData.reason || serverData.message || errorMessage || "");
+
     const updates: Record<string, any> = {
-      status: serverStatus,
+      status: effectiveStatus,
       last_check: new Date().toISOString(),
       server_url: normalizeLicenseServerUrl(config.server_url),
-      message: serverData.reason || serverData.message || errorMessage || "",
+      message: effectiveMessage,
       customer_name: customerJson,
       expires_at: serverData.expires_at || serverData.expiresAt || config.expires_at,
       storage_limit_gb: storageLimitGb || config.storage_limit_gb || 0,
@@ -254,13 +240,14 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        status: serverStatus,
+        status: effectiveStatus,
         customer_name: updates.customer_name,
         expires_at: updates.expires_at,
         message: updates.message,
         last_check: updates.last_check,
         storage_limit_gb: updates.storage_limit_gb,
         storage_used_bytes: updates.storage_used_bytes,
+        temp_unlock_until: tempUnlockActive ? config.temp_unlock_until : null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
