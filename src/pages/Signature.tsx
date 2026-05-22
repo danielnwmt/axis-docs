@@ -29,6 +29,8 @@ export default function Signature() {
   const [signaturePos, setSignaturePos] = useState<SignaturePosition | null>(null);
   const [certCN, setCertCN] = useState<string>("");
   const [hasCert, setHasCert] = useState<boolean | null>(null);
+  const [sigLogo, setSigLogo] = useState<string | null>(null);
+  const [sigLogoSize, setSigLogoSize] = useState<number>(22);
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
