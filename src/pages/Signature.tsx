@@ -291,6 +291,8 @@ export default function Signature() {
                     signerLabel={certCN || user?.email?.split("@")[0] || "Assinatura"}
                     value={signaturePos}
                     onChange={setSignaturePos}
+                    logoUrl={sigLogo}
+                    logoSizePct={sigLogoSize}
                   />
                 </div>
               )}
