@@ -801,15 +801,16 @@ function LicencaSection() {
       const res = await unlockTemporary();
       if (res.ok) {
         clearLicenseCache();
+        await validateLicense();
         const c = await loadLicenseConfig();
         setConfig(c);
+        await refreshQuota();
         toast({
           title: "Sistema desbloqueado",
           description: res.valid_until
             ? `Válido até ${new Date(res.valid_until).toLocaleString("pt-BR")}`
             : "Desbloqueio temporário ativado por 24h.",
         });
-        await validateLicense();
       } else {
         toast({ title: "Não foi possível desbloquear", description: res.message || "Tente novamente mais tarde.", variant: "destructive" });
       }
