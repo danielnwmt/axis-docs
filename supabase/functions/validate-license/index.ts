@@ -241,9 +241,11 @@ Deno.serve(async (req) => {
       ? JSON.stringify({ cpf_cnpj: finalCpfCnpj, full_name: finalName })
       : (config.customer_name || "");
 
-    // Se desbloqueio temporário ativo, força status active e mensagem específica
-    const effectiveStatus = tempUnlockActive ? "active" : serverStatus;
-    const effectiveMessage = tempUnlockActive
+    // Se a licença está ativa no servidor, limpa o desbloqueio temporário (não é mais necessário)
+    const licenseTrulyActive = serverStatus === "active";
+    const showTempUnlock = tempUnlockActive && !licenseTrulyActive;
+    const effectiveStatus = showTempUnlock ? "active" : serverStatus;
+    const effectiveMessage = showTempUnlock
       ? `Desbloqueio temporário ativo até ${new Date(config.temp_unlock_until).toLocaleString("pt-BR")}`
       : (serverData.reason || serverData.message || errorMessage || "");
 
