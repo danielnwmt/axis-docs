@@ -285,7 +285,7 @@ Deno.serve(async (req) => {
     // Load user's encrypted certificate
     const { data: certRow, error: certErr } = await supabase
       .from("user_certificates")
-      .select("pfx_encrypted, pfx_iv, pfx_auth_tag, subject_cn, cpf, issuer, valid_to, fingerprint_sha256")
+      .select("pfx_encrypted, pfx_iv, pfx_auth_tag, subject_cn, cpf, issuer, valid_to, fingerprint_sha256, signature_logo, signature_logo_size_pct")
       .eq("user_id", user.id).maybeSingle();
     if (certErr || !certRow) {
       return new Response(JSON.stringify({ error: "Você ainda não cadastrou seu certificado A1. Vá em Configurações → Meu Certificado." }), {
