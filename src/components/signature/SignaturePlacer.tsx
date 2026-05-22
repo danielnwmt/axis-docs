@@ -17,6 +17,12 @@ export type SignaturePosition = {
   pdfY?: number;
   pdfW?: number;
   pdfH?: number;
+  pdfQuad?: {
+    tl: [number, number];
+    tr: [number, number];
+    br: [number, number];
+    bl: [number, number];
+  };
 };
 
 type Props = {
@@ -119,12 +125,15 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
     const viewport = viewportRef.current;
     const size = renderSizeRef.current;
     if (viewport?.convertToPdfPoint && size.w && size.h) {
-      const [x1, y1] = viewport.convertToPdfPoint(xr * size.w, yr * size.h);
-      const [x2, y2] = viewport.convertToPdfPoint((xr + wr) * size.w, (yr + hr) * size.h);
-      next.pdfX = Math.min(x1, x2);
-      next.pdfY = Math.min(y1, y2);
-      next.pdfW = Math.abs(x2 - x1);
-      next.pdfH = Math.abs(y2 - y1);
+      const tl = viewport.convertToPdfPoint(xr * size.w, yr * size.h) as [number, number];
+      const tr = viewport.convertToPdfPoint((xr + wr) * size.w, yr * size.h) as [number, number];
+      const br = viewport.convertToPdfPoint((xr + wr) * size.w, (yr + hr) * size.h) as [number, number];
+      const bl = viewport.convertToPdfPoint(xr * size.w, (yr + hr) * size.h) as [number, number];
+      next.pdfQuad = { tl, tr, br, bl };
+      next.pdfX = Math.min(tl[0], tr[0], br[0], bl[0]);
+      next.pdfY = Math.min(tl[1], tr[1], br[1], bl[1]);
+      next.pdfW = Math.max(tl[0], tr[0], br[0], bl[0]) - next.pdfX;
+      next.pdfH = Math.max(tl[1], tr[1], br[1], bl[1]) - next.pdfY;
     }
     valueRef.current = next;
     onChange(next);
