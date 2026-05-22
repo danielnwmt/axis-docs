@@ -13,6 +13,10 @@ export type SignaturePosition = {
   yRatio: number;
   wRatio: number;
   hRatio: number;
+  pdfX?: number;
+  pdfY?: number;
+  pdfW?: number;
+  pdfH?: number;
 };
 
 type Props = {
@@ -44,10 +48,13 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
   const [renderSize, setRenderSize] = useState({ w: 0, h: 0 });
   const [now, setNow] = useState(() => new Date());
   const dragRef = useRef<DragMode | null>(null);
+  const viewportRef = useRef<any>(null);
+  const renderSizeRef = useRef({ w: 0, h: 0 });
   const valueRef = useRef<SignaturePosition | null>(value);
   const pageRef = useRef<number>(page);
   useEffect(() => { valueRef.current = value; }, [value]);
   useEffect(() => { pageRef.current = page; }, [page]);
+  useEffect(() => { renderSizeRef.current = renderSize; }, [renderSize]);
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
@@ -85,7 +92,10 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
       canvas.style.height = `${viewport.height}px`;
       renderTask = p.render({ canvasContext: ctx, viewport });
       try { await renderTask.promise; } catch (e: any) { if (e?.name !== "RenderingCancelledException") throw e; }
-      if (!cancelled) setRenderSize({ w: viewport.width, h: viewport.height });
+      if (!cancelled) {
+        viewportRef.current = viewport;
+        setRenderSize({ w: viewport.width, h: viewport.height });
+      }
     })();
     return () => { cancelled = true; try { renderTask?.cancel(); } catch {} };
   }, [pdf, page]);
@@ -105,7 +115,17 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
     hr = clamp(hr, MIN_H, 1);
     xr = clamp(xr, 0, 1 - wr);
     yr = clamp(yr, 0, 1 - hr);
-    const next = { page: pageRef.current, xRatio: xr, yRatio: yr, wRatio: wr, hRatio: hr };
+    const next: SignaturePosition = { page: pageRef.current, xRatio: xr, yRatio: yr, wRatio: wr, hRatio: hr };
+    const viewport = viewportRef.current;
+    const size = renderSizeRef.current;
+    if (viewport?.convertToPdfPoint && size.w && size.h) {
+      const [x1, y1] = viewport.convertToPdfPoint(xr * size.w, yr * size.h);
+      const [x2, y2] = viewport.convertToPdfPoint((xr + wr) * size.w, (yr + hr) * size.h);
+      next.pdfX = Math.min(x1, x2);
+      next.pdfY = Math.min(y1, y2);
+      next.pdfW = Math.abs(x2 - x1);
+      next.pdfH = Math.abs(y2 - y1);
+    }
     valueRef.current = next;
     onChange(next);
   };
