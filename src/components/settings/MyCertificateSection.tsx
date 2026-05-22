@@ -40,16 +40,24 @@ export function MyCertificateSection() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  // Logo da assinatura
+  const [sigLogo, setSigLogo] = useState<string | null>(null);
+  const [sigLogoSize, setSigLogoSize] = useState<number>(22);
+  const [savingLogo, setSavingLogo] = useState(false);
+  const logoFileRef = useRef<HTMLInputElement>(null);
+
   const load = async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
     const { data } = await supabase
       .from("user_certificates" as any)
-      .select("subject_cn, cpf, issuer, valid_from, valid_to, fingerprint_sha256, uploaded_at")
+      .select("subject_cn, cpf, issuer, valid_from, valid_to, fingerprint_sha256, uploaded_at, signature_logo, signature_logo_size_pct")
       .eq("user_id", user.id)
       .maybeSingle();
     setCert((data as any) || null);
+    setSigLogo((data as any)?.signature_logo ?? null);
+    setSigLogoSize((data as any)?.signature_logo_size_pct ?? 22);
     setLoading(false);
   };
 
