@@ -182,58 +182,7 @@ Deno.serve(async (req) => {
       const pdfDoc = await PDFDocument.load(pdfBytes);
       if (position && typeof position.page === "number") {
         try {
-          const pages = pdfDoc.getPages();
-          const pageIdx = Math.max(0, Math.min(pages.length - 1, position.page - 1));
-          const page = pages[pageIdx];
-          const { width: pw, height: ph } = page.getSize();
-          const x = (position.xRatio ?? 0) * pw;
-          const wBox = (position.wRatio ?? 0.28) * pw;
-          const hBox = (position.hRatio ?? 0.08) * ph;
-          const yTop = (position.yRatio ?? 0) * ph;
-          const y = ph - yTop - hBox;
-          const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-          const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-          const navy = rgb(0.12, 0.23, 0.37);
-          const navyDark = rgb(0.06, 0.11, 0.24);
-          const slate = rgb(0.28, 0.33, 0.41);
-          const white = rgb(1, 1, 1);
-          page.drawRectangle({ x, y, width: wBox, height: hBox, color: white, opacity: 1, borderColor: navy, borderWidth: 0.6 });
-          const barW = Math.max(2.5, wBox * 0.022);
-          page.drawRectangle({ x, y, width: barW, height: hBox, color: navy });
-          const cn = certRow.subject_cn || user.email || "Assinante";
-          const now = new Date();
-          const dt = `${now.toISOString().slice(0,10)} ${now.toISOString().slice(11,19)} UTC`;
-          const padL = barW + wBox * 0.035;
-          const padR = wBox * 0.035;
-          const textX = x + padL;
-          const contentW = wBox - padL - padR;
-          const labelSize = Math.max(6, hBox * 0.14);
-          const nameSize = Math.max(8, hBox * 0.22);
-          const cpfSize = Math.max(7, hBox * 0.18);
-          const metaSize = Math.max(6, hBox * 0.13);
-          const formatCPF = (raw: string): string => {
-            const digits = raw.replace(/\D/g, "");
-            if (digits.length === 11) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-            return raw;
-          };
-          const colonIdx = cn.lastIndexOf(":");
-          let nameOnly = cn, cpfOnly = "";
-          if (colonIdx > 0) { nameOnly = cn.slice(0, colonIdx).trim(); cpfOnly = cn.slice(colonIdx + 1).trim(); }
-          const gap = hBox * 0.04;
-          const totalH = labelSize + nameSize + (cpfOnly ? cpfSize + gap : 0) + metaSize + gap * 3;
-          let cy = y + (hBox + totalH) / 2 - labelSize;
-          page.drawText("ASSINADO DIGITALMENTE POR", { x: textX, y: cy, size: labelSize, font: fontBold, color: navy });
-          cy -= nameSize + gap;
-          let nameText = nameOnly;
-          while (fontBold.widthOfTextAtSize(nameText, nameSize) > contentW && nameText.length > 4) nameText = nameText.slice(0, -2);
-          if (nameText !== nameOnly) nameText = nameText.slice(0, -1) + "…";
-          page.drawText(nameText, { x: textX, y: cy, size: nameSize, font: fontBold, color: navyDark });
-          if (cpfOnly) {
-            cy -= cpfSize + gap;
-            page.drawText(`CPF: ${formatCPF(cpfOnly)}`, { x: textX, y: cy, size: cpfSize, font: fontBold, color: navyDark });
-          }
-          cy -= metaSize + gap;
-          page.drawText(dt, { x: textX, y: cy, size: metaSize, font, color: slate });
+          await drawSignatureStamp(pdfDoc, page_position_to_pages(pdfDoc, position), certRow, user);
         } catch (e) { console.error("draw stamp failed:", e); }
       }
       pdflibAddPlaceholder({
