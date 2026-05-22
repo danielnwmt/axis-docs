@@ -218,11 +218,6 @@ async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user
   const textX = x + padL + logoW;
   const contentW = wBox - padL - padR - logoW;
 
-  let labelSize = Math.max(8, hBox * 0.17);
-  let nameSize = Math.max(11, hBox * 0.28);
-  let cpfSize = Math.max(9, hBox * 0.22);
-  let metaSize = Math.max(8, hBox * 0.16);
-
   const formatCPF = (raw: string): string => {
     const digits = raw.replace(/\D/g, "");
     if (digits.length === 11) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
@@ -237,24 +232,39 @@ async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user
     cpfOnly = cn.slice(colonIdx + 1).trim();
   }
 
-  // Shrink name font until it fits (no truncation)
-  while (nameSize > 6 && fontBold.widthOfTextAtSize(nameOnly, nameSize) > contentW) {
-    nameSize -= 0.5;
+  const labelText = "ASSINADO DIGITALMENTE POR";
+  const cpfText = cpfOnly ? `CPF: ${formatCPF(cpfOnly)}` : "";
+  const fitSize = (text: string, initial: number, min: number, f: any) => {
+    let size = initial;
+    while (size > min && f.widthOfTextAtSize(text, size) > contentW) size -= 0.25;
+    return Math.max(min, size);
+  };
+
+  let labelSize = fitSize(labelText, Math.max(7, hBox * 0.15), 4.5, fontBold);
+  let nameSize = fitSize(nameOnly, Math.max(9, hBox * 0.24), 5.5, fontBold);
+  let cpfSize = cpfText ? fitSize(cpfText, Math.max(10, hBox * 0.22), 5.5, fontBold) : 0;
+  let metaSize = fitSize(dt, Math.max(7, hBox * 0.15), 4.5, font);
+  let gap = Math.max(1.2, hBox * 0.035);
+
+  let totalH = labelSize + nameSize + (cpfText ? cpfSize : 0) + metaSize + gap * (cpfText ? 3 : 2);
+  if (totalH > hBox * 0.84) {
+    const scale = (hBox * 0.84) / totalH;
+    labelSize *= scale;
+    nameSize *= scale;
+    cpfSize *= scale;
+    metaSize *= scale;
+    gap *= scale;
+    totalH = labelSize + nameSize + (cpfText ? cpfSize : 0) + metaSize + gap * (cpfText ? 3 : 2);
   }
 
-  const gap = hBox * 0.04;
-  const totalH = labelSize + nameSize + (cpfOnly ? cpfSize + gap : 0) + metaSize + gap * 3;
   let cy = y + (hBox + totalH) / 2 - labelSize;
-
-  page.drawText("ASSINADO DIGITALMENTE POR", { x: textX, y: cy, size: labelSize, font: fontBold, color: navy });
+  page.drawText(labelText, { x: textX, y: cy, size: labelSize, font: fontBold, color: navy });
   cy -= nameSize + gap;
   page.drawText(nameOnly, { x: textX, y: cy, size: nameSize, font: fontBold, color: navyDark });
-
-  if (cpfOnly) {
+  if (cpfText) {
     cy -= cpfSize + gap;
-    page.drawText(`CPF: ${formatCPF(cpfOnly)}`, { x: textX, y: cy, size: cpfSize, font: fontBold, color: navyDark });
+    page.drawText(cpfText, { x: textX, y: cy, size: cpfSize, font: fontBold, color: navyDark });
   }
-
   cy -= metaSize + gap;
   page.drawText(dt, { x: textX, y: cy, size: metaSize, font, color: slate });
 }
