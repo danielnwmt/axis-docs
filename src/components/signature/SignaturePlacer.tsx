@@ -39,8 +39,6 @@ const DEFAULT_W = 0.28;
 const DEFAULT_H = 0.08;
 const MIN_W = 0.08;
 const MIN_H = 0.03;
-const CLICK_Y_CORRECTION_CM = 7;
-const CSS_PX_PER_CM = 96 / 2.54;
 
 type DragMode =
   | { kind: "move"; dx: number; dy: number }
@@ -150,11 +148,10 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
     const { x, y } = getRatio(e);
     const w = valueRef.current?.wRatio ?? DEFAULT_W;
     const h = valueRef.current?.hRatio ?? DEFAULT_H;
-    const yCorrectionRatio = (CLICK_Y_CORRECTION_CM * CSS_PX_PER_CM) / renderSize.h;
     const xr = clamp(x, 0, 1 - w);
-    const yr = clamp(y + yCorrectionRatio, 0, 1 - h);
+    const yr = clamp(y, 0, 1 - h);
     emit(xr, yr, w, h);
-    dragRef.current = { kind: "move", dx: 0, dy: -yCorrectionRatio };
+    dragRef.current = { kind: "move", dx: 0, dy: 0 };
     attachWindow();
   };
 
