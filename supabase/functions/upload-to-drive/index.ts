@@ -120,6 +120,7 @@ Deno.serve(async (req) => {
     const file = formData.get("file") as File | null;
     const fileName = formData.get("fileName") as string || file?.name || "arquivo";
     const unitName = formData.get("unitName") as string || "";
+    const categoryName = formData.get("categoryName") as string || "";
     const mimeType = file?.type || "application/octet-stream";
 
     if (!file) {
