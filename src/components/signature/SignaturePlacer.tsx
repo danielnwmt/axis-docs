@@ -39,7 +39,7 @@ const DEFAULT_W = 0.28;
 const DEFAULT_H = 0.08;
 const MIN_W = 0.08;
 const MIN_H = 0.03;
-const CLICK_OFFSET_CM = 5;
+const CLICK_OFFSET_CM = 7;
 const PDF_POINTS_PER_CM = 72 / 2.54;
 
 type DragMode =
