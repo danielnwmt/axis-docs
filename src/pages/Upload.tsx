@@ -49,6 +49,8 @@ export default function Upload() {
   const [signaturePos, setSignaturePos] = useState<SignaturePosition | null>(null);
   const [certCN, setCertCN] = useState<string>("");
   const [hasCert, setHasCert] = useState<boolean | null>(null);
+  const [sigLogo, setSigLogo] = useState<string | null>(null);
+  const [sigLogoSize, setSigLogoSize] = useState<number>(22);
   const [signedFiles, setSignedFiles] = useState<Set<string>>(new Set());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
