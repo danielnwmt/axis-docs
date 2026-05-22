@@ -141,6 +141,124 @@ async function uploadSignedToDrive(supabase: any, signedName: string, signedPdfB
   return { driveFileId: upJson.id as string, driveLink: `https://drive.google.com/file/d/${upJson.id}/view` };
 }
 
+async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user: any) {
+  const pages = pdfDoc.getPages();
+  const pageIdx = Math.max(0, Math.min(pages.length - 1, position.page - 1));
+  const page = pages[pageIdx];
+  const { width: pw, height: ph } = page.getSize();
+  const x = (position.xRatio ?? 0) * pw;
+  const wBox = (position.wRatio ?? 0.28) * pw;
+  const hBox = (position.hRatio ?? 0.08) * ph;
+  const yTop = (position.yRatio ?? 0) * ph;
+  const y = ph - yTop - hBox;
+
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const navy = rgb(0.12, 0.23, 0.37);
+  const navyDark = rgb(0.06, 0.11, 0.24);
+  const slate = rgb(0.28, 0.33, 0.41);
+  const white = rgb(1, 1, 1);
+
+  page.drawRectangle({ x, y, width: wBox, height: hBox, color: white, opacity: 1, borderColor: navy, borderWidth: 0.6 });
+  const barW = Math.max(2.5, wBox * 0.022);
+  page.drawRectangle({ x, y, width: barW, height: hBox, color: navy });
+
+  const cn = certRow.subject_cn || user.email || "Assinante";
+  const now = new Date();
+  // pt-BR local format: DD/MM/YYYY, HH:MM:SS
+  const dt = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).format(now);
+
+  // Try to embed logo (custom user logo or system default)
+  let logoImg: any = null;
+  try {
+    const customLogo: string | null = (certRow as any).signature_logo || null;
+    if (customLogo && customLogo.startsWith("data:image/")) {
+      const commaIdx = customLogo.indexOf(",");
+      const meta = customLogo.slice(0, commaIdx);
+      const b64 = customLogo.slice(commaIdx + 1);
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      if (/image\/jpe?g/.test(meta)) logoImg = await pdfDoc.embedJpg(bytes);
+      else logoImg = await pdfDoc.embedPng(bytes);
+    } else {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+      const projectRef = supabaseUrl.replace("https://", "").split(".")[0];
+      const logoUrl = `https://${projectRef}.lovable.app/axis-logo-transparent.png`;
+      const logoResp = await fetch(logoUrl);
+      if (logoResp.ok) {
+        const logoBytes = new Uint8Array(await logoResp.arrayBuffer());
+        logoImg = await pdfDoc.embedPng(logoBytes);
+      }
+    }
+  } catch (e) { console.warn("logo embed failed:", e); }
+
+  const padL = barW + wBox * 0.035;
+  const padR = wBox * 0.035;
+
+  let logoW = 0;
+  if (logoImg) {
+    const sizePct = Math.min(50, Math.max(5, (certRow as any).signature_logo_size_pct ?? 22));
+    const maxLogoH = hBox * 0.7;
+    const maxLogoW = wBox * (sizePct / 100);
+    const ratio = logoImg.width / logoImg.height;
+    let lh = maxLogoH;
+    let lw = lh * ratio;
+    if (lw > maxLogoW) { lw = maxLogoW; lh = lw / ratio; }
+    const lx = x + padL;
+    const ly = y + (hBox - lh) / 2;
+    page.drawImage(logoImg, { x: lx, y: ly, width: lw, height: lh });
+    logoW = lw + wBox * 0.025;
+  }
+
+  const textX = x + padL + logoW;
+  const contentW = wBox - padL - padR - logoW;
+
+  let labelSize = Math.max(8, hBox * 0.17);
+  let nameSize = Math.max(11, hBox * 0.28);
+  let cpfSize = Math.max(9, hBox * 0.22);
+  let metaSize = Math.max(8, hBox * 0.16);
+
+  const formatCPF = (raw: string): string => {
+    const digits = raw.replace(/\D/g, "");
+    if (digits.length === 11) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+    return raw;
+  };
+
+  const colonIdx = cn.lastIndexOf(":");
+  let nameOnly = cn;
+  let cpfOnly = "";
+  if (colonIdx > 0) {
+    nameOnly = cn.slice(0, colonIdx).trim();
+    cpfOnly = cn.slice(colonIdx + 1).trim();
+  }
+
+  // Shrink name font until it fits (no truncation)
+  while (nameSize > 6 && fontBold.widthOfTextAtSize(nameOnly, nameSize) > contentW) {
+    nameSize -= 0.5;
+  }
+
+  const gap = hBox * 0.04;
+  const totalH = labelSize + nameSize + (cpfOnly ? cpfSize + gap : 0) + metaSize + gap * 3;
+  let cy = y + (hBox + totalH) / 2 - labelSize;
+
+  page.drawText("ASSINADO DIGITALMENTE POR", { x: textX, y: cy, size: labelSize, font: fontBold, color: navy });
+  cy -= nameSize + gap;
+  page.drawText(nameOnly, { x: textX, y: cy, size: nameSize, font: fontBold, color: navyDark });
+
+  if (cpfOnly) {
+    cy -= cpfSize + gap;
+    page.drawText(`CPF: ${formatCPF(cpfOnly)}`, { x: textX, y: cy, size: cpfSize, font: fontBold, color: navyDark });
+  }
+
+  cy -= metaSize + gap;
+  page.drawText(dt, { x: textX, y: cy, size: metaSize, font, color: slate });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
