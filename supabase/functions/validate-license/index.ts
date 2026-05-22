@@ -94,15 +94,39 @@ Deno.serve(async (req) => {
       const ctrl = new AbortController();
       const timeoutId = setTimeout(() => ctrl.abort(), 10000);
       const licenseServerUrl = normalizeLicenseServerUrl(config.server_url);
-      const resp = await fetch(licenseServerUrl, {
+      let resp = await fetch(licenseServerUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify({
           license_key: config.license_key,
           hostname: config.hardware_id || "axisdocs",
         }),
         signal: ctrl.signal,
+        redirect: "manual",
       });
+      // Se o servidor responder com redirect, seguimos manualmente preservando
+      // o host original (evita que o destino reescreva o path concatenando o host).
+      if ([301, 302, 307, 308].includes(resp.status)) {
+        const loc = resp.headers.get("location");
+        if (loc) {
+          try {
+            const origUrl = new URL(licenseServerUrl);
+            const redirected = new URL(loc, licenseServerUrl);
+            // Reusa o host configurado no painel, mas adota o path/redirect retornado.
+            const forced = new URL(redirected.pathname + redirected.search, origUrl.origin);
+            resp = await fetch(forced.toString(), {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Accept": "application/json" },
+              body: JSON.stringify({
+                license_key: config.license_key,
+                hostname: config.hardware_id || "axisdocs",
+              }),
+              signal: ctrl.signal,
+              redirect: "manual",
+            });
+          } catch {}
+        }
+      }
       clearTimeout(timeoutId);
       serverData = await resp.json().catch(() => ({}));
 
