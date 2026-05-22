@@ -122,19 +122,6 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
     xr = clamp(xr, 0, 1 - wr);
     yr = clamp(yr, 0, 1 - hr);
     const next: SignaturePosition = { page: pageRef.current, xRatio: xr, yRatio: yr, wRatio: wr, hRatio: hr };
-    const viewport = viewportRef.current;
-    const size = renderSizeRef.current;
-    if (viewport?.convertToPdfPoint && size.w && size.h) {
-      const tl = viewport.convertToPdfPoint(xr * size.w, yr * size.h) as [number, number];
-      const tr = viewport.convertToPdfPoint((xr + wr) * size.w, yr * size.h) as [number, number];
-      const br = viewport.convertToPdfPoint((xr + wr) * size.w, (yr + hr) * size.h) as [number, number];
-      const bl = viewport.convertToPdfPoint(xr * size.w, (yr + hr) * size.h) as [number, number];
-      next.pdfQuad = { tl, tr, br, bl };
-      next.pdfX = Math.min(tl[0], tr[0], br[0], bl[0]);
-      next.pdfY = Math.min(tl[1], tr[1], br[1], bl[1]);
-      next.pdfW = Math.max(tl[0], tr[0], br[0], bl[0]) - next.pdfX;
-      next.pdfH = Math.max(tl[1], tr[1], br[1], bl[1]) - next.pdfY;
-    }
     valueRef.current = next;
     onChange(next);
   };
@@ -148,6 +135,8 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
     const xr = clamp(x - w / 2, 0, 1 - w);
     const yr = clamp(y - h / 2, 0, 1 - h);
     emit(xr, yr, w, h);
+    dragRef.current = { kind: "move", dx: w / 2, dy: h / 2 };
+    attachWindow();
   };
 
   const handleBoxMouseDown = (e: React.MouseEvent) => {
