@@ -166,7 +166,12 @@ Deno.serve(async (req) => {
     if (unitName) {
       const existingId = await findFolder(accessToken, unitName, rootFolderId);
       targetFolderId = existingId || await createFolder(accessToken, unitName, rootFolderId);
-      console.log(`Target folder: ${targetFolderId} (unit: ${unitName})`);
+      console.log(`Unit folder: ${targetFolderId} (${unitName})`);
+    }
+    if (categoryName) {
+      const existingCat = await findFolder(accessToken, categoryName, targetFolderId);
+      targetFolderId = existingCat || await createFolder(accessToken, categoryName, targetFolderId);
+      console.log(`Category folder: ${targetFolderId} (${categoryName})`);
     }
 
     // Read file bytes
