@@ -20,6 +20,8 @@ type Props = {
   signerLabel: string;
   value: SignaturePosition | null;
   onChange: (pos: SignaturePosition) => void;
+  logoUrl?: string | null;
+  logoSizePct?: number; // largura máx. do logo em % da largura do carimbo (1-50)
 };
 
 const DEFAULT_W = 0.28;
