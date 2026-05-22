@@ -542,6 +542,8 @@ export type Database = {
           pfx_auth_tag: string
           pfx_encrypted: string
           pfx_iv: string
+          signature_logo: string | null
+          signature_logo_size_pct: number
           subject_cn: string
           updated_at: string
           uploaded_at: string
@@ -557,6 +559,8 @@ export type Database = {
           pfx_auth_tag: string
           pfx_encrypted: string
           pfx_iv: string
+          signature_logo?: string | null
+          signature_logo_size_pct?: number
           subject_cn?: string
           updated_at?: string
           uploaded_at?: string
@@ -572,6 +576,8 @@ export type Database = {
           pfx_auth_tag?: string
           pfx_encrypted?: string
           pfx_iv?: string
+          signature_logo?: string | null
+          signature_logo_size_pct?: number
           subject_cn?: string
           updated_at?: string
           uploaded_at?: string

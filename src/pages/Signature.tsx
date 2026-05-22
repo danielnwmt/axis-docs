@@ -29,6 +29,8 @@ export default function Signature() {
   const [signaturePos, setSignaturePos] = useState<SignaturePosition | null>(null);
   const [certCN, setCertCN] = useState<string>("");
   const [hasCert, setHasCert] = useState<boolean | null>(null);
+  const [sigLogo, setSigLogo] = useState<string | null>(null);
+  const [sigLogoSize, setSigLogoSize] = useState<number>(22);
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -51,12 +53,14 @@ export default function Signature() {
       if (!user) return;
       const { data } = await supabase
         .from("user_certificates" as any)
-        .select("subject_cn")
+        .select("subject_cn, signature_logo, signature_logo_size_pct")
         .eq("user_id", user.id)
         .maybeSingle();
       if (data && (data as any).subject_cn) {
         setCertCN((data as any).subject_cn);
         setHasCert(true);
+        setSigLogo((data as any).signature_logo ?? null);
+        setSigLogoSize((data as any).signature_logo_size_pct ?? 22);
       } else {
         setHasCert(false);
       }
@@ -287,6 +291,8 @@ export default function Signature() {
                     signerLabel={certCN || user?.email?.split("@")[0] || "Assinatura"}
                     value={signaturePos}
                     onChange={setSignaturePos}
+                    logoUrl={sigLogo}
+                    logoSizePct={sigLogoSize}
                   />
                 </div>
               )}

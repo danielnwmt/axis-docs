@@ -102,7 +102,7 @@ async function loadDriveConfig(supabase: any) {
 async function loadCertForUser(supabase: any, userId: string, password: string) {
   const { data: certRow, error: certErr } = await supabase
     .from("user_certificates")
-    .select("pfx_encrypted, pfx_iv, pfx_auth_tag, subject_cn, cpf, issuer, valid_to, fingerprint_sha256")
+    .select("pfx_encrypted, pfx_iv, pfx_auth_tag, subject_cn, cpf, issuer, valid_to, fingerprint_sha256, signature_logo, signature_logo_size_pct")
     .eq("user_id", userId).maybeSingle();
   if (certErr || !certRow) throw new Error("Você ainda não cadastrou seu certificado A1. Vá em Configurações → Meu Certificado.");
   if (certRow.valid_to && new Date(certRow.valid_to) < new Date()) throw new Error("Certificado expirado. Cadastre um novo .pfx.");
@@ -285,7 +285,7 @@ Deno.serve(async (req) => {
     // Load user's encrypted certificate
     const { data: certRow, error: certErr } = await supabase
       .from("user_certificates")
-      .select("pfx_encrypted, pfx_iv, pfx_auth_tag, subject_cn, cpf, issuer, valid_to, fingerprint_sha256")
+      .select("pfx_encrypted, pfx_iv, pfx_auth_tag, subject_cn, cpf, issuer, valid_to, fingerprint_sha256, signature_logo, signature_logo_size_pct")
       .eq("user_id", user.id).maybeSingle();
     if (certErr || !certRow) {
       return new Response(JSON.stringify({ error: "Você ainda não cadastrou seu certificado A1. Vá em Configurações → Meu Certificado." }), {
@@ -385,16 +385,32 @@ Deno.serve(async (req) => {
         const now = new Date();
         const dt = `${now.toISOString().slice(0,10)} ${now.toISOString().slice(11,19)} UTC`;
 
-        // Try to embed Axis logo
+        // Try to embed logo (custom user logo or system default)
         let logoImg: any = null;
         try {
-          const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-          const projectRef = supabaseUrl.replace("https://", "").split(".")[0];
-          const logoUrl = `https://${projectRef}.lovable.app/axis-logo-transparent.png`;
-          const logoResp = await fetch(logoUrl);
-          if (logoResp.ok) {
-            const logoBytes = new Uint8Array(await logoResp.arrayBuffer());
-            logoImg = await pdfDoc.embedPng(logoBytes);
+          const customLogo: string | null = (certRow as any).signature_logo || null;
+          if (customLogo && customLogo.startsWith("data:image/")) {
+            // base64 data URL
+            const commaIdx = customLogo.indexOf(",");
+            const meta = customLogo.slice(0, commaIdx);
+            const b64 = customLogo.slice(commaIdx + 1);
+            const bin = atob(b64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            if (/image\/jpe?g/.test(meta)) {
+              logoImg = await pdfDoc.embedJpg(bytes);
+            } else {
+              logoImg = await pdfDoc.embedPng(bytes);
+            }
+          } else {
+            const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+            const projectRef = supabaseUrl.replace("https://", "").split(".")[0];
+            const logoUrl = `https://${projectRef}.lovable.app/axis-logo-transparent.png`;
+            const logoResp = await fetch(logoUrl);
+            if (logoResp.ok) {
+              const logoBytes = new Uint8Array(await logoResp.arrayBuffer());
+              logoImg = await pdfDoc.embedPng(logoBytes);
+            }
           }
         } catch (e) { console.warn("logo embed failed:", e); }
 
@@ -404,8 +420,9 @@ Deno.serve(async (req) => {
         // Logo area
         let logoW = 0;
         if (logoImg) {
+          const sizePct = Math.min(50, Math.max(5, (certRow as any).signature_logo_size_pct ?? 22));
           const maxLogoH = hBox * 0.7;
-          const maxLogoW = wBox * 0.22;
+          const maxLogoW = wBox * (sizePct / 100);
           const ratio = logoImg.width / logoImg.height;
           let lh = maxLogoH;
           let lw = lh * ratio;

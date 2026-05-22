@@ -20,6 +20,8 @@ type Props = {
   signerLabel: string;
   value: SignaturePosition | null;
   onChange: (pos: SignaturePosition) => void;
+  logoUrl?: string | null;
+  logoSizePct?: number; // largura máx. do logo em % da largura do carimbo (1-50)
 };
 
 const DEFAULT_W = 0.28;
@@ -31,7 +33,9 @@ type DragMode =
   | { kind: "move"; dx: number; dy: number }
   | { kind: "resize"; handle: "nw" | "ne" | "sw" | "se"; startX: number; startY: number; startW: number; startH: number; anchorX: number; anchorY: number };
 
-export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
+export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, logoSizePct }: Props) {
+  const effectiveLogo = logoUrl || axisLogo;
+  const effectiveLogoMaxPct = Math.min(50, Math.max(5, logoSizePct ?? 22));
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [pdf, setPdf] = useState<any>(null);
@@ -213,7 +217,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange }: Props) {
             >
               <div style={{ width: "5px", background: "#1e3a5f", flexShrink: 0 }} />
               <div className="flex-1 min-w-0 px-2 py-1.5 flex items-center gap-2 leading-tight">
-                <img src={axisLogo} alt="" className="h-full max-h-[80%] w-auto object-contain flex-shrink-0" style={{ maxWidth: "22%" }} />
+                <img src={effectiveLogo} alt="" className="h-full max-h-[80%] w-auto object-contain flex-shrink-0" style={{ maxWidth: `${effectiveLogoMaxPct}%` }} />
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
                   <div className="text-[7px] font-semibold uppercase mb-0.5" style={{ color: "#1e3a5f", letterSpacing: "0.5px" }}>
                     Assinado digitalmente por

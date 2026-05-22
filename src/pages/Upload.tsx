@@ -49,6 +49,8 @@ export default function Upload() {
   const [signaturePos, setSignaturePos] = useState<SignaturePosition | null>(null);
   const [certCN, setCertCN] = useState<string>("");
   const [hasCert, setHasCert] = useState<boolean | null>(null);
+  const [sigLogo, setSigLogo] = useState<string | null>(null);
+  const [sigLogoSize, setSigLogoSize] = useState<number>(22);
   const [signedFiles, setSignedFiles] = useState<Set<string>>(new Set());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -87,12 +89,14 @@ export default function Upload() {
       if (!user) return;
       const { data } = await supabase
         .from("user_certificates" as any)
-        .select("subject_cn")
+        .select("subject_cn, signature_logo, signature_logo_size_pct")
         .eq("user_id", user.id)
         .maybeSingle();
       const cn = data && (data as any).subject_cn;
       if (cn) setCertCN(cn);
       setHasCert(!!cn);
+      setSigLogo((data as any)?.signature_logo ?? null);
+      setSigLogoSize((data as any)?.signature_logo_size_pct ?? 22);
     })();
   }, [user]);
 
@@ -734,6 +738,8 @@ export default function Upload() {
                 signerLabel={certCN || user?.email?.split("@")[0] || "Assinatura"}
                 value={signaturePos}
                 onChange={setSignaturePos}
+                logoUrl={sigLogo}
+                logoSizePct={sigLogoSize}
               />
             </div>
           )}

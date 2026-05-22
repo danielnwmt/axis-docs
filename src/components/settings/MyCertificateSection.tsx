@@ -2,9 +2,11 @@ import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { ShieldCheck, Upload, Trash2, AlertCircle, Loader2, FileKey2, KeyRound, Eye, EyeOff } from "lucide-react";
+import { ShieldCheck, Upload, Trash2, AlertCircle, Loader2, FileKey2, KeyRound, Eye, EyeOff, Image as ImageIcon } from "lucide-react";
+import axisLogo from "@/assets/axis-logo-transparent.png";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -38,16 +40,24 @@ export function MyCertificateSection() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  // Logo da assinatura
+  const [sigLogo, setSigLogo] = useState<string | null>(null);
+  const [sigLogoSize, setSigLogoSize] = useState<number>(22);
+  const [savingLogo, setSavingLogo] = useState(false);
+  const logoFileRef = useRef<HTMLInputElement>(null);
+
   const load = async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
     const { data } = await supabase
       .from("user_certificates" as any)
-      .select("subject_cn, cpf, issuer, valid_from, valid_to, fingerprint_sha256, uploaded_at")
+      .select("subject_cn, cpf, issuer, valid_from, valid_to, fingerprint_sha256, uploaded_at, signature_logo, signature_logo_size_pct")
       .eq("user_id", user.id)
       .maybeSingle();
     setCert((data as any) || null);
+    setSigLogo((data as any)?.signature_logo ?? null);
+    setSigLogoSize((data as any)?.signature_logo_size_pct ?? 22);
     setLoading(false);
   };
 
@@ -124,6 +134,40 @@ export function MyCertificateSection() {
     } finally {
       setChanging(false);
     }
+  };
+
+  const handleLogoFile = (f: File | null) => {
+    if (!f) return;
+    if (!/^image\/(png|jpe?g|webp|svg\+xml)$/.test(f.type)) {
+      toast({ title: "Formato inválido", description: "Use PNG, JPG, WebP ou SVG.", variant: "destructive" });
+      return;
+    }
+    if (f.size > 512 * 1024) {
+      toast({ title: "Imagem muito grande", description: "Máximo 512 KB.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setSigLogo(reader.result as string);
+    reader.readAsDataURL(f);
+  };
+
+  const saveLogoSettings = async (payload: { signature_logo?: string | null; signature_logo_size_pct?: number }) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setSavingLogo(true);
+    const { error } = await supabase
+      .from("user_certificates" as any)
+      .update(payload)
+      .eq("user_id", user.id);
+    setSavingLogo(false);
+    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Logo atualizado" });
+  };
+
+  const handleRemoveLogo = async () => {
+    setSigLogo(null);
+    if (logoFileRef.current) logoFileRef.current.value = "";
+    await saveLogoSettings({ signature_logo: null });
   };
 
   const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString("pt-BR") : "—";
@@ -243,6 +287,65 @@ export function MyCertificateSection() {
             {changing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <KeyRound className="w-4 h-4 mr-2" />}
             {changing ? "Alterando senha…" : "Alterar senha"}
           </Button>
+        </div>
+      )}
+
+      {cert && (
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <h3 className="font-display font-semibold text-foreground flex items-center gap-2">
+            <ImageIcon className="w-5 h-5 text-primary" /> Logo do carimbo de assinatura
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Envie um logo personalizado (PNG/JPG/SVG, máx. 512 KB) que aparecerá no carimbo da assinatura digital.
+            Se nenhum logo for enviado, o sistema usa o logo padrão AXIS.
+          </p>
+
+          <div className="flex items-center gap-4">
+            <div className="w-32 h-20 rounded-lg border border-border bg-background flex items-center justify-center p-2">
+              <img src={sigLogo || axisLogo} alt="logo preview" className="max-w-full max-h-full object-contain" />
+            </div>
+            <div className="flex-1 space-y-2">
+              <Input
+                ref={logoFileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                onChange={(e) => handleLogoFile(e.target.files?.[0] || null)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {sigLogo ? "Logo personalizado carregado" : "Usando logo padrão do sistema"}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <Label>Tamanho do logo</Label>
+              <span className="text-xs font-medium text-muted-foreground tabular-nums">{sigLogoSize}% da largura</span>
+            </div>
+            <Slider
+              min={5}
+              max={50}
+              step={1}
+              value={[sigLogoSize]}
+              onValueChange={(v) => setSigLogoSize(v[0])}
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              onClick={() => saveLogoSettings({ signature_logo: sigLogo, signature_logo_size_pct: sigLogoSize })}
+              disabled={savingLogo}
+              className="flex-1"
+            >
+              {savingLogo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
+              Salvar configuração
+            </Button>
+            {sigLogo && (
+              <Button variant="outline" onClick={handleRemoveLogo} disabled={savingLogo}>
+                <Trash2 className="w-4 h-4 mr-2" /> Restaurar padrão
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
