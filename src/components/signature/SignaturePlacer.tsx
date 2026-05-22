@@ -217,9 +217,9 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
             >
               <div style={{ width: "5px", background: "#1e3a5f", flexShrink: 0 }} />
               <div className="flex-1 min-w-0 px-2 py-1.5 flex items-center gap-2 leading-tight">
-                <img src={effectiveLogo} alt="" className="h-full max-h-[80%] w-auto object-contain flex-shrink-0" style={{ maxWidth: `${effectiveLogoMaxPct}%` }} />
+                <img src={effectiveLogo} alt="" className="h-full max-h-[90%] w-auto object-contain flex-shrink-0" style={{ maxWidth: `${effectiveLogoMaxPct}%` }} />
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
-                  <div className="text-[7px] font-semibold uppercase mb-0.5" style={{ color: "#1e3a5f", letterSpacing: "0.5px" }}>
+                  <div className="text-[9px] font-bold uppercase mb-0.5" style={{ color: "#1e3a5f", letterSpacing: "0.6px" }}>
                     Assinado digitalmente por
                   </div>
                   {(() => {
@@ -233,18 +233,18 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
                     };
                     return (
                       <>
-                        <div className="text-[10px] font-bold truncate" style={{ color: "#0f1b3d" }}>
+                        <div className="text-[13px] font-extrabold truncate" style={{ color: "#0a1430" }}>
                           {nameOnly}
                         </div>
                         {cpfOnly && (
-                          <div className="text-[9px] font-semibold truncate" style={{ color: "#0f1b3d" }}>
+                          <div className="text-[11px] font-bold truncate" style={{ color: "#0a1430" }}>
                             CPF: {formatCPF(cpfOnly)}
                           </div>
                         )}
                       </>
                     );
                   })()}
-                  <div className="text-[7px] truncate mt-0.5" style={{ color: "#475569" }}>
+                  <div className="text-[9px] font-semibold truncate mt-0.5" style={{ color: "#334155" }}>
                     {now.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", hour12: false })}
                   </div>
                 </div>
