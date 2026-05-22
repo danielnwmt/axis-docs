@@ -168,6 +168,10 @@ async function loadSignatureLogo(pdfDoc: any, customLogo?: string | null) {
       }
     }
   } catch (e) { console.warn("custom logo embed failed:", e); }
+  const axisPngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAByklEQVR4Xu2bTU7DMBCFv6ogceAAnIAzUA6Am3ACDsAZOAPBIOwAR+AMnIATcAbOQDnRgEJibAfp2HRqO+mXAif4lvX7bWa8yePVaDabzeYKA+faHhr+8PexFwL4AnAFcAYwBfADF8uvEjYBzuIorhNuAQ4B3gC+AzSMAA4BHsZxvN8BuS+AXhzHcZI9dgmvtOiwC3Be/aNOwC7AVF4kMlre7kmAD1HKJT1Ob0fqg4DgEWiFAfZkqkqD4OwSbRiS9g0sB8xYLahSWJx2pgHEeW2tTr0+K6scLwGKI0lFQtJ7SCPtc1Cgp9OFIAXhSg83VEAQjmlRBbEVAAUglxFQbgPgi3gxxFQbQLgqXgxxFQoQPgofcxiKiQAfAMuiJhqAxgcKKIcSkq5DMBF4FvhNBNCiC+CE6KEn+GNiXSAey6BHKG3cALgIuAS4Dsj0pwi9RrkHLcARwGXAH8M0iO9CqL7HTgXeAN4LmDPmBtBciPwReBN4L+AJ4B5gTse+AP4x8d2nYCJ4J8D+jr2KeA34Ami0v/50Ejh/3rsE2A+8bpwC7A2fZMIlc2wdODf2gjuAJ2+1nkl+vjEUHcm2DqJ2B1Y3+IGojz31A8/zNwQAHaHF7wPjqO48J4rDabzVsN8AMhs4oWFKfLPQAAAABJRU5ErkJggg==";
+  try {
+    return await pdfDoc.embedPng(Uint8Array.from(atob(axisPngBase64), (c) => c.charCodeAt(0)));
+  } catch (e) { console.warn("default logo embed failed:", e); }
   return null;
 }
 
@@ -182,11 +186,15 @@ async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user
   const yr = clamp(Number(position.yRatio ?? 0), 0, 1);
   const wr = clamp(Number(position.wRatio ?? 0.28), 0.03, 1);
   const hr = clamp(Number(position.hRatio ?? 0.08), 0.02, 1);
-  const wBox = Math.min(wr * crop.width, crop.width);
-  const hBox = Math.min(hr * crop.height, crop.height);
-  const x = crop.x + clamp(xr * crop.width, 0, crop.width - wBox);
-  const yTop = clamp(yr * crop.height, 0, crop.height - hBox);
-  const y = crop.y + crop.height - yTop - hBox;
+  const hasPdfCoords = [position.pdfX, position.pdfY, position.pdfW, position.pdfH].every((v) => Number.isFinite(Number(v)));
+  let wBox = Math.min(hasPdfCoords ? Number(position.pdfW) : wr * crop.width, crop.width);
+  let hBox = Math.min(hasPdfCoords ? Number(position.pdfH) : hr * crop.height, crop.height);
+  let x = hasPdfCoords ? Number(position.pdfX) : crop.x + xr * crop.width;
+  let y = hasPdfCoords ? Number(position.pdfY) : crop.y + crop.height - yr * crop.height - hBox;
+  wBox = clamp(wBox, 12, crop.width);
+  hBox = clamp(hBox, 8, crop.height);
+  x = clamp(x, crop.x, crop.x + crop.width - wBox);
+  y = clamp(y, crop.y, crop.y + crop.height - hBox);
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
