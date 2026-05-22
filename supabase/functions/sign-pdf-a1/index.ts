@@ -186,17 +186,12 @@ async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user
   const yr = clamp(Number(position.yRatio ?? 0), 0, 1);
   const wr = clamp(Number(position.wRatio ?? 0.28), 0.03, 1);
   const hr = clamp(Number(position.hRatio ?? 0.08), 0.02, 1);
-  const rect = position.pdfRect;
-  const hasPdfRect = rect && [rect.x, rect.y, rect.width, rect.height].every((v) => Number.isFinite(Number(v)));
-  const hasPdfCoords = !hasPdfRect && [position.pdfX, position.pdfY, position.pdfW, position.pdfH].every((v) => Number.isFinite(Number(v)));
-  let wBox = Math.min(hasPdfRect ? Number(rect.width) : hasPdfCoords ? Number(position.pdfW) : wr * crop.width, crop.width);
-  let hBox = Math.min(hasPdfRect ? Number(rect.height) : hasPdfCoords ? Number(position.pdfH) : hr * crop.height, crop.height);
-  let x = hasPdfRect ? Number(rect.x) : hasPdfCoords ? Number(position.pdfX) : crop.x + xr * crop.width;
-  let y = hasPdfRect ? Number(rect.y) : hasPdfCoords ? Number(position.pdfY) : crop.y + crop.height - (yr + hr) * crop.height;
-  wBox = clamp(wBox, 12, crop.width);
-  hBox = clamp(hBox, 8, crop.height);
-  x = clamp(x, crop.x, crop.x + crop.width - wBox);
-  y = clamp(y, crop.y, crop.y + crop.height - hBox);
+  // Sempre usa proporções (xr/yr/wr/hr) para garantir que a assinatura caia
+  // exatamente onde o usuário posicionou na pré-visualização.
+  let wBox = clamp(wr * crop.width, 12, crop.width);
+  let hBox = clamp(hr * crop.height, 8, crop.height);
+  let x = clamp(crop.x + xr * crop.width, crop.x, crop.x + crop.width - wBox);
+  let y = clamp(crop.y + crop.height - (yr + hr) * crop.height, crop.y, crop.y + crop.height - hBox);
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
