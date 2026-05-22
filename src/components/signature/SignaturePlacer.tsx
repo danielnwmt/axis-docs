@@ -142,12 +142,31 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
     onChange(next);
   };
 
+  const computeDefaultSize = () => {
+    const vp = viewportRef.current;
+    const size = renderSizeRef.current;
+    let w = DEFAULT_W;
+    let h = DEFAULT_H;
+    if (vp?.convertToPdfPoint && size.w && size.h) {
+      const p0 = vp.convertToPdfPoint(0, 0) as [number, number];
+      const p1 = vp.convertToPdfPoint(size.w, size.h) as [number, number];
+      const pageWpt = Math.abs(p1[0] - p0[0]);
+      const pageHpt = Math.abs(p1[1] - p0[1]);
+      const targetWpt = (5 / 2.54) * 72; // 5 cm em pontos PDF
+      const targetHpt = targetWpt / 3.5; // mantém proporção do carimbo
+      if (pageWpt > 0) w = clamp(targetWpt / pageWpt, MIN_W, 1);
+      if (pageHpt > 0) h = clamp(targetHpt / pageHpt, MIN_H, 1);
+    }
+    return { w, h };
+  };
+
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (!renderSize.w) return;
     e.preventDefault();
     const { x, y } = getRatio(e);
-    const w = valueRef.current?.wRatio ?? DEFAULT_W;
-    const h = valueRef.current?.hRatio ?? DEFAULT_H;
+    const def = computeDefaultSize();
+    const w = valueRef.current?.wRatio ?? def.w;
+    const h = valueRef.current?.hRatio ?? def.h;
     const xr = clamp(x, 0, 1 - w);
     const yr = clamp(y, 0, 1 - h);
     emit(xr, yr, w, h);
