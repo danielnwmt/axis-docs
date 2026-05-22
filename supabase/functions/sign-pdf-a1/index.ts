@@ -120,11 +120,33 @@ async function loadCertForUser(supabase: any, userId: string, password: string) 
   return { certRow, pfxBytes };
 }
 
-async function uploadSignedToDrive(supabase: any, signedName: string, signedPdfBuf: Uint8Array) {
+async function findOrCreateFolder(token: string, name: string, parentId: string): Promise<string> {
+  const q = `name='${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const r = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (r.ok) {
+    const j = await r.json();
+    if (j.files?.[0]?.id) return j.files[0].id;
+  }
+  const c = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, mimeType: "application/vnd.google-apps.folder", parents: [parentId] }),
+  });
+  if (!c.ok) throw new Error(`Falha ao criar pasta '${name}': ${await c.text()}`);
+  return (await c.json()).id;
+}
+
+async function uploadSignedToDrive(supabase: any, signedName: string, signedPdfBuf: Uint8Array, unitName?: string, categoryName?: string) {
   const cfg = await loadDriveConfig(supabase);
   if (!cfg.folderId) throw new Error("ID da pasta raiz do Google Drive não configurado. Configure em Configurações.");
   const token = await getDriveAccessToken(cfg.serviceAccount);
-  const metadata: any = { name: signedName, parents: [cfg.folderId] };
+  let targetFolderId = cfg.folderId;
+  if (unitName) targetFolderId = await findOrCreateFolder(token, unitName, targetFolderId);
+  if (categoryName) targetFolderId = await findOrCreateFolder(token, categoryName, targetFolderId);
+  const metadata: any = { name: signedName, parents: [targetFolderId] };
   const boundary = "----axisdocs" + Math.random().toString(36).slice(2);
   const body = new Blob([
     `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`,
