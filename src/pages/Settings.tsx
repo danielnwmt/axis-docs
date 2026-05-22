@@ -860,19 +860,33 @@ function LicencaSection() {
   const handleValidate = async () => {
     setChecking(true);
     try {
+      const parseCustomer = (raw?: string | null) => {
+        if (!raw) return { cpf_cnpj: "", name: "" };
+        try {
+          const p = JSON.parse(raw);
+          return {
+            cpf_cnpj: String(p?.cpf_cnpj || p?.cpf || p?.cnpj || "").trim(),
+            name: String(p?.full_name || p?.name || p?.email || "").trim(),
+          };
+        } catch {
+          return { cpf_cnpj: "", name: raw };
+        }
+      };
+      const prev = parseCustomer(config?.customer_name);
       const res = await validateLicense();
       const c = await loadLicenseConfig();
       setConfig(c);
       await refreshQuota();
+      const next = parseCustomer(res.customer_name || c?.customer_name);
       if (res.status === "active") {
-        let desc = "Validação concluída.";
-        if (res.customer_name) {
-          try {
-            const p = JSON.parse(res.customer_name);
-            desc = p?.full_name || p?.name || p?.email || desc;
-          } catch { desc = res.customer_name; }
-        }
+        const desc = next.name || next.cpf_cnpj || "Validação concluída.";
         toast({ title: "Licença ativa", description: desc });
+        if (prev.cpf_cnpj && next.cpf_cnpj && prev.cpf_cnpj !== next.cpf_cnpj) {
+          toast({
+            title: "CPF/CNPJ da licença foi alterado",
+            description: `Anterior: ${prev.cpf_cnpj} → Atual: ${next.cpf_cnpj}${next.name ? ` (${next.name})` : ""}`,
+          });
+        }
       } else {
         toast({
           title: `Status: ${res.status}`,
