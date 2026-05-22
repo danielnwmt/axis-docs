@@ -300,7 +300,7 @@ Deno.serve(async (req) => {
       const pdfDoc = await PDFDocument.load(pdfBytes);
       if (position && typeof position.page === "number") {
         try {
-          await drawSignatureStamp(pdfDoc, page_position_to_pages(pdfDoc, position), certRow, user);
+          await drawSignatureStamp(pdfDoc, position, certRow, user);
         } catch (e) { console.error("draw stamp failed:", e); }
       }
       pdflibAddPlaceholder({
