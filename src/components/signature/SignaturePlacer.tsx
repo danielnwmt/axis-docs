@@ -39,6 +39,8 @@ const DEFAULT_W = 0.28;
 const DEFAULT_H = 0.08;
 const MIN_W = 0.08;
 const MIN_H = 0.03;
+const CLICK_OFFSET_CM = 5;
+const PDF_POINTS_PER_CM = 72 / 2.54;
 
 type DragMode =
   | { kind: "move"; dx: number; dy: number }
@@ -148,10 +150,12 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
     const { x, y } = getRatio(e);
     const w = valueRef.current?.wRatio ?? DEFAULT_W;
     const h = valueRef.current?.hRatio ?? DEFAULT_H;
+    const viewportScale = viewportRef.current?.scale || 1;
+    const yOffsetRatio = renderSize.h ? (CLICK_OFFSET_CM * PDF_POINTS_PER_CM * viewportScale) / renderSize.h : 0;
     const xr = clamp(x - w / 2, 0, 1 - w);
-    const yr = clamp(y - h / 2, 0, 1 - h);
+    const yr = clamp(y + yOffsetRatio, 0, 1 - h);
     emit(xr, yr, w, h);
-    dragRef.current = { kind: "move", dx: w / 2, dy: h / 2 };
+    dragRef.current = { kind: "move", dx: w / 2, dy: -yOffsetRatio };
     attachWindow();
   };
 
