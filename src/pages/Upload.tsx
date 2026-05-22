@@ -457,6 +457,7 @@ export default function Upload() {
             formData.append("file", file);
             formData.append("fileName", file.name);
             formData.append("unitName", unit);
+            formData.append("categoryName", category);
             const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", { body: formData });
             if (driveError || !driveResult?.success || !driveResult?.driveFileId) {
               throw new Error(driveError?.message || driveResult?.error || "Falha ao enviar para o Google Drive.");
