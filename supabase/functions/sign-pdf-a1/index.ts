@@ -141,8 +141,6 @@ async function uploadSignedToDrive(supabase: any, signedName: string, signedPdfB
   return { driveFileId: upJson.id as string, driveLink: `https://drive.google.com/file/d/${upJson.id}/view` };
 }
 
-const DEFAULT_AXIS_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABICAYAAAAJZ/BjAAAcC0lEQVR42u18d3Qc1dn377kzs71oZRVLlrstg2UwIINNMZJNsykOBNYBAiFAMNU49ORLGS1JCHyElxbgs5NQQiiREl5MOzYGJNGLCwYb44Jt5KJiSStt0e7OzL3P98fKxiGEwPsaF+LnnDm7Z3f2ztyn/p7fvbPAftkv+2W/7Jf9sl/2y37ZL/tlv+yX/fKfJLSv3bDJpog1VBGiKxkAULfTASBaVUX10SjPbGig+miUiUjtN/MuVP7OnvP5Q98fAd+c1DSaevOUmDOz+Y/HdhrixlxG6RYgJDRyJDFBR9Jh/aKKqo6fHXToHec1LTvu4lFljVMqBr5HRAyATdMUdXV1O+bd1ARqQhPQ1KRisZjab4B/5fmmKWKxmLqs8aFJqzz2i0ndCDo5hg0dthKwFQGsoyNr4ZejJ+GCcJna7CYx0NDkS5u2TL+ocuQi02QRi/3rdMTMguoAxHZvytL3hbQTQ4wvOeXRw9dy5oW0dIKy17LBumAlAUUAE6A0kOVAJdNwQqRVWNIpC/rEhaNH5C4CUFcHV9X310zMSN+EAp0mtfdZmXaHuz7JyZX/vWHjK0S0HgCi9fVaw8yZcr8B+uUjVBEIquWN5HV2yBfBtpxNmm7YEpBgKCKQIkgCGECbZSFu29xpZ9Djcgk/W5cBeHXJkiP5kP8AV4+9rBqpSzAAAAAASUVORK5CYII=";
-
 async function embedLogoFromDataUrl(pdfDoc: any, dataUrl: string) {
   const commaIdx = dataUrl.indexOf(",");
   if (commaIdx < 0) return null;
@@ -170,8 +168,7 @@ async function loadSignatureLogo(pdfDoc: any, customLogo?: string | null) {
       }
     }
   } catch (e) { console.warn("custom logo embed failed:", e); }
-  try { return await embedLogoFromDataUrl(pdfDoc, DEFAULT_AXIS_LOGO_DATA_URL); }
-  catch (e) { console.warn("default logo embed failed:", e); return null; }
+  return null;
 }
 
 async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user: any) {
