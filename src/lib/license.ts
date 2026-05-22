@@ -149,10 +149,21 @@ async function getStorageUsedBytes(): Promise<number> {
 async function validateLicenseDirect(): Promise<LicenseInfo> {
   const config = await loadLicenseConfig();
   if (config?.temp_unlock_until && new Date(config.temp_unlock_until).getTime() > Date.now()) {
+    const tempMsg = `Desbloqueio temporário ativo até ${new Date(config.temp_unlock_until).toLocaleString("pt-BR")}`;
+    const nowIso = new Date().toISOString();
+    if (config.id) {
+      await (supabase as any).from("license_config").update({
+        status: "active",
+        last_check: nowIso,
+        message: tempMsg,
+        updated_at: nowIso,
+      }).eq("id", config.id);
+    }
     return cacheAndNotifyLicense({
       ...config,
       status: "active",
-      message: `Desbloqueio temporário ativo até ${new Date(config.temp_unlock_until).toLocaleString("pt-BR")}`,
+      last_check: nowIso,
+      message: tempMsg,
     });
   }
 

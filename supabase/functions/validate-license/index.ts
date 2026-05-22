@@ -71,13 +71,24 @@ Deno.serve(async (req) => {
 
     // Temporary unlock takes precedence (admin entered an unlock code)
     if (config?.temp_unlock_until && new Date(config.temp_unlock_until).getTime() > Date.now()) {
+      const tempMsg = `Desbloqueio temporário ativo até ${new Date(config.temp_unlock_until).toLocaleString("pt-BR")}`;
+      const nowIso = new Date().toISOString();
+      // Persiste status=active para que a UI (que lê do banco) reflita imediatamente
+      await admin.from("license_config").update({
+        status: "active",
+        last_check: nowIso,
+        message: tempMsg,
+        updated_at: nowIso,
+        updated_by: userData.user.id,
+      }).eq("id", config.id);
+
       return new Response(
         JSON.stringify({
           status: "active",
           customer_name: config.customer_name || "",
           expires_at: config.expires_at,
-          message: `Desbloqueio temporário ativo até ${new Date(config.temp_unlock_until).toLocaleString("pt-BR")}`,
-          last_check: config.last_check,
+          message: tempMsg,
+          last_check: nowIso,
           temp_unlock_until: config.temp_unlock_until,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
