@@ -241,9 +241,11 @@ Deno.serve(async (req) => {
       ? JSON.stringify({ cpf_cnpj: finalCpfCnpj, full_name: finalName })
       : (config.customer_name || "");
 
-    // Se desbloqueio temporário ativo, força status active e mensagem específica
-    const effectiveStatus = tempUnlockActive ? "active" : serverStatus;
-    const effectiveMessage = tempUnlockActive
+    // Se a licença está ativa no servidor, limpa o desbloqueio temporário (não é mais necessário)
+    const licenseTrulyActive = serverStatus === "active";
+    const showTempUnlock = tempUnlockActive && !licenseTrulyActive;
+    const effectiveStatus = showTempUnlock ? "active" : serverStatus;
+    const effectiveMessage = showTempUnlock
       ? `Desbloqueio temporário ativo até ${new Date(config.temp_unlock_until).toLocaleString("pt-BR")}`
       : (serverData.reason || serverData.message || errorMessage || "");
 
@@ -260,6 +262,11 @@ Deno.serve(async (req) => {
       updated_by: userData.user.id,
     };
 
+    // Limpa desbloqueio temporário quando licença já está ativa no servidor
+    if (licenseTrulyActive && tempUnlockActive) {
+      updates.temp_unlock_until = null;
+    }
+
     await admin.from("license_config").update(updates).eq("id", config.id);
 
     return new Response(
@@ -271,7 +278,7 @@ Deno.serve(async (req) => {
         last_check: updates.last_check,
         storage_limit_gb: updates.storage_limit_gb,
         storage_used_bytes: updates.storage_used_bytes,
-        temp_unlock_until: tempUnlockActive ? config.temp_unlock_until : null,
+        temp_unlock_until: showTempUnlock ? config.temp_unlock_until : null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
