@@ -2,9 +2,11 @@ import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { ShieldCheck, Upload, Trash2, AlertCircle, Loader2, FileKey2, KeyRound, Eye, EyeOff } from "lucide-react";
+import { ShieldCheck, Upload, Trash2, AlertCircle, Loader2, FileKey2, KeyRound, Eye, EyeOff, Image as ImageIcon } from "lucide-react";
+import axisLogo from "@/assets/axis-logo-transparent.png";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
