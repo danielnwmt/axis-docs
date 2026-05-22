@@ -102,7 +102,7 @@ async function loadDriveConfig(supabase: any) {
 async function loadCertForUser(supabase: any, userId: string, password: string) {
   const { data: certRow, error: certErr } = await supabase
     .from("user_certificates")
-    .select("pfx_encrypted, pfx_iv, pfx_auth_tag, subject_cn, cpf, issuer, valid_to, fingerprint_sha256")
+    .select("pfx_encrypted, pfx_iv, pfx_auth_tag, subject_cn, cpf, issuer, valid_to, fingerprint_sha256, signature_logo, signature_logo_size_pct")
     .eq("user_id", userId).maybeSingle();
   if (certErr || !certRow) throw new Error("Você ainda não cadastrou seu certificado A1. Vá em Configurações → Meu Certificado.");
   if (certRow.valid_to && new Date(certRow.valid_to) < new Date()) throw new Error("Certificado expirado. Cadastre um novo .pfx.");
