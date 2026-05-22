@@ -189,8 +189,8 @@ async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user
   // A tela usa origem no topo-esquerdo; o PDF usa origem no rodapé-esquerdo.
   // Por isso o Y precisa ser invertido usando a altura do carimbo.
   // Não usamos pdfRect aqui porque ele pode vir em outro referencial dependendo do PDF.js/viewport.
-  // Sobe 1 cm (~28.35 pt) para ajuste fino de posicionamento.
-  const ONE_CM_PT = 28.35;
+  // Sobe 2 cm (~56.7 pt) para ajuste fino de posicionamento.
+  const OFFSET_PT = 56.7;
   let wBox = clamp(wr * crop.width, 12, crop.width);
   let hBox = clamp(hr * crop.height, 8, crop.height);
   let x = clamp(crop.x + xr * crop.width, crop.x, crop.x + crop.width - wBox);
