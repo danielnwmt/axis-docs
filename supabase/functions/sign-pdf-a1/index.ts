@@ -141,16 +141,52 @@ async function uploadSignedToDrive(supabase: any, signedName: string, signedPdfB
   return { driveFileId: upJson.id as string, driveLink: `https://drive.google.com/file/d/${upJson.id}/view` };
 }
 
+async function embedLogoFromDataUrl(pdfDoc: any, dataUrl: string) {
+  const commaIdx = dataUrl.indexOf(",");
+  if (commaIdx < 0) return null;
+  const meta = dataUrl.slice(0, commaIdx).toLowerCase();
+  const b64 = dataUrl.slice(commaIdx + 1);
+  if (!/image\/(png|jpe?g)/.test(meta)) return null;
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return /image\/jpe?g/.test(meta) ? await pdfDoc.embedJpg(bytes) : await pdfDoc.embedPng(bytes);
+}
+
+async function loadSignatureLogo(pdfDoc: any, customLogo?: string | null) {
+  try {
+    if (customLogo?.startsWith("data:image/")) {
+      const img = await embedLogoFromDataUrl(pdfDoc, customLogo);
+      if (img) return img;
+    }
+    if (customLogo?.startsWith("http")) {
+      const resp = await fetch(customLogo);
+      if (resp.ok) {
+        const contentType = resp.headers.get("content-type") || customLogo;
+        const bytes = new Uint8Array(await resp.arrayBuffer());
+        return /jpe?g/i.test(contentType) ? await pdfDoc.embedJpg(bytes) : await pdfDoc.embedPng(bytes);
+      }
+    }
+  } catch (e) { console.warn("custom logo embed failed:", e); }
+  return null;
+}
+
 async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user: any) {
   const pages = pdfDoc.getPages();
   const pageIdx = Math.max(0, Math.min(pages.length - 1, position.page - 1));
   const page = pages[pageIdx];
   const { width: pw, height: ph } = page.getSize();
-  const x = (position.xRatio ?? 0) * pw;
-  const wBox = (position.wRatio ?? 0.28) * pw;
-  const hBox = (position.hRatio ?? 0.08) * ph;
-  const yTop = (position.yRatio ?? 0) * ph;
-  const y = ph - yTop - hBox;
+  const crop = typeof page.getCropBox === "function" ? page.getCropBox() : { x: 0, y: 0, width: pw, height: ph };
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+  const xr = clamp(Number(position.xRatio ?? 0), 0, 1);
+  const yr = clamp(Number(position.yRatio ?? 0), 0, 1);
+  const wr = clamp(Number(position.wRatio ?? 0.28), 0.03, 1);
+  const hr = clamp(Number(position.hRatio ?? 0.08), 0.02, 1);
+  const wBox = Math.min(wr * crop.width, crop.width);
+  const hBox = Math.min(hr * crop.height, crop.height);
+  const x = crop.x + clamp(xr * crop.width, 0, crop.width - wBox);
+  const yTop = clamp(yr * crop.height, 0, crop.height - hBox);
+  const y = crop.y + crop.height - yTop - hBox;
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -172,30 +208,7 @@ async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user
     hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
   }).format(now);
 
-  // Try to embed logo (custom user logo or system default)
-  let logoImg: any = null;
-  try {
-    const customLogo: string | null = (certRow as any).signature_logo || null;
-    if (customLogo && customLogo.startsWith("data:image/")) {
-      const commaIdx = customLogo.indexOf(",");
-      const meta = customLogo.slice(0, commaIdx);
-      const b64 = customLogo.slice(commaIdx + 1);
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      if (/image\/jpe?g/.test(meta)) logoImg = await pdfDoc.embedJpg(bytes);
-      else logoImg = await pdfDoc.embedPng(bytes);
-    } else {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-      const projectRef = supabaseUrl.replace("https://", "").split(".")[0];
-      const logoUrl = `https://${projectRef}.lovable.app/axis-logo-transparent.png`;
-      const logoResp = await fetch(logoUrl);
-      if (logoResp.ok) {
-        const logoBytes = new Uint8Array(await logoResp.arrayBuffer());
-        logoImg = await pdfDoc.embedPng(logoBytes);
-      }
-    }
-  } catch (e) { console.warn("logo embed failed:", e); }
+  const logoImg = await loadSignatureLogo(pdfDoc, (certRow as any).signature_logo || null);
 
   const padL = barW + wBox * 0.035;
   const padR = wBox * 0.035;
@@ -213,6 +226,16 @@ async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user
     const ly = y + (hBox - lh) / 2;
     page.drawImage(logoImg, { x: lx, y: ly, width: lw, height: lh });
     logoW = lw + wBox * 0.025;
+  } else {
+    const lx = x + padL;
+    const icon = Math.min(hBox * 0.28, wBox * 0.055);
+    const brandSize = Math.max(5, Math.min(hBox * 0.16, wBox * 0.035));
+    const ly = y + (hBox - icon - brandSize - 1.5) / 2;
+    page.drawCircle({ x: lx + icon * 0.45, y: ly + icon * 0.55, size: icon * 0.26, color: rgb(0.18, 0.73, 0.62), opacity: 0.95 });
+    page.drawCircle({ x: lx + icon * 0.7, y: ly + icon * 0.72, size: icon * 0.22, color: rgb(0.25, 0.82, 0.91), opacity: 0.95 });
+    page.drawRectangle({ x: lx + icon * 0.18, y: ly + icon * 0.18, width: icon * 0.78, height: icon * 0.24, color: rgb(0.12, 0.23, 0.37), opacity: 0.9 });
+    page.drawText("AXIS", { x: lx, y: ly - brandSize - 1.5, size: brandSize, font: fontBold, color: navy });
+    logoW = Math.max(icon, fontBold.widthOfTextAtSize("AXIS", brandSize)) + wBox * 0.035;
   }
 
   const textX = x + padL + logoW;
