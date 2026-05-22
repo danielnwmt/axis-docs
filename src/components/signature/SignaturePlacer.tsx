@@ -223,6 +223,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
 
   const totalPages = pdf?.numPages || 0;
   const showBox = value && value.page === page;
+  const previewTopRatio = value ? clamp(value.yRatio + getPreviewYOffsetRatio(), 0, 1 - value.hRatio) : 0;
 
   const handleStyle = "absolute w-3 h-3 bg-primary border-2 border-background rounded-sm";
 
@@ -257,7 +258,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
               className="absolute overflow-hidden flex"
               style={{
                 left: `${value!.xRatio * 100}%`,
-                top: `${value!.yRatio * 100}%`,
+                top: `${previewTopRatio * 100}%`,
                 width: `${value!.wRatio * 100}%`,
                 height: `${value!.hRatio * 100}%`,
                 cursor: "move",
