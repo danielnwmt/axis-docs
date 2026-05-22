@@ -11,9 +11,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SIGNED_PDF_Y_CORRECTION_CM = 9;
-const PDF_POINTS_PER_CM = 72 / 2.54;
-
 function getEncKey(): Uint8Array {
   const raw = Deno.env.get("CERT_ENCRYPTION_KEY") || "";
   let bytes: Uint8Array;
@@ -196,7 +193,6 @@ async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user
   let hBox = Math.min(hasPdfRect ? Number(rect.height) : hasPdfCoords ? Number(position.pdfH) : hr * crop.height, crop.height);
   let x = hasPdfRect ? Number(rect.x) : hasPdfCoords ? Number(position.pdfX) : crop.x + xr * crop.width;
   let y = hasPdfRect ? Number(rect.y) : hasPdfCoords ? Number(position.pdfY) : crop.y + crop.height - (yr + hr) * crop.height;
-  y += SIGNED_PDF_Y_CORRECTION_CM * PDF_POINTS_PER_CM;
   wBox = clamp(wBox, 12, crop.width);
   hBox = clamp(hBox, 8, crop.height);
   x = clamp(x, crop.x, crop.x + crop.width - wBox);
