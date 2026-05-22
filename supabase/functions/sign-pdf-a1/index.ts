@@ -436,10 +436,10 @@ Deno.serve(async (req) => {
         const textX = x + padL + logoW;
         const contentW = wBox - padL - padR - logoW;
 
-        const labelSize = Math.max(6, hBox * 0.14);
-        const nameSize = Math.max(8, hBox * 0.22);
-        const cpfSize = Math.max(7, hBox * 0.18);
-        const metaSize = Math.max(6, hBox * 0.13);
+        const labelSize = Math.max(8, hBox * 0.17);
+        const nameSize = Math.max(11, hBox * 0.28);
+        const cpfSize = Math.max(9, hBox * 0.22);
+        const metaSize = Math.max(8, hBox * 0.16);
 
         const formatCPF = (raw: string): string => {
           const digits = raw.replace(/\D/g, "");
