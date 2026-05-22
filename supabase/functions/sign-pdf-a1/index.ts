@@ -194,7 +194,7 @@ async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user
   let wBox = clamp(wr * crop.width, 12, crop.width);
   let hBox = clamp(hr * crop.height, 8, crop.height);
   let x = clamp(crop.x + xr * crop.width, crop.x, crop.x + crop.width - wBox);
-  let y = clamp(crop.y + crop.height - (yr * crop.height) - hBox + ONE_CM_PT, crop.y, crop.y + crop.height - hBox);
+  let y = clamp(crop.y + crop.height - (yr * crop.height) - hBox + OFFSET_PT, crop.y, crop.y + crop.height - hBox);
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
