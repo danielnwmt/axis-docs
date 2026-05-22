@@ -342,6 +342,8 @@ Deno.serve(async (req) => {
       const file = form.get("file") as File | null;
       const password = String(form.get("password") || "");
       const fileName = String(form.get("fileName") || (file?.name ?? "documento.pdf"));
+      const unitName = String(form.get("unitName") || "").trim();
+      const categoryName = String(form.get("categoryName") || "").trim();
       const positionRaw = form.get("position");
       const position = positionRaw ? JSON.parse(String(positionRaw)) : null;
       if (!file || !password) {
