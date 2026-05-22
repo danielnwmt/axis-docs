@@ -136,6 +136,40 @@ export function MyCertificateSection() {
     }
   };
 
+  const handleLogoFile = (f: File | null) => {
+    if (!f) return;
+    if (!/^image\/(png|jpe?g|webp|svg\+xml)$/.test(f.type)) {
+      toast({ title: "Formato inválido", description: "Use PNG, JPG, WebP ou SVG.", variant: "destructive" });
+      return;
+    }
+    if (f.size > 512 * 1024) {
+      toast({ title: "Imagem muito grande", description: "Máximo 512 KB.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setSigLogo(reader.result as string);
+    reader.readAsDataURL(f);
+  };
+
+  const saveLogoSettings = async (payload: { signature_logo?: string | null; signature_logo_size_pct?: number }) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setSavingLogo(true);
+    const { error } = await supabase
+      .from("user_certificates" as any)
+      .update(payload)
+      .eq("user_id", user.id);
+    setSavingLogo(false);
+    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Logo atualizado" });
+  };
+
+  const handleRemoveLogo = async () => {
+    setSigLogo(null);
+    if (logoFileRef.current) logoFileRef.current.value = "";
+    await saveLogoSettings({ signature_logo: null });
+  };
+
   const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString("pt-BR") : "—";
   const expired = cert?.valid_to ? new Date(cert.valid_to) < new Date() : false;
   const daysLeft = cert?.valid_to ? Math.ceil((new Date(cert.valid_to).getTime() - Date.now()) / 86400000) : null;
