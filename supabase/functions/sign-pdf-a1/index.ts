@@ -226,6 +226,16 @@ async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user
     const ly = y + (hBox - lh) / 2;
     page.drawImage(logoImg, { x: lx, y: ly, width: lw, height: lh });
     logoW = lw + wBox * 0.025;
+  } else {
+    const lx = x + padL;
+    const icon = Math.min(hBox * 0.28, wBox * 0.055);
+    const brandSize = Math.max(5, Math.min(hBox * 0.16, wBox * 0.035));
+    const ly = y + (hBox - icon - brandSize - 1.5) / 2;
+    page.drawCircle({ x: lx + icon * 0.45, y: ly + icon * 0.55, size: icon * 0.26, color: rgb(0.18, 0.73, 0.62), opacity: 0.95 });
+    page.drawCircle({ x: lx + icon * 0.7, y: ly + icon * 0.72, size: icon * 0.22, color: rgb(0.25, 0.82, 0.91), opacity: 0.95 });
+    page.drawRectangle({ x: lx + icon * 0.18, y: ly + icon * 0.18, width: icon * 0.78, height: icon * 0.24, color: rgb(0.12, 0.23, 0.37), opacity: 0.9 });
+    page.drawText("AXIS", { x: lx, y: ly - brandSize - 1.5, size: brandSize, font: fontBold, color: navy });
+    logoW = Math.max(icon, fontBold.widthOfTextAtSize("AXIS", brandSize)) + wBox * 0.035;
   }
 
   const textX = x + padL + logoW;
