@@ -186,21 +186,13 @@ async function drawSignatureStamp(pdfDoc: any, position: any, certRow: any, user
   const yr = clamp(Number(position.yRatio ?? 0), 0, 1);
   const wr = clamp(Number(position.wRatio ?? 0.28), 0.03, 1);
   const hr = clamp(Number(position.hRatio ?? 0.08), 0.02, 1);
-  // Quando a pré-visualização envia as coordenadas reais do PDF, elas são a
-  // referência mais fiel ao que aparece na tela. As proporções ficam só como fallback.
-  const pdfRect = position.pdfRect;
-  const hasPdfRect = pdfRect
-    && Number.isFinite(Number(pdfRect.x))
-    && Number.isFinite(Number(pdfRect.y))
-    && Number.isFinite(Number(pdfRect.width))
-    && Number.isFinite(Number(pdfRect.height))
-    && Number(pdfRect.width) > 0
-    && Number(pdfRect.height) > 0;
-
-  let wBox = hasPdfRect ? clamp(Number(pdfRect.width), 12, crop.width) : clamp(wr * crop.width, 12, crop.width);
-  let hBox = hasPdfRect ? clamp(Number(pdfRect.height), 8, crop.height) : clamp(hr * crop.height, 8, crop.height);
-  let x = hasPdfRect ? clamp(Number(pdfRect.x), crop.x, crop.x + crop.width - wBox) : clamp(crop.x + xr * crop.width, crop.x, crop.x + crop.width - wBox);
-  let y = hasPdfRect ? clamp(Number(pdfRect.y), crop.y, crop.y + crop.height - hBox) : clamp(crop.y + crop.height - (yr + hr) * crop.height, crop.y, crop.y + crop.height - hBox);
+  // A tela usa origem no topo-esquerdo; o PDF usa origem no rodapé-esquerdo.
+  // Por isso o Y precisa ser invertido usando a altura do carimbo.
+  // Não usamos pdfRect aqui porque ele pode vir em outro referencial dependendo do PDF.js/viewport.
+  let wBox = clamp(wr * crop.width, 12, crop.width);
+  let hBox = clamp(hr * crop.height, 8, crop.height);
+  let x = clamp(crop.x + xr * crop.width, crop.x, crop.x + crop.width - wBox);
+  let y = clamp(crop.y + crop.height - (yr * crop.height) - hBox, crop.y, crop.y + crop.height - hBox);
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
