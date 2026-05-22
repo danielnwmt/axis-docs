@@ -217,11 +217,17 @@ Deno.serve(async (req) => {
       ? JSON.stringify({ cpf_cnpj: finalCpfCnpj, full_name: finalName })
       : (config.customer_name || "");
 
+    // Se desbloqueio temporário ativo, força status active e mensagem específica
+    const effectiveStatus = tempUnlockActive ? "active" : serverStatus;
+    const effectiveMessage = tempUnlockActive
+      ? `Desbloqueio temporário ativo até ${new Date(config.temp_unlock_until).toLocaleString("pt-BR")}`
+      : (serverData.reason || serverData.message || errorMessage || "");
+
     const updates: Record<string, any> = {
-      status: serverStatus,
+      status: effectiveStatus,
       last_check: new Date().toISOString(),
       server_url: normalizeLicenseServerUrl(config.server_url),
-      message: serverData.reason || serverData.message || errorMessage || "",
+      message: effectiveMessage,
       customer_name: customerJson,
       expires_at: serverData.expires_at || serverData.expiresAt || config.expires_at,
       storage_limit_gb: storageLimitGb || config.storage_limit_gb || 0,
@@ -234,13 +240,14 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        status: serverStatus,
+        status: effectiveStatus,
         customer_name: updates.customer_name,
         expires_at: updates.expires_at,
         message: updates.message,
         last_check: updates.last_check,
         storage_limit_gb: updates.storage_limit_gb,
         storage_used_bytes: updates.storage_used_bytes,
+        temp_unlock_until: tempUnlockActive ? config.temp_unlock_until : null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
