@@ -217,7 +217,7 @@ export function SignaturePlacer({ file, signerLabel, value, onChange, logoUrl, l
             >
               <div style={{ width: "5px", background: "#1e3a5f", flexShrink: 0 }} />
               <div className="flex-1 min-w-0 px-2 py-1.5 flex items-center gap-2 leading-tight">
-                <img src={axisLogo} alt="" className="h-full max-h-[80%] w-auto object-contain flex-shrink-0" style={{ maxWidth: "22%" }} />
+                <img src={effectiveLogo} alt="" className="h-full max-h-[80%] w-auto object-contain flex-shrink-0" style={{ maxWidth: `${effectiveLogoMaxPct}%` }} />
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
                   <div className="text-[7px] font-semibold uppercase mb-0.5" style={{ color: "#1e3a5f", letterSpacing: "0.5px" }}>
                     Assinado digitalmente por
