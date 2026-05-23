@@ -1,0 +1,1 @@
+DELETE FROM public.documents WHERE id IN ('8b0f4a30-5d5a-4dbb-b9cb-d83c8f61e505','75b294f7-70ad-4a5a-af86-331a09ae64ef','496e3d8d-1806-4aad-af12-b9b556083005','905a0607-75a5-4db7-8dfd-8216b71066cb','03735ba2-e087-4096-90d6-1c0dce4e157c');
