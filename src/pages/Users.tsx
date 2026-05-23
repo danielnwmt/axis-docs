@@ -176,12 +176,7 @@ export default function Users() {
   const handleDeleteUser = async () => {
     if (!deleteTarget) return;
     try {
-      const response = await supabase.functions.invoke("create-user?action=delete", {
-        body: { userId: deleteTarget.id },
-      });
-
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
+      await adminUserAction("delete", { userId: deleteTarget.id });
 
       toast({ title: "Usuário excluído", description: `${deleteTarget.email} foi removido.` });
       setDeleteTarget(null);
