@@ -207,6 +207,40 @@ export default function Users() {
     }
   };
 
+  const openEdit = (user: UserProfile) => {
+    setEditTarget(user);
+    setEditFullName(user.full_name || "");
+    setEditCpf(maskCpf(user.cpf || ""));
+    setEditRole(allowedRoles.includes(user.role) ? user.role : allowedRoles[allowedRoles.length - 1]);
+    setEditUnits((user.unit || "").split(",").map(s => s.trim()).filter(Boolean));
+  };
+
+  const handleEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTarget) return;
+    setEditLoading(true);
+    try {
+      const cpfDigits = editCpf.replace(/\D/g, "");
+      if (cpfDigits && cpfDigits.length !== 11) {
+        throw new Error("CPF deve conter 11 dígitos.");
+      }
+      await adminUserAction("update", {
+        userId: editTarget.id,
+        role: editRole,
+        unit: editUnits.join(", "),
+        full_name: editFullName.trim(),
+        cpf: cpfDigits,
+      });
+      toast({ title: "Usuário atualizado", description: `${editTarget.email} foi atualizado.` });
+      setEditTarget(null);
+      fetchUsers();
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   if (roleLoaded && !isAdmin && !isOperator) {
     return <Navigate to="/" replace />;
   }
