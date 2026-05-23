@@ -941,21 +941,38 @@ async function handleRequest(req, res) {
     const claims = verifyJwt(token);
     if (!claims) return json(res, 401, { error: "Token inválido" });
 
-    // Verifica se quem chama é Administrador ativo
+    // Verifica se quem chama é Administrador ou Operador ativo
     const adminCheck = await pool.query(
       "SELECT role, active FROM public.profiles WHERE id = $1",
       [claims.sub]
     );
-    if (adminCheck.rows.length === 0 || adminCheck.rows[0].role !== "Administrador" || !adminCheck.rows[0].active) {
+    const callerRole = (adminCheck.rows[0]?.role || "").toString().trim();
+    const callerActive = !!adminCheck.rows[0]?.active;
+    const isAdmin = callerRole.toLowerCase() === "administrador";
+    const isOperator = callerRole.toLowerCase() === "operador";
+    if (adminCheck.rows.length === 0 || !callerActive || (!isAdmin && !isOperator)) {
       return json(res, 403, { error: "Apenas administradores podem executar esta ação" });
     }
 
     const action = parsed.query.action;
     const body = await readBody(req);
 
+    // Operador só pode criar usuários; demais ações são exclusivas de Administrador
+    if (!isAdmin && !(isOperator && action === "create")) {
+      return json(res, 403, { error: "Permissão negada para esta ação" });
+    }
+
     if (action === "create") {
-      const { email, password, role, unit } = body;
+      const { email, password, role, unit, full_name, cpf } = body;
       if (!email || !password) return json(res, 400, { error: "E-mail e senha são obrigatórios" });
+
+      const requestedRole = role || "Usuário";
+      const allowedRoles = isAdmin
+        ? ["Administrador", "Operador", "Usuário"]
+        : ["Operador", "Usuário"];
+      if (!allowedRoles.includes(requestedRole)) {
+        return json(res, 403, { error: "Perfil não permitido para o seu nível de acesso" });
+      }
 
       const existing = await pool.query("SELECT id FROM auth.users WHERE email = $1", [email]);
       if (existing.rows.length > 0) return json(res, 400, { error: "Usuário já cadastrado" });
@@ -968,8 +985,8 @@ async function handleRequest(req, res) {
       const newUser = result.rows[0];
 
       await pool.query(
-        "INSERT INTO public.profiles (id, email, role, unit, active, must_change_password) VALUES ($1, $2, $3, $4, true, true) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = EXCLUDED.role, unit = EXCLUDED.unit, active = true, must_change_password = true",
-        [newUser.id, email, role || "Usuário", unit || ""]
+        "INSERT INTO public.profiles (id, email, role, unit, full_name, cpf, active, must_change_password) VALUES ($1, $2, $3, $4, $5, $6, true, true) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = EXCLUDED.role, unit = EXCLUDED.unit, full_name = EXCLUDED.full_name, cpf = EXCLUDED.cpf, active = true, must_change_password = true",
+        [newUser.id, email, requestedRole, unit || "", full_name || "", cpf || ""]
       );
 
       return json(res, 200, { user: { id: newUser.id, email: newUser.email } });
