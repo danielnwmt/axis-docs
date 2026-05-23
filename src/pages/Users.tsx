@@ -13,6 +13,7 @@ interface UnitOption {
   name: string;
 }
 import { supabase } from "@/integrations/supabase/client";
+import { adminUserAction } from "@/lib/adminApi";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -128,12 +129,14 @@ export default function Users() {
       if (cpfDigits && cpfDigits.length !== 11) {
         throw new Error("CPF deve conter 11 dígitos.");
       }
-      const response = await supabase.functions.invoke("create-user?action=create", {
-        body: { email, password, role, unit: selectedUnits.join(", "), full_name: fullName.trim(), cpf: cpfDigits },
+      await adminUserAction("create", {
+        email,
+        password,
+        role,
+        unit: selectedUnits.join(", "),
+        full_name: fullName.trim(),
+        cpf: cpfDigits,
       });
-
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
 
       toast({ title: "Usuário criado!", description: `Usuário ${email} criado com sucesso.` });
       setOpen(false);
@@ -161,12 +164,7 @@ export default function Users() {
 
   const handleToggleActive = async (user: UserProfile) => {
     try {
-      const response = await supabase.functions.invoke("create-user?action=toggle", {
-        body: { userId: user.id, active: !user.active },
-      });
-
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
+      await adminUserAction("toggle", { userId: user.id, active: !user.active });
 
       toast({ title: user.active ? "Usuário inativado" : "Usuário ativado", description: `${user.email} foi ${user.active ? "inativado" : "ativado"}.` });
       fetchUsers();
@@ -178,12 +176,7 @@ export default function Users() {
   const handleDeleteUser = async () => {
     if (!deleteTarget) return;
     try {
-      const response = await supabase.functions.invoke("create-user?action=delete", {
-        body: { userId: deleteTarget.id },
-      });
-
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
+      await adminUserAction("delete", { userId: deleteTarget.id });
 
       toast({ title: "Usuário excluído", description: `${deleteTarget.email} foi removido.` });
       setDeleteTarget(null);
@@ -197,11 +190,7 @@ export default function Users() {
     if (!resetTarget || !newPassword) return;
     setResetLoading(true);
     try {
-      const response = await supabase.functions.invoke("create-user?action=reset-password", {
-        body: { userId: resetTarget.id, newPassword },
-      });
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
+      await adminUserAction("reset-password", { userId: resetTarget.id, newPassword });
       toast({ title: "Senha alterada", description: `Senha de ${resetTarget.email} foi alterada com sucesso.` });
       setResetTarget(null);
       setNewPassword("");
