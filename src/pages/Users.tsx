@@ -164,12 +164,7 @@ export default function Users() {
 
   const handleToggleActive = async (user: UserProfile) => {
     try {
-      const response = await supabase.functions.invoke("create-user?action=toggle", {
-        body: { userId: user.id, active: !user.active },
-      });
-
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
+      await adminUserAction("toggle", { userId: user.id, active: !user.active });
 
       toast({ title: user.active ? "Usuário inativado" : "Usuário ativado", description: `${user.email} foi ${user.active ? "inativado" : "ativado"}.` });
       fetchUsers();
