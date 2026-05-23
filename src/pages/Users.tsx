@@ -440,6 +440,74 @@ export default function Users() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Usuário</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{editTarget?.email}</p>
+          <form onSubmit={handleEditUser} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome completo</Label>
+              <Input type="text" value={editFullName} onChange={(e) => setEditFullName(e.target.value)} maxLength={120} />
+            </div>
+            <div className="space-y-2">
+              <Label>CPF</Label>
+              <Input type="text" inputMode="numeric" placeholder="000.000.000-00" value={editCpf} onChange={(e) => setEditCpf(maskCpf(e.target.value))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Perfil</Label>
+              <Select value={editRole} onValueChange={setEditRole}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {allowedRoles.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!isAdmin && (
+                <p className="text-xs text-muted-foreground">Você só pode atribuir perfis até o seu nível.</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Unidade/Setor</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                    {editUnits.length > 0 ? `${editUnits.length} setor(es) selecionado(s)` : "Selecione os setores"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-2" align="start">
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {units.map((u) => {
+                      const isSelected = editUnits.includes(u.name);
+                      return (
+                        <div
+                          key={u.id}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-secondary/50"
+                          onClick={() => {
+                            setEditUnits(prev => isSelected ? prev.filter(n => n !== u.name) : [...prev, u.name]);
+                          }}
+                        >
+                          <div className={`w-4 h-4 border rounded flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-input'}`}>
+                            {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+                          </div>
+                          <span className="text-sm">{u.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <Button type="submit" className="w-full" disabled={editLoading}>
+              {editLoading ? "Salvando..." : "Salvar Alterações"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
