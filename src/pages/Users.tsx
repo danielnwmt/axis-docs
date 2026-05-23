@@ -190,11 +190,7 @@ export default function Users() {
     if (!resetTarget || !newPassword) return;
     setResetLoading(true);
     try {
-      const response = await supabase.functions.invoke("create-user?action=reset-password", {
-        body: { userId: resetTarget.id, newPassword },
-      });
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
+      await adminUserAction("reset-password", { userId: resetTarget.id, newPassword });
       toast({ title: "Senha alterada", description: `Senha de ${resetTarget.email} foi alterada com sucesso.` });
       setResetTarget(null);
       setNewPassword("");
