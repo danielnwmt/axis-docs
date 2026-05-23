@@ -299,6 +299,9 @@ export default function Users() {
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEdit(user)}>
+                          <Pencil className="w-4 h-4 mr-2" /> Editar
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleToggleActive(user)}>
                           {user.active ? (
                             <><ToggleLeft className="w-4 h-4 mr-2" /> Inativar</>
