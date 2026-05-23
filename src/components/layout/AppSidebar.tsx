@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 
@@ -27,23 +27,27 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { t } = useTranslation();
-  const [role, setRole] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!user?.id) return;
-    (async () => {
+  const { data: role, isLoading: roleLoading } = useQuery({
+    queryKey: ["sidebar-role", user?.id],
+    queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
         .select("role")
-        .eq("id", user.id)
+        .eq("id", user!.id)
         .maybeSingle();
-      setRole((data as any)?.role ?? null);
-    })();
-  }, [user?.id]);
+      return (data as any)?.role ?? null;
+    },
+    enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+  });
 
   const items = navItems.filter((it) => {
-    if (it.key === "users") return role === "Administrador" || role === "Operador";
-    
+    if (it.key === "users") {
+      if (roleLoading) return true;
+      return role === "Administrador" || role === "Operador";
+    }
     return true;
   });
 
