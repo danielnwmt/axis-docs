@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-type AdminUserAction = "create" | "toggle" | "delete" | "reset-password";
+type AdminUserAction = "create" | "toggle" | "delete" | "reset-password" | "update";
 
 const apiBaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;

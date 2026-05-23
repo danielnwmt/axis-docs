@@ -217,6 +217,55 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (req.method === "POST" && action === "update") {
+      const { userId, role, unit, full_name, cpf } = await req.json();
+
+      if (!userId) {
+        return new Response(JSON.stringify({ error: "ID do usuário é obrigatório" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const allowedRoles = isAdmin
+        ? ["Administrador", "Operador", "Usuário"]
+        : ["Operador", "Usuário"];
+
+      const updates: Record<string, unknown> = {};
+      if (typeof role === "string") {
+        if (!allowedRoles.includes(role)) {
+          return new Response(JSON.stringify({ error: "Perfil não permitido para o seu nível de acesso" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        updates.role = role;
+      }
+      if (typeof unit === "string") updates.unit = unit;
+      if (typeof full_name === "string") updates.full_name = full_name;
+      if (typeof cpf === "string") updates.cpf = cpf;
+
+      if (Object.keys(updates).length === 0) {
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { error } = await supabaseAdmin.from("profiles").update(updates).eq("id", userId);
+      if (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: "Ação inválida" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

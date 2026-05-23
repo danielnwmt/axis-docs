@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Users as UsersIcon, Plus, MoreVertical, Trash2, ToggleLeft, ToggleRight, Check, ChevronsUpDown, KeyRound } from "lucide-react";
+import { Users as UsersIcon, Plus, MoreVertical, Trash2, ToggleLeft, ToggleRight, Check, ChevronsUpDown, KeyRound, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -74,6 +74,12 @@ export default function Users() {
   const [resetTarget, setResetTarget] = useState<UserProfile | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+  const [editTarget, setEditTarget] = useState<UserProfile | null>(null);
+  const [editFullName, setEditFullName] = useState("");
+  const [editCpf, setEditCpf] = useState("");
+  const [editRole, setEditRole] = useState("Usuário");
+  const [editUnits, setEditUnits] = useState<string[]>([]);
+  const [editLoading, setEditLoading] = useState(false);
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
   const [currentRole, setCurrentRole] = useState<string | null>(null);
@@ -201,6 +207,40 @@ export default function Users() {
     }
   };
 
+  const openEdit = (user: UserProfile) => {
+    setEditTarget(user);
+    setEditFullName(user.full_name || "");
+    setEditCpf(maskCpf(user.cpf || ""));
+    setEditRole(allowedRoles.includes(user.role) ? user.role : allowedRoles[allowedRoles.length - 1]);
+    setEditUnits((user.unit || "").split(",").map(s => s.trim()).filter(Boolean));
+  };
+
+  const handleEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTarget) return;
+    setEditLoading(true);
+    try {
+      const cpfDigits = editCpf.replace(/\D/g, "");
+      if (cpfDigits && cpfDigits.length !== 11) {
+        throw new Error("CPF deve conter 11 dígitos.");
+      }
+      await adminUserAction("update", {
+        userId: editTarget.id,
+        role: editRole,
+        unit: editUnits.join(", "),
+        full_name: editFullName.trim(),
+        cpf: cpfDigits,
+      });
+      toast({ title: "Usuário atualizado", description: `${editTarget.email} foi atualizado.` });
+      setEditTarget(null);
+      fetchUsers();
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   if (roleLoaded && !isAdmin && !isOperator) {
     return <Navigate to="/" replace />;
   }
@@ -259,6 +299,9 @@ export default function Users() {
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEdit(user)}>
+                          <Pencil className="w-4 h-4 mr-2" /> Editar
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleToggleActive(user)}>
                           {user.active ? (
                             <><ToggleLeft className="w-4 h-4 mr-2" /> Inativar</>
@@ -393,6 +436,74 @@ export default function Users() {
             </div>
             <Button type="submit" className="w-full" disabled={resetLoading}>
               {resetLoading ? "Alterando..." : "Alterar Senha"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Usuário</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{editTarget?.email}</p>
+          <form onSubmit={handleEditUser} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome completo</Label>
+              <Input type="text" value={editFullName} onChange={(e) => setEditFullName(e.target.value)} maxLength={120} />
+            </div>
+            <div className="space-y-2">
+              <Label>CPF</Label>
+              <Input type="text" inputMode="numeric" placeholder="000.000.000-00" value={editCpf} onChange={(e) => setEditCpf(maskCpf(e.target.value))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Perfil</Label>
+              <Select value={editRole} onValueChange={setEditRole}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {allowedRoles.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!isAdmin && (
+                <p className="text-xs text-muted-foreground">Você só pode atribuir perfis até o seu nível.</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Unidade/Setor</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                    {editUnits.length > 0 ? `${editUnits.length} setor(es) selecionado(s)` : "Selecione os setores"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-2" align="start">
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {units.map((u) => {
+                      const isSelected = editUnits.includes(u.name);
+                      return (
+                        <div
+                          key={u.id}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-secondary/50"
+                          onClick={() => {
+                            setEditUnits(prev => isSelected ? prev.filter(n => n !== u.name) : [...prev, u.name]);
+                          }}
+                        >
+                          <div className={`w-4 h-4 border rounded flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-input'}`}>
+                            {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+                          </div>
+                          <span className="text-sm">{u.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <Button type="submit" className="w-full" disabled={editLoading}>
+              {editLoading ? "Salvando..." : "Salvar Alterações"}
             </Button>
           </form>
         </DialogContent>
