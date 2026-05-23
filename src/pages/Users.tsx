@@ -128,12 +128,14 @@ export default function Users() {
       if (cpfDigits && cpfDigits.length !== 11) {
         throw new Error("CPF deve conter 11 dígitos.");
       }
-      const response = await supabase.functions.invoke("create-user?action=create", {
-        body: { email, password, role, unit: selectedUnits.join(", "), full_name: fullName.trim(), cpf: cpfDigits },
+      await adminUserAction("create", {
+        email,
+        password,
+        role,
+        unit: selectedUnits.join(", "),
+        full_name: fullName.trim(),
+        cpf: cpfDigits,
       });
-
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
 
       toast({ title: "Usuário criado!", description: `Usuário ${email} criado com sucesso.` });
       setOpen(false);
