@@ -141,7 +141,7 @@ export default function Help() {
                 <p className="text-xs text-muted-foreground">Nossa equipe responde em até 1 dia útil.</p>
               </div>
             </div>
-            <a href="mailto:suporte@protenexus.cloud">
+            <a href="mailto:contato@axisdocs.xyz">
               <Button className="gap-2"><Mail className="w-4 h-4" /> suporte@protenexus.cloud</Button>
             </a>
           </Card>
