@@ -14,7 +14,7 @@ import { MyCertificateSection } from "@/components/settings/MyCertificateSection
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | "minhasenha" | null;
 
 // Apenas Administrador
 const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "licenca"];
@@ -27,12 +27,77 @@ const sectionCards = [
   { id: "unidades" as Section, icon: FolderTree, title: "Unidades/Setores", description: "Gerenciar a estrutura organizacional" },
   { id: "parametros" as Section, icon: Sliders, title: "Parâmetros do Sistema", description: "Configurações gerais da plataforma" },
   { id: "googledrive" as Section, icon: HardDrive, title: "Google Drive", description: "Configurar integração com Google Drive via API" },
-  
+
   { id: "meucertificado" as Section, icon: ShieldCheck, title: "Meu Certificado", description: "Cadastre seu certificado A1 (.pfx) ICP-Brasil para assinar documentos" },
+  { id: "minhasenha" as Section, icon: KeyRound, title: "Minha Senha", description: "Alterar a sua senha de acesso ao sistema" },
   { id: "backup" as Section, icon: DatabaseBackup, title: "Backup & Restauração", description: "Exportar e importar usuários, auditoria e referências de documentos" },
   { id: "licenca" as Section, icon: KeyRound, title: "Licença", description: "Ativar e consultar o status da licença do AxisDocs" },
   { id: "mobile" as Section, icon: Smartphone, title: "Acesso Mobile", description: "QR Code para abrir o sistema no aplicativo" },
 ];
+
+function MyPasswordSection() {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNext, setShowNext] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (next.length < 10 || !/[A-Z]/.test(next) || !/[0-9]/.test(next) || !/[^A-Za-z0-9]/.test(next)) {
+      toast({ title: "Senha fraca", description: "Mínimo 10 caracteres, com maiúscula, número e símbolo.", variant: "destructive" });
+      return;
+    }
+    if (next !== confirm) {
+      toast({ title: "Erro", description: "As senhas não coincidem.", variant: "destructive" });
+      return;
+    }
+    if (!user?.email) {
+      toast({ title: "Erro", description: "Sessão inválida.", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: user.email, password: current });
+      if (signInError) throw new Error("Senha atual incorreta.");
+      const { error } = await supabase.auth.updateUser({ password: next });
+      if (error) throw error;
+      toast({ title: "Senha alterada", description: "Sua senha foi atualizada com sucesso." });
+      setCurrent(""); setNext(""); setConfirm("");
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderField = (id: string, label: string, value: string, set: (v: string) => void, show: boolean, setShow: (f: (v: boolean) => boolean) => void) => (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <Input id={id} type={show ? "text" : "password"} value={value} onChange={(e) => set(e.target.value)} required className="pr-10" autoComplete="new-password" />
+        <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" tabIndex={-1} aria-label={show ? "Ocultar" : "Mostrar"}>
+          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
+      {renderField("current-pw", "Senha atual", current, setCurrent, showCurrent, setShowCurrent)}
+      {renderField("new-pw", "Nova senha", next, setNext, showNext, setShowNext)}
+      <p className="text-[11px] text-muted-foreground -mt-2">Mín. 10 caracteres, com maiúscula, número e símbolo.</p>
+      {renderField("confirm-pw", "Confirmar nova senha", confirm, setConfirm, showConfirm, setShowConfirm)}
+      <Button type="submit" disabled={loading}>
+        {loading ? "Salvando..." : "Alterar Senha"}
+      </Button>
+    </form>
+  );
+}
 
 function MobileAccessSection() {
   const url = typeof window !== "undefined" ? window.location.origin : "";
@@ -1093,6 +1158,7 @@ export default function Settings() {
       case "backup": return <BackupSection />;
       case "licenca": return <LicencaSection />;
       case "mobile": return <MobileAccessSection />;
+      case "minhasenha": return <MyPasswordSection />;
       default: return null;
     }
   };
