@@ -20,6 +20,7 @@ import Signature from "./pages/Signature";
 import ChangePassword from "./pages/ChangePassword";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
+import Help from "./pages/Help";
 
 
 import NotFound from "./pages/NotFound";
@@ -62,6 +63,7 @@ const App = () => (
             <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
             <Route path="/signature" element={<ProtectedRoute><Signature /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
             
             <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />

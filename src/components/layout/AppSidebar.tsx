@@ -95,7 +95,10 @@ export function AppSidebar() {
 
       {/* Footer */}
       <div className="px-3 pb-4 space-y-1">
-        <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors">
+        <button
+          onClick={() => navigate("/help")}
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+        >
           <HelpCircle className="w-[18px] h-[18px]" />
           <span>{t("nav.help")}</span>
         </button>
