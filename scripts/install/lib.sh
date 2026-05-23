@@ -1919,11 +1919,18 @@ server {
         client_max_body_size 100M;
     }
 
-    # License server proxy (evita bloqueio de CORS no browser)
-    location /license-proxy/ {
-        proxy_pass https://getlicence.lovable.app/;
+    # License server proxy dinâmico (evita CORS no browser)
+    # Formato esperado pelo frontend: /license-proxy/<host>/<path...>
+    location ~ ^/license-proxy/([^/]+)(/.*)?$ {
+        resolver 8.8.8.8 1.1.1.1 ipv6=off valid=300s;
+        resolver_timeout 5s;
+        set \$lic_host \$1;
+        set \$lic_path \$2;
+        if (\$lic_path = "") { set \$lic_path "/"; }
+        proxy_pass https://\$lic_host\$lic_path\$is_args\$args;
         proxy_ssl_server_name on;
-        proxy_set_header Host getlicence.lovable.app;
+        proxy_ssl_name \$lic_host;
+        proxy_set_header Host \$lic_host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
