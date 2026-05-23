@@ -1,0 +1,2 @@
+DROP POLICY IF EXISTS "Authenticated read dpo config" ON public.dpo_config;
+CREATE POLICY "Admins read dpo config" ON public.dpo_config FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Administrador'));
