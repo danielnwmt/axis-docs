@@ -139,13 +139,12 @@ async function findOrCreateFolder(token: string, name: string, parentId: string)
   return (await c.json()).id;
 }
 
-async function uploadSignedToDrive(supabase: any, signedName: string, signedPdfBuf: Uint8Array, unitName?: string, categoryName?: string) {
+async function uploadSignedToDrive(supabase: any, signedName: string, signedPdfBuf: Uint8Array, _unitName?: string, _categoryName?: string) {
   const cfg = await loadDriveConfig(supabase);
   if (!cfg.folderId) throw new Error("ID da pasta raiz do Google Drive não configurado. Configure em Configurações.");
   const token = await getDriveAccessToken(cfg.serviceAccount);
-  let targetFolderId = cfg.folderId;
-  if (unitName) targetFolderId = await findOrCreateFolder(token, unitName, targetFolderId);
-  if (categoryName) targetFolderId = await findOrCreateFolder(token, categoryName, targetFolderId);
+  // Todos os PDFs assinados ficam centralizados na pasta "Assinatura Digital"
+  const targetFolderId = await findOrCreateFolder(token, "Assinatura Digital", cfg.folderId);
   const metadata: any = { name: signedName, parents: [targetFolderId] };
   const boundary = "----axisdocs" + Math.random().toString(36).slice(2);
   const body = new Blob([
@@ -510,26 +509,10 @@ Deno.serve(async (req) => {
     let newDriveLink: string | null = null;
 
     if (filePath.startsWith("drive://")) {
-      const cfg = await loadDriveConfig(supabase);
-      if (!cfg.folderId) throw new Error("ID da pasta raiz do Google Drive não configurado.");
-      const token = await getDriveAccessToken(cfg.serviceAccount);
-      const metadata: any = { name: signedName, parents: [cfg.folderId] };
-      const boundary = "----axisdocs" + Math.random().toString(36).slice(2);
-      const body = new Blob([
-        `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`,
-        signedPdfBuf,
-        `\r\n--${boundary}--`,
-      ]);
-      const upRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&enforceSingleParent=true", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` },
-        body,
-      });
-      if (!upRes.ok) throw new Error(`Falha ao subir assinado no Drive: ${await upRes.text()}`);
-      const upJson = await upRes.json();
-      newDriveFileId = upJson.id;
-      newDriveLink = `https://drive.google.com/file/d/${upJson.id}/view`;
-      newFilePath = `drive://${upJson.id}`;
+      const up = await uploadSignedToDrive(supabase, signedName, signedPdfBuf);
+      newDriveFileId = up.driveFileId;
+      newDriveLink = up.driveLink;
+      newFilePath = `drive://${up.driveFileId}`;
     } else {
       newFilePath = `${user.id}/${Date.now()}_${signedName}`;
       const { error: upErr } = await supabase.storage.from("documents").upload(newFilePath, signedPdfBuf, {

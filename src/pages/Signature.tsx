@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useState, useRef, useEffect } from "react";
-import { FileText, Upload, PenTool, CheckCircle, Loader2, AlertCircle, ShieldCheck, Eye, EyeOff } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { FileText, Upload, PenTool, CheckCircle, Loader2, AlertCircle, ShieldCheck, Eye, EyeOff, Download, Trash2, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -13,6 +13,7 @@ import { fetchDriveFileBlob } from "@/lib/driveFile";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SignaturePlacer, SignaturePosition } from "@/components/signature/SignaturePlacer";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 type SignatureStep = "upload" | "signing" | "done";
 
@@ -129,7 +130,7 @@ export default function Signature() {
         const formData = new FormData();
         formData.append("file", file);
         formData.append("fileName", file.name);
-        formData.append("unitName", "ICP-Brasil");
+        formData.append("unitName", "Assinatura Digital");
         const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", { body: formData });
         if (driveError || !driveResult?.success || !driveResult?.driveFileId) {
           throw new Error(driveError?.message || driveResult?.error || "Falha ao enviar para o Google Drive.");
@@ -141,7 +142,7 @@ export default function Signature() {
             user_id: user.id,
             title: file.name.replace(".pdf", ""),
             category: "Assinatura Digital",
-            unit: "ICP-Brasil",
+            unit: "Assinatura Digital",
             file_name: file.name,
             file_path: filePath,
             file_size: file.size,
@@ -204,6 +205,82 @@ export default function Signature() {
     setExistingDocId(null);
     setExistingFilePath(null);
     setSignaturePos(null);
+  };
+
+  // ===== Lista de documentos assinados do usuário =====
+  const [signedDocs, setSignedDocs] = useState<any[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const loadSignedDocs = useCallback(async () => {
+    if (!user) return;
+    setLoadingDocs(true);
+    const { data } = await supabase
+      .from("documents")
+      .select("id, title, file_name, file_path, file_size, drive_file_id, sign_timestamp, created_at")
+      .eq("user_id", user.id)
+      .eq("category", "Assinatura Digital")
+      .eq("sign_status", "assinado")
+      .order("sign_timestamp", { ascending: false, nullsFirst: false })
+      .limit(50);
+    setSignedDocs(data || []);
+    setLoadingDocs(false);
+  }, [user]);
+
+  useEffect(() => { loadSignedDocs(); }, [loadSignedDocs, step]);
+
+  const handleViewOrDownload = async (doc: any, mode: "view" | "download") => {
+    try {
+      let blob: Blob;
+      if (doc.file_path?.startsWith("drive://")) {
+        const driveId = doc.drive_file_id || doc.file_path.replace("drive://", "");
+        blob = await fetchDriveFileBlob(driveId, mode, "application/pdf");
+      } else {
+        const { data, error } = await supabase.storage.from("documents").download(doc.file_path);
+        if (error) throw error;
+        blob = data;
+      }
+      const url = URL.createObjectURL(blob);
+      if (mode === "view") {
+        window.open(url, "_blank");
+      } else {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = doc.file_name || `${doc.title}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message || "Falha ao abrir arquivo.", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      if (deleteTarget.drive_file_id) {
+        const { error } = await supabase.functions.invoke("delete-from-drive", {
+          body: { driveFileId: deleteTarget.drive_file_id },
+        });
+        if (error) console.warn("delete-from-drive:", error);
+      } else if (deleteTarget.file_path && !deleteTarget.file_path.startsWith("drive://")) {
+        await supabase.storage.from("documents").remove([deleteTarget.file_path]);
+      }
+      const { error: dbErr } = await supabase.from("documents").delete().eq("id", deleteTarget.id);
+      if (dbErr) throw dbErr;
+      toast({ title: "Documento excluído", description: "O documento assinado foi removido." });
+      setDeleteTarget(null);
+      loadSignedDocs();
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    } catch (err: any) {
+      toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -389,6 +466,75 @@ export default function Signature() {
           </CardContent>
         </Card>
       )}
+
+      {/* Meus documentos assinados */}
+      {hasCert === true && (
+        <Card className="mt-6 max-w-[1400px]">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <FolderOpen className="w-5 h-5 text-primary" />
+              Meus documentos assinados
+              <span className="text-xs font-normal text-muted-foreground ml-1">
+                ({signedDocs.length})
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingDocs ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+                <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
+              </div>
+            ) : signedDocs.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                Você ainda não possui documentos assinados.
+              </p>
+            ) : (
+              <div className="divide-y divide-border">
+                {signedDocs.map((d) => (
+                  <div key={d.id} className="flex items-center gap-3 py-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <FileText className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{d.file_name || d.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {d.sign_timestamp ? new Date(d.sign_timestamp).toLocaleString("pt-BR") : "—"}
+                        {d.file_size ? ` · ${(d.file_size / 1024 / 1024).toFixed(2)} MB` : ""}
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => handleViewOrDownload(d, "view")} className="gap-1">
+                      <Eye className="w-4 h-4" /> Visualizar
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleViewOrDownload(d, "download")} className="gap-1">
+                      <Download className="w-4 h-4" /> Baixar
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setDeleteTarget(d)} className="gap-1 text-destructive hover:text-destructive">
+                      <Trash2 className="w-4 h-4" /> Excluir
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir documento assinado?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação é permanente. O arquivo "{deleteTarget?.file_name || deleteTarget?.title}" será removido do Google Drive e do sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
