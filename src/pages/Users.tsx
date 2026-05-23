@@ -74,6 +74,12 @@ export default function Users() {
   const [resetTarget, setResetTarget] = useState<UserProfile | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+  const [editTarget, setEditTarget] = useState<UserProfile | null>(null);
+  const [editFullName, setEditFullName] = useState("");
+  const [editCpf, setEditCpf] = useState("");
+  const [editRole, setEditRole] = useState("Usuário");
+  const [editUnits, setEditUnits] = useState<string[]>([]);
+  const [editLoading, setEditLoading] = useState(false);
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
   const [currentRole, setCurrentRole] = useState<string | null>(null);
