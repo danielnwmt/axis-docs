@@ -207,6 +207,82 @@ export default function Signature() {
     setSignaturePos(null);
   };
 
+  // ===== Lista de documentos assinados do usuário =====
+  const [signedDocs, setSignedDocs] = useState<any[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const loadSignedDocs = useCallback(async () => {
+    if (!user) return;
+    setLoadingDocs(true);
+    const { data } = await supabase
+      .from("documents")
+      .select("id, title, file_name, file_path, file_size, drive_file_id, sign_timestamp, created_at")
+      .eq("user_id", user.id)
+      .eq("category", "Assinatura Digital")
+      .eq("sign_status", "assinado")
+      .order("sign_timestamp", { ascending: false, nullsFirst: false })
+      .limit(50);
+    setSignedDocs(data || []);
+    setLoadingDocs(false);
+  }, [user]);
+
+  useEffect(() => { loadSignedDocs(); }, [loadSignedDocs, step]);
+
+  const handleViewOrDownload = async (doc: any, mode: "view" | "download") => {
+    try {
+      let blob: Blob;
+      if (doc.file_path?.startsWith("drive://")) {
+        const driveId = doc.drive_file_id || doc.file_path.replace("drive://", "");
+        blob = await fetchDriveFileBlob(driveId, mode, "application/pdf");
+      } else {
+        const { data, error } = await supabase.storage.from("documents").download(doc.file_path);
+        if (error) throw error;
+        blob = data;
+      }
+      const url = URL.createObjectURL(blob);
+      if (mode === "view") {
+        window.open(url, "_blank");
+      } else {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = doc.file_name || `${doc.title}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message || "Falha ao abrir arquivo.", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      if (deleteTarget.drive_file_id) {
+        const { error } = await supabase.functions.invoke("delete-from-drive", {
+          body: { driveFileId: deleteTarget.drive_file_id },
+        });
+        if (error) console.warn("delete-from-drive:", error);
+      } else if (deleteTarget.file_path && !deleteTarget.file_path.startsWith("drive://")) {
+        await supabase.storage.from("documents").remove([deleteTarget.file_path]);
+      }
+      const { error: dbErr } = await supabase.from("documents").delete().eq("id", deleteTarget.id);
+      if (dbErr) throw dbErr;
+      toast({ title: "Documento excluído", description: "O documento assinado foi removido." });
+      setDeleteTarget(null);
+      loadSignedDocs();
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    } catch (err: any) {
+      toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="flex items-center justify-between mb-6">
