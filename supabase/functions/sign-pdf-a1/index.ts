@@ -139,13 +139,12 @@ async function findOrCreateFolder(token: string, name: string, parentId: string)
   return (await c.json()).id;
 }
 
-async function uploadSignedToDrive(supabase: any, signedName: string, signedPdfBuf: Uint8Array, unitName?: string, categoryName?: string) {
+async function uploadSignedToDrive(supabase: any, signedName: string, signedPdfBuf: Uint8Array, _unitName?: string, _categoryName?: string) {
   const cfg = await loadDriveConfig(supabase);
   if (!cfg.folderId) throw new Error("ID da pasta raiz do Google Drive não configurado. Configure em Configurações.");
   const token = await getDriveAccessToken(cfg.serviceAccount);
-  let targetFolderId = cfg.folderId;
-  if (unitName) targetFolderId = await findOrCreateFolder(token, unitName, targetFolderId);
-  if (categoryName) targetFolderId = await findOrCreateFolder(token, categoryName, targetFolderId);
+  // Todos os PDFs assinados ficam centralizados na pasta "Assinatura Digital"
+  const targetFolderId = await findOrCreateFolder(token, "Assinatura Digital", cfg.folderId);
   const metadata: any = { name: signedName, parents: [targetFolderId] };
   const boundary = "----axisdocs" + Math.random().toString(36).slice(2);
   const body = new Blob([
