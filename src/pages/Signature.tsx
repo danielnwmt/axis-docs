@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useState, useRef, useEffect, useCallback } from "react";
-import { FileText, Upload, PenTool, CheckCircle, Loader2, AlertCircle, ShieldCheck, Eye, EyeOff, Download, Trash2, FolderOpen } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { FileText, Upload, PenTool, CheckCircle, Loader2, AlertCircle, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
