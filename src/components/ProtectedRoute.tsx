@@ -3,23 +3,38 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { LicenseGate } from "@/components/LicenseGate";
+import { useEffect } from "react";
+import { toast } from "@/hooks/use-toast";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const location = useLocation();
 
   const { data: profile, isLoading: profileLoading } = useQuery({
-    queryKey: ["profile-password-check", user?.id],
+    queryKey: ["profile-access-check", user?.id],
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("must_change_password")
+        .select("must_change_password, active")
         .eq("id", user!.id)
         .single();
       return data;
     },
     enabled: !!user,
   });
+
+  const isInactive = !!profile && profile.active === false;
+
+  useEffect(() => {
+    if (isInactive) {
+      toast({
+        title: "Acesso bloqueado",
+        description: "Seu usuário está inativo. Contate o administrador.",
+        variant: "destructive",
+      });
+      signOut();
+    }
+  }, [isInactive, signOut]);
 
   if (loading || (user && profileLoading)) {
     return (
@@ -29,7 +44,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) {
+  if (!user || isInactive) {
     return <Navigate to="/login" replace />;
   }
 
