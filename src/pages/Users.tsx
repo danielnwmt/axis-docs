@@ -13,6 +13,7 @@ interface UnitOption {
   name: string;
 }
 import { supabase } from "@/integrations/supabase/client";
+import { adminUserAction } from "@/lib/adminApi";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
