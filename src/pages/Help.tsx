@@ -142,7 +142,7 @@ export default function Help() {
               </div>
             </div>
             <a href="mailto:contato@axisdocs.xyz">
-              <Button className="gap-2"><Mail className="w-4 h-4" /> suporte@protenexus.cloud</Button>
+              <Button className="gap-2"><Mail className="w-4 h-4" /> contato@axisdocs.xyz</Button>
             </a>
           </Card>
         </div>
