@@ -130,7 +130,7 @@ export default function Signature() {
         const formData = new FormData();
         formData.append("file", file);
         formData.append("fileName", file.name);
-        formData.append("unitName", "ICP-Brasil");
+        formData.append("unitName", "Assinatura Digital");
         const { data: driveResult, error: driveError } = await supabase.functions.invoke("upload-to-drive", { body: formData });
         if (driveError || !driveResult?.success || !driveResult?.driveFileId) {
           throw new Error(driveError?.message || driveResult?.error || "Falha ao enviar para o Google Drive.");
