@@ -142,7 +142,7 @@ export default function Signature() {
             user_id: user.id,
             title: file.name.replace(".pdf", ""),
             category: "Assinatura Digital",
-            unit: "ICP-Brasil",
+            unit: "Assinatura Digital",
             file_name: file.name,
             file_path: filePath,
             file_size: file.size,
