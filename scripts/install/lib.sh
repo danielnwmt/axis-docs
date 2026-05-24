@@ -301,6 +301,10 @@ ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS user_id uuid;
 ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS revoked boolean DEFAULT false;
 ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
 ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+CREATE SEQUENCE IF NOT EXISTS auth.refresh_tokens_id_seq;
+ALTER SEQUENCE auth.refresh_tokens_id_seq OWNED BY auth.refresh_tokens.id;
+ALTER TABLE auth.refresh_tokens ALTER COLUMN id SET DEFAULT nextval('auth.refresh_tokens_id_seq');
+SELECT setval('auth.refresh_tokens_id_seq', COALESCE((SELECT MAX(id) FROM auth.refresh_tokens), 0) + 1, false);
 
 -- Roles do PostgREST
 DO $$ BEGIN
