@@ -69,6 +69,7 @@ const App = () => (
             <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
             
             <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
+            <Route path="/mfa-setup" element={<ProtectedRoute><MfaSetup /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
