@@ -486,8 +486,18 @@ export default function Users() {
               <Input type="text" value={editFullName} onChange={(e) => setEditFullName(e.target.value)} maxLength={120} />
             </div>
             <div className="space-y-2">
-              <Label>CPF</Label>
-              <Input type="text" inputMode="numeric" placeholder="000.000.000-00" value={editCpf} onChange={(e) => setEditCpf(maskCpf(e.target.value))} />
+              <Label>Tipo de documento</Label>
+              <Select value={editDocType} onValueChange={(v) => { setEditDocType(v as any); setEditCpf(""); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cpf">CPF</SelectItem>
+                  <SelectItem value="cnpj">CNPJ</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{editDocType === "cpf" ? "CPF" : "CNPJ"}</Label>
+              <Input type="text" inputMode="numeric" placeholder={editDocType === "cpf" ? "000.000.000-00" : "00.000.000/0000-00"} value={editCpf} onChange={(e) => setEditCpf(maskDoc(e.target.value, editDocType))} />
             </div>
             <div className="space-y-2">
               <Label>Perfil</Label>
