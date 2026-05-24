@@ -352,7 +352,7 @@ function ParametrosSection() {
   };
 
   const handleSystemUpdate = async () => {
-    if (!confirm("Deseja atualizar o AxisDocs agora?\n\nO sistema buscará a última versão no Git (danielnwmt/axis-docs, branch main) e refará o build.\nIsso pode levar alguns minutos e a página será recarregada ao final.")) return;
+    if (!confirm("Deseja atualizar o AxisDocs agora?\n\nO sistema buscará a última versão oficial e refará o build.\nIsso pode levar alguns minutos e a página será recarregada ao final.")) return;
     setUpdating(true);
     try {
       const { triggerSystemUpdate } = await import("@/lib/version");
@@ -429,7 +429,7 @@ function ParametrosSection() {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          A atualização busca a última versão em <span className="font-mono">danielnwmt/axis-docs</span> (branch main) e refaz o build.
+          A atualização busca a última versão oficial do AxisDocs e refaz o build automaticamente.
         </p>
       </div>
     </div>
