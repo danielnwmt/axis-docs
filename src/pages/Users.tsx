@@ -241,8 +241,9 @@ export default function Users() {
     setEditLoading(true);
     try {
       const cpfDigits = editCpf.replace(/\D/g, "");
-      if (cpfDigits && cpfDigits.length !== 11) {
-        throw new Error("CPF deve conter 11 dígitos.");
+      const expectedLen = editDocType === "cpf" ? 11 : 14;
+      if (cpfDigits && cpfDigits.length !== expectedLen) {
+        throw new Error(`${editDocType.toUpperCase()} deve conter ${expectedLen} dígitos.`);
       }
       await adminUserAction("update", {
         userId: editTarget.id,
