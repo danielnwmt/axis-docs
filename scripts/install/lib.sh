@@ -2556,6 +2556,28 @@ verify_installation() {
   done
   if [ "$auth_ok" = true ]; then success "Auth respondendo"; else fail "Auth não respondeu"; fi
 
+  # Teste real: login do admin padrão + criação de usuário pela API administrativa local.
+  local login_payload login_response access_token probe_email create_payload create_response probe_id
+  probe_email="axisdocs-selftest-$(date +%s)@local.test"
+  login_payload=$(jq -nc --arg email "$ADMIN_EMAIL" --arg password "$ADMIN_PASSWORD" '{email:$email,password:$password}')
+  login_response=$(curl -sS -X POST "http://127.0.0.1:9999/auth/v1/token?grant_type=password" -H "Content-Type: application/json" -d "$login_payload" 2>/dev/null || true)
+  access_token=$(printf '%s' "$login_response" | jq -r '.access_token // empty' 2>/dev/null || true)
+  if [ -z "$access_token" ]; then
+    echo "Resposta do login local: $login_response" >&2
+    fail "Login do administrador local falhou; criação de usuários não foi testada"
+  fi
+
+  create_payload=$(jq -nc --arg email "$probe_email" '{email:$email,password:"Axisdocs123!",role:"Usuário",unit:"Geral",full_name:"Teste AxisDocs",cpf:""}')
+  create_response=$(curl -sS -X POST "http://127.0.0.1:9999/auth/v1/admin/users?action=create" -H "Content-Type: application/json" -H "Authorization: Bearer $access_token" -d "$create_payload" 2>/dev/null || true)
+  probe_id=$(printf '%s' "$create_response" | jq -r '.user.id // empty' 2>/dev/null || true)
+  if [ -z "$probe_id" ]; then
+    echo "Resposta da criação local: $create_response" >&2
+    journalctl -u axisdocs-auth -n 30 --no-pager >&2 || true
+    fail "API local de criação de usuário falhou"
+  fi
+  sudo -u postgres psql -d "$PG_DB" -v ON_ERROR_STOP=1 -c "DELETE FROM auth.users WHERE email = '$probe_email';" >/dev/null 2>&1 || true
+  success "Criação de usuário local validada"
+
   # Verifica Nginx
   local nginx_ok=false
   for _ in $(seq 1 15); do
