@@ -1375,9 +1375,11 @@ const path = require("path");
 const crypto = require("crypto");
 const { URL } = require("url");
 const { Client } = require("pg");
+const { spawn } = require("child_process");
 
 const PORT = 5556;
 const STORAGE_DIR = "/var/lib/axisdocs/storage";
+const APP_DIR = "/opt/axisdocs";
 const JWT_SECRET = process.env.JWT_SECRET;
 const DATABASE_URL = process.env.DATABASE_URL;
 
