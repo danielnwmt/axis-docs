@@ -119,8 +119,8 @@ BEGIN
   -- Remove admin anterior com mesmo email (reinstalação)
   DELETE FROM auth.users WHERE email = '${ADMIN_EMAIL}';
 
-  INSERT INTO auth.users (email, encrypted_password, email_confirmed_at)
-  VALUES ('${ADMIN_EMAIL}', '${encrypted}', now())
+  INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at)
+  VALUES (gen_random_uuid(), '${ADMIN_EMAIL}', '${encrypted}', now())
   RETURNING id INTO _uid;
 
   INSERT INTO public.profiles (id, email, role, unit, full_name, cpf, active, must_change_password)
