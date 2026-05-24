@@ -376,21 +376,28 @@ export default function Upload() {
       // New document mode — send file directly to Drive (no Storage middleman)
       for (const file of files) {
         const isPdf = file.type === "application/pdf";
-        const alreadyIcp = isPdf && (signedFiles.has(file.name) || (await isPdfIcpBrasilSigned(file)));
-        const hasAnySignature = isPdf && !alreadyIcp && (await isPdfSigned(file));
-        const shouldSign = signDocument && isPdf && !alreadyIcp;
 
-        // Conformidade Lei 12.682/2012 e Decreto 10.278/2020:
-        // somente PDFs com assinatura ICP-Brasil (já presente ou a ser aplicada) são aceitos.
-        if (!isPdf) {
+        // Validação de magic bytes (header %PDF-) — não confiar só no MIME do navegador
+        let hasPdfMagic = false;
+        if (isPdf) {
+          const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+          hasPdfMagic =
+            head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 &&
+            head[3] === 0x46 && head[4] === 0x2d;
+        }
+        if (!isPdf || !hasPdfMagic) {
           toast({
             title: "Formato não permitido",
-            description: `"${file.name}" não é PDF. Apenas PDFs com assinatura ICP-Brasil são aceitos.`,
+            description: `"${file.name}" não é um PDF válido. Apenas PDFs com assinatura ICP-Brasil são aceitos.`,
             variant: "destructive",
           });
           setLoading(false);
           return;
         }
+
+        const alreadyIcp = (signedFiles.has(file.name) || (await isPdfIcpBrasilSigned(file)));
+        const hasAnySignature = !alreadyIcp && (await isPdfSigned(file));
+        const shouldSign = signDocument && !alreadyIcp;
         if (hasAnySignature && !shouldSign) {
           toast({
             title: "Certificado não é ICP-Brasil",
