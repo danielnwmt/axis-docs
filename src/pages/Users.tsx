@@ -64,6 +64,7 @@ export default function Users() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [docType, setDocType] = useState<"cpf" | "cnpj">("cpf");
   const [cpf, setCpf] = useState("");
   const [role, setRole] = useState("Usuário");
   const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
@@ -76,6 +77,7 @@ export default function Users() {
   const [resetLoading, setResetLoading] = useState(false);
   const [editTarget, setEditTarget] = useState<UserProfile | null>(null);
   const [editFullName, setEditFullName] = useState("");
+  const [editDocType, setEditDocType] = useState<"cpf" | "cnpj">("cpf");
   const [editCpf, setEditCpf] = useState("");
   const [editRole, setEditRole] = useState("Usuário");
   const [editUnits, setEditUnits] = useState<string[]>([]);
@@ -132,8 +134,9 @@ export default function Users() {
     setLoading(true);
     try {
       const cpfDigits = cpf.replace(/\D/g, "");
-      if (cpfDigits && cpfDigits.length !== 11) {
-        throw new Error("CPF deve conter 11 dígitos.");
+      const expectedLen = docType === "cpf" ? 11 : 14;
+      if (cpfDigits && cpfDigits.length !== expectedLen) {
+        throw new Error(`${docType.toUpperCase()} deve conter ${expectedLen} dígitos.`);
       }
       await adminUserAction("create", {
         email,
@@ -150,6 +153,7 @@ export default function Users() {
       setPassword("");
       setFullName("");
       setCpf("");
+      setDocType("cpf");
       setRole("Usuário");
       setSelectedUnits([]);
       fetchUsers();
@@ -167,6 +171,19 @@ export default function Users() {
       .replace(/(\d{3})(\d)/, "$1.$2")
       .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
   };
+
+  const maskCnpj = (v: string) => {
+    const d = v.replace(/\D/g, "").slice(0, 14);
+    return d
+      .replace(/^(\d{2})(\d)/, "$1.$2")
+      .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/\.(\d{3})(\d)/, ".$1/$2")
+      .replace(/(\d{4})(\d)/, "$1-$2");
+  };
+
+  const maskDoc = (v: string, type: "cpf" | "cnpj") => type === "cpf" ? maskCpf(v) : maskCnpj(v);
+
+  const detectDocType = (digits: string): "cpf" | "cnpj" => digits.length > 11 ? "cnpj" : "cpf";
 
   const handleToggleActive = async (user: UserProfile) => {
     try {
@@ -210,7 +227,10 @@ export default function Users() {
   const openEdit = (user: UserProfile) => {
     setEditTarget(user);
     setEditFullName(user.full_name || "");
-    setEditCpf(maskCpf(user.cpf || ""));
+    const digits = (user.cpf || "").replace(/\D/g, "");
+    const t = detectDocType(digits);
+    setEditDocType(t);
+    setEditCpf(maskDoc(digits, t));
     setEditRole(allowedRoles.includes(user.role) ? user.role : allowedRoles[allowedRoles.length - 1]);
     setEditUnits((user.unit || "").split(",").map(s => s.trim()).filter(Boolean));
   };
@@ -221,8 +241,9 @@ export default function Users() {
     setEditLoading(true);
     try {
       const cpfDigits = editCpf.replace(/\D/g, "");
-      if (cpfDigits && cpfDigits.length !== 11) {
-        throw new Error("CPF deve conter 11 dígitos.");
+      const expectedLen = editDocType === "cpf" ? 11 : 14;
+      if (cpfDigits && cpfDigits.length !== expectedLen) {
+        throw new Error(`${editDocType.toUpperCase()} deve conter ${expectedLen} dígitos.`);
       }
       await adminUserAction("update", {
         userId: editTarget.id,
@@ -338,8 +359,18 @@ export default function Users() {
               <Input type="text" placeholder="Nome do usuário" value={fullName} onChange={(e) => setFullName(e.target.value)} required maxLength={120} />
             </div>
             <div className="space-y-2">
-              <Label>CPF</Label>
-              <Input type="text" inputMode="numeric" placeholder="000.000.000-00" value={cpf} onChange={(e) => setCpf(maskCpf(e.target.value))} required />
+              <Label>Tipo de documento</Label>
+              <Select value={docType} onValueChange={(v) => { setDocType(v as any); setCpf(""); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cpf">CPF</SelectItem>
+                  <SelectItem value="cnpj">CNPJ</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{docType === "cpf" ? "CPF" : "CNPJ"}</Label>
+              <Input type="text" inputMode="numeric" placeholder={docType === "cpf" ? "000.000.000-00" : "00.000.000/0000-00"} value={cpf} onChange={(e) => setCpf(maskDoc(e.target.value, docType))} required />
             </div>
             <div className="space-y-2">
               <Label>E-mail</Label>
@@ -455,8 +486,18 @@ export default function Users() {
               <Input type="text" value={editFullName} onChange={(e) => setEditFullName(e.target.value)} maxLength={120} />
             </div>
             <div className="space-y-2">
-              <Label>CPF</Label>
-              <Input type="text" inputMode="numeric" placeholder="000.000.000-00" value={editCpf} onChange={(e) => setEditCpf(maskCpf(e.target.value))} />
+              <Label>Tipo de documento</Label>
+              <Select value={editDocType} onValueChange={(v) => { setEditDocType(v as any); setEditCpf(""); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cpf">CPF</SelectItem>
+                  <SelectItem value="cnpj">CNPJ</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{editDocType === "cpf" ? "CPF" : "CNPJ"}</Label>
+              <Input type="text" inputMode="numeric" placeholder={editDocType === "cpf" ? "000.000.000-00" : "00.000.000/0000-00"} value={editCpf} onChange={(e) => setEditCpf(maskDoc(e.target.value, editDocType))} />
             </div>
             <div className="space-y-2">
               <Label>Perfil</Label>
