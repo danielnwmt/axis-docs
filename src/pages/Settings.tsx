@@ -429,7 +429,7 @@ function ParametrosSection() {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          A atualização busca a última versão em <span className="font-mono">danielnwmt/axis-docs</span> (branch main) e refaz o build.
+          A atualização busca a última versão oficial do AxisDocs e refaz o build automaticamente.
         </p>
       </div>
     </div>
