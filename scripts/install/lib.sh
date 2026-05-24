@@ -2410,6 +2410,7 @@ main_install() {
   write_uninstall_script
   write_backup_script
   configure_fail2ban
+  configure_clamav
   verify_installation
   print_success
 }
