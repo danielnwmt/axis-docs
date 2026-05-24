@@ -1947,7 +1947,7 @@ build_frontend() {
 }
 
 configure_nginx() {
-  local listen_ipv4 listen_ipv6 server_name
+  local listen_ipv4 listen_ipv6 server_name has_ipv6
 
   log "Configurando Nginx como gateway"
 
@@ -1958,15 +1958,26 @@ configure_nginx() {
 
   mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
 
+  # Detecta automaticamente se o host possui IPv6 ativo
+  has_ipv6="no"
+  if [ -f /proc/net/if_inet6 ] && [ -s /proc/net/if_inet6 ]; then
+    if ip -6 addr show scope global 2>/dev/null | grep -q "inet6"; then
+      has_ipv6="yes"
+    fi
+  fi
+
   if [ -n "$APP_DOMAIN" ]; then
     listen_ipv4="listen 80;"
-    listen_ipv6="listen [::]:80;"
+    [ "$has_ipv6" = "yes" ] && listen_ipv6="listen [::]:80;" || listen_ipv6="# IPv6 indisponível neste host"
     server_name="$APP_DOMAIN"
   else
     listen_ipv4="listen 80 default_server;"
-    listen_ipv6="listen [::]:80 default_server;"
+    [ "$has_ipv6" = "yes" ] && listen_ipv6="listen [::]:80 default_server;" || listen_ipv6="# IPv6 indisponível neste host"
     server_name="_"
   fi
+
+  log "Acesso HTTP: IPv4=on  IPv6=$has_ipv6"
+
 
   # Zonas de rate-limit (devem ficar no contexto http via conf.d)
   cat > /etc/nginx/conf.d/axisdocs-limits.conf <<'EOF_LIMITS'
