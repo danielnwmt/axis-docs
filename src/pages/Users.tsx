@@ -134,8 +134,9 @@ export default function Users() {
     setLoading(true);
     try {
       const cpfDigits = cpf.replace(/\D/g, "");
-      if (cpfDigits && cpfDigits.length !== 11) {
-        throw new Error("CPF deve conter 11 dígitos.");
+      const expectedLen = docType === "cpf" ? 11 : 14;
+      if (cpfDigits && cpfDigits.length !== expectedLen) {
+        throw new Error(`${docType.toUpperCase()} deve conter ${expectedLen} dígitos.`);
       }
       await adminUserAction("create", {
         email,
@@ -152,6 +153,7 @@ export default function Users() {
       setPassword("");
       setFullName("");
       setCpf("");
+      setDocType("cpf");
       setRole("Usuário");
       setSelectedUnits([]);
       fetchUsers();
@@ -169,6 +171,19 @@ export default function Users() {
       .replace(/(\d{3})(\d)/, "$1.$2")
       .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
   };
+
+  const maskCnpj = (v: string) => {
+    const d = v.replace(/\D/g, "").slice(0, 14);
+    return d
+      .replace(/^(\d{2})(\d)/, "$1.$2")
+      .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/\.(\d{3})(\d)/, ".$1/$2")
+      .replace(/(\d{4})(\d)/, "$1-$2");
+  };
+
+  const maskDoc = (v: string, type: "cpf" | "cnpj") => type === "cpf" ? maskCpf(v) : maskCnpj(v);
+
+  const detectDocType = (digits: string): "cpf" | "cnpj" => digits.length > 11 ? "cnpj" : "cpf";
 
   const handleToggleActive = async (user: UserProfile) => {
     try {
