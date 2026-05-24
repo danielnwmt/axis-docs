@@ -14,7 +14,7 @@ import { MyCertificateSection } from "@/components/settings/MyCertificateSection
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | "minhasenha" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | "minhasenha" | "mfa" | null;
 
 // Apenas Administrador
 const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "licenca"];
