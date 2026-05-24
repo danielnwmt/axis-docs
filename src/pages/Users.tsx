@@ -227,7 +227,10 @@ export default function Users() {
   const openEdit = (user: UserProfile) => {
     setEditTarget(user);
     setEditFullName(user.full_name || "");
-    setEditCpf(maskCpf(user.cpf || ""));
+    const digits = (user.cpf || "").replace(/\D/g, "");
+    const t = detectDocType(digits);
+    setEditDocType(t);
+    setEditCpf(maskDoc(digits, t));
     setEditRole(allowedRoles.includes(user.role) ? user.role : allowedRoles[allowedRoles.length - 1]);
     setEditUnits((user.unit || "").split(",").map(s => s.trim()).filter(Boolean));
   };
