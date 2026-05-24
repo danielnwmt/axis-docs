@@ -179,7 +179,7 @@ apt_update() {
 install_base_packages() {
   log "Atualizando pacotes do sistema"
   apt_update
-  apt_install ca-certificates curl gnupg nginx jq openssl psmisc
+  apt_install ca-certificates curl gnupg nginx jq openssl psmisc fail2ban
   systemctl enable nginx >/dev/null 2>&1 || true
   systemctl start nginx
   success "Dependências base instaladas"
@@ -1883,6 +1883,13 @@ configure_nginx() {
     server_name="_"
   fi
 
+  # Zonas de rate-limit (devem ficar no contexto http via conf.d)
+  cat > /etc/nginx/conf.d/axisdocs-limits.conf <<'EOF_LIMITS'
+limit_req_zone $binary_remote_addr zone=axisdocs_auth:10m rate=5r/s;
+limit_req_zone $binary_remote_addr zone=axisdocs_api:10m rate=30r/s;
+server_tokens off;
+EOF_LIMITS
+
   cat > /etc/nginx/sites-available/axisdocs <<EOF_NGINX
 server {
     $listen_ipv4
@@ -1897,8 +1904,17 @@ server {
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
     gzip_min_length 256;
 
+    # ===== Security headers (aplicados a todas as respostas) =====
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(self), microphone=(), geolocation=()" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' https: wss:; worker-src 'self' blob:; frame-ancestors 'self'; base-uri 'self'; object-src 'none'" always;
+
     # PostgREST API
     location /rest/v1/ {
+        limit_req zone=axisdocs_api burst=60 nodelay;
         proxy_pass http://127.0.0.1:3001/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -1906,8 +1922,9 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
-    # Auth API
+    # Auth API (rate-limit estrito p/ brute-force)
     location /auth/v1/ {
+        limit_req zone=axisdocs_auth burst=10 nodelay;
         proxy_pass http://127.0.0.1:9999/auth/v1/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -1915,17 +1932,22 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
-    # Storage API
+    # Storage API — CORS restrito ao próprio host
     location /storage/v1/ {
+        limit_req zone=axisdocs_api burst=60 nodelay;
         proxy_pass http://127.0.0.1:5555/storage/v1/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_hide_header Access-Control-Allow-Origin;
+        add_header Access-Control-Allow-Origin "\$scheme://\$host" always;
+        add_header Access-Control-Allow-Credentials "true" always;
     }
 
-    # Local Functions API (upload-to-drive, serve-drive-file, delete-from-drive)
+    # Local Functions API
     location /functions/v1/ {
+        limit_req zone=axisdocs_api burst=60 nodelay;
         proxy_pass http://127.0.0.1:5556/functions/v1/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -1934,10 +1956,12 @@ server {
         proxy_request_buffering off;
         proxy_read_timeout 300s;
         client_max_body_size 100M;
+        proxy_hide_header Access-Control-Allow-Origin;
+        add_header Access-Control-Allow-Origin "\$scheme://\$host" always;
+        add_header Access-Control-Allow-Credentials "true" always;
     }
 
-    # License server proxy dinâmico (evita CORS no browser)
-    # Formato esperado pelo frontend: /license-proxy/<host>/<path...>
+    # License server proxy dinâmico
     location ~ ^/license-proxy/([^/]+)(/.*)?$ {
         resolver 8.8.8.8 1.1.1.1 ipv6=off valid=300s;
         resolver_timeout 5s;
@@ -1952,7 +1976,7 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 15s;
-        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Origin "\$scheme://\$host" always;
         add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
         add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
         if (\$request_method = OPTIONS) { return 204; }
@@ -2175,31 +2199,84 @@ EOF_UNINSTALL
 }
 
 write_backup_script() {
+  # Gera passphrase persistente p/ cifrar backups (somente root lê)
+  if [ ! -f /etc/axisdocs/backup.key ]; then
+    mkdir -p /etc/axisdocs
+    openssl rand -base64 48 > /etc/axisdocs/backup.key
+    chmod 600 /etc/axisdocs/backup.key
+  fi
+
+  # gpg é necessário p/ cifrar
+  command -v gpg >/dev/null 2>&1 || apt_install gnupg
+
   cat > "$APP_DIR/backup.sh" <<'EOF_BACKUP'
 #!/bin/bash
 set -euo pipefail
 
 BACKUP_DIR="/var/backups/axisdocs"
 DATE=$(date +%Y%m%d_%H%M%S)
+KEY_FILE="/etc/axisdocs/backup.key"
 
 if [ "$EUID" -ne 0 ]; then
   echo "❌ Execute como root: sudo bash backup.sh"
   exit 1
 fi
 
+if [ ! -f "$KEY_FILE" ]; then
+  echo "❌ Chave de backup não encontrada em $KEY_FILE"
+  exit 1
+fi
+
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
 
-echo "➡️  Fazendo backup do banco de dados..."
-sudo -u postgres pg_dump axisdocs > "$BACKUP_DIR/db_$DATE.sql"
+echo "➡️  Backup do banco (cifrado AES-256)..."
+sudo -u postgres pg_dump axisdocs \
+  | gpg --batch --yes --symmetric --cipher-algo AES256 \
+        --passphrase-file "$KEY_FILE" \
+        -o "$BACKUP_DIR/db_$DATE.sql.gpg"
 
-echo "➡️  Fazendo backup dos arquivos..."
-tar -czf "$BACKUP_DIR/storage_$DATE.tar.gz" -C /var/lib/axisdocs storage/
+echo "➡️  Backup dos arquivos (cifrado AES-256)..."
+tar -czf - -C /var/lib/axisdocs storage/ \
+  | gpg --batch --yes --symmetric --cipher-algo AES256 \
+        --passphrase-file "$KEY_FILE" \
+        -o "$BACKUP_DIR/storage_$DATE.tar.gz.gpg"
 
-echo "✅ Backup concluído em $BACKUP_DIR/"
+chmod 600 "$BACKUP_DIR/"*"$DATE"*
+echo "✅ Backup cifrado em $BACKUP_DIR/"
+echo "ℹ️  Para restaurar: gpg --decrypt --passphrase-file $KEY_FILE <arquivo.gpg>"
 ls -lh "$BACKUP_DIR/"*"$DATE"*
 EOF_BACKUP
 
   chmod +x "$APP_DIR/backup.sh"
+}
+
+configure_fail2ban() {
+  log "Configurando fail2ban (SSH + Nginx)"
+
+  cat > /etc/fail2ban/jail.d/axisdocs.conf <<'EOF_F2B'
+[DEFAULT]
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+
+[sshd]
+enabled = true
+
+[nginx-http-auth]
+enabled = true
+
+[nginx-limit-req]
+enabled  = true
+filter   = nginx-limit-req
+port     = http,https
+logpath  = /var/log/nginx/error.log
+maxretry = 10
+EOF_F2B
+
+  systemctl enable fail2ban >/dev/null 2>&1 || true
+  systemctl restart fail2ban || true
+  success "fail2ban ativo"
 }
 
 verify_installation() {
@@ -2296,6 +2373,7 @@ main_install() {
   write_update_script
   write_uninstall_script
   write_backup_script
+  configure_fail2ban
   verify_installation
   print_success
 }
