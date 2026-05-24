@@ -12,18 +12,29 @@ export type SystemVersionInfo = {
 
 export async function fetchSystemVersion(): Promise<SystemVersionInfo> {
   try {
-    const { data } = await supabase.functions.invoke("system-version", { method: "GET" as any });
-    if (data && typeof data === "object") {
-      return { version: APP_VERSION, ...(data as any) };
+    const res = await fetch("/api/system/version", { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      return { version: APP_VERSION, ...data };
     }
   } catch {
-    // ignore — endpoint só existe no install local
+    // endpoint só existe no install local
   }
   return { version: APP_VERSION };
 }
 
 export async function triggerSystemUpdate(): Promise<{ ok: boolean; message?: string }> {
-  const { data, error } = await supabase.functions.invoke("system-update", { body: {} });
-  if (error) return { ok: false, message: error.message };
-  return data as any;
+  try {
+    const res = await fetch("/api/system/update", { method: "POST" });
+    if (res.status === 404) {
+      return { ok: false, message: "Atualização disponível apenas na instalação local (servidor Ubuntu)." };
+    }
+    if (!res.ok) {
+      return { ok: false, message: `Erro ${res.status} ao iniciar atualização.` };
+    }
+    const data = await res.json().catch(() => ({}));
+    return { ok: true, ...data };
+  } catch (e: any) {
+    return { ok: false, message: "Atualização disponível apenas na instalação local (servidor Ubuntu)." };
+  }
 }
