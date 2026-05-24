@@ -119,8 +119,8 @@ BEGIN
   -- Remove admin anterior com mesmo email (reinstalação)
   DELETE FROM auth.users WHERE email = '${ADMIN_EMAIL}';
 
-  INSERT INTO auth.users (email, encrypted_password, email_confirmed_at)
-  VALUES ('${ADMIN_EMAIL}', '${encrypted}', now())
+  INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at)
+  VALUES (gen_random_uuid(), '${ADMIN_EMAIL}', '${encrypted}', now())
   RETURNING id INTO _uid;
 
   INSERT INTO public.profiles (id, email, role, unit, full_name, cpf, active, must_change_password)
@@ -267,6 +267,24 @@ CREATE TABLE IF NOT EXISTS auth.users (
   role text NOT NULL DEFAULT 'authenticated',
   aud text NOT NULL DEFAULT 'authenticated'
 );
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS id uuid;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS encrypted_password text NOT NULL DEFAULT '';
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email_confirmed_at timestamptz;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS raw_user_meta_data jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'authenticated';
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS aud text NOT NULL DEFAULT 'authenticated';
+UPDATE auth.users SET id = gen_random_uuid() WHERE id IS NULL;
+UPDATE auth.users SET encrypted_password = '' WHERE encrypted_password IS NULL;
+UPDATE auth.users SET created_at = now() WHERE created_at IS NULL;
+UPDATE auth.users SET updated_at = now() WHERE updated_at IS NULL;
+UPDATE auth.users SET raw_user_meta_data = '{}'::jsonb WHERE raw_user_meta_data IS NULL;
+UPDATE auth.users SET role = 'authenticated' WHERE role IS NULL;
+UPDATE auth.users SET aud = 'authenticated' WHERE aud IS NULL;
+ALTER TABLE auth.users ALTER COLUMN id SET DEFAULT gen_random_uuid();
+ALTER TABLE auth.users ALTER COLUMN id SET NOT NULL;
 
 -- Tabela de sessões/refresh tokens
 CREATE TABLE IF NOT EXISTS auth.refresh_tokens (
@@ -277,6 +295,16 @@ CREATE TABLE IF NOT EXISTS auth.refresh_tokens (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS id bigserial;
+ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS token text;
+ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS revoked boolean DEFAULT false;
+ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+CREATE SEQUENCE IF NOT EXISTS auth.refresh_tokens_id_seq;
+ALTER SEQUENCE auth.refresh_tokens_id_seq OWNED BY auth.refresh_tokens.id;
+ALTER TABLE auth.refresh_tokens ALTER COLUMN id SET DEFAULT nextval('auth.refresh_tokens_id_seq');
+SELECT setval('auth.refresh_tokens_id_seq', COALESCE((SELECT MAX(id) FROM auth.refresh_tokens), 0) + 1, false);
 
 -- Roles do PostgREST
 DO $$ BEGIN
@@ -614,6 +642,17 @@ APPSQL
 
   # Permissões do owner
   sudo -u postgres psql -d "$PG_DB" -c "GRANT $PG_USER TO authenticator;" 2>/dev/null || true
+  # O servidor local de autenticação conecta como $PG_USER e precisa ser owner das tabelas da aplicação.
+  # O PostgREST continua aplicando RLS normalmente porque troca para anon/authenticated/service_role por JWT.
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.profiles OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.categories OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.units OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.documents OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.audit_logs OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.license_config OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL ROUTINES IN SCHEMA public TO $PG_USER;" 2>/dev/null || true
   # CRÍTICO: PostgREST conecta como $PG_USER e precisa poder fazer SET ROLE para anon/authenticated/service_role
   sudo -u postgres psql -d "$PG_DB" -c "GRANT anon TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "GRANT authenticated TO $PG_USER;" 2>/dev/null || true
@@ -824,7 +863,7 @@ async function handleRequest(req, res) {
 
     const encrypted = hashPassword(password);
     const result = await pool.query(
-      "INSERT INTO auth.users (email, encrypted_password, email_confirmed_at) VALUES ($1, $2, now()) RETURNING *",
+      "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at) VALUES (gen_random_uuid(), $1, $2, now()) RETURNING *",
       [email, encrypted]
     );
     const user = result.rows[0];
@@ -1017,6 +1056,7 @@ async function handleRequest(req, res) {
     if (action === "create") {
       const { email, password, role, unit, full_name, cpf } = body;
       if (!email || !password) return json(res, 400, { error: "E-mail e senha são obrigatórios" });
+      const normalizedEmail = String(email).trim().toLowerCase();
 
       const requestedRole = role || "Usuário";
       const allowedRoles = isAdmin
@@ -1026,22 +1066,41 @@ async function handleRequest(req, res) {
         return json(res, 403, { error: "Perfil não permitido para o seu nível de acesso" });
       }
 
-      const existing = await pool.query("SELECT id FROM auth.users WHERE email = $1", [email]);
-      if (existing.rows.length > 0) return json(res, 400, { error: "Usuário já cadastrado" });
-
-      const encrypted = hashPassword(password);
-      const result = await pool.query(
-        "INSERT INTO auth.users (email, encrypted_password, email_confirmed_at) VALUES ($1, $2, now()) RETURNING *",
-        [email, encrypted]
+      const existing = await pool.query(
+        "SELECT u.id, u.email, p.id AS profile_id FROM auth.users u LEFT JOIN public.profiles p ON p.id = u.id WHERE lower(u.email) = lower($1) LIMIT 1",
+        [normalizedEmail]
       );
-      const newUser = result.rows[0];
+      if (existing.rows.length > 0) {
+        const existingUser = existing.rows[0];
+        if (existingUser.profile_id) return json(res, 400, { error: "Usuário já cadastrado" });
+        await pool.query(
+          "INSERT INTO public.profiles (id, email, role, unit, full_name, cpf, active, must_change_password) VALUES ($1, $2, $3, $4, $5, $6, true, true) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = EXCLUDED.role, unit = EXCLUDED.unit, full_name = EXCLUDED.full_name, cpf = EXCLUDED.cpf, active = true, must_change_password = true",
+          [existingUser.id, normalizedEmail, requestedRole, unit || "", full_name || "", cpf || ""]
+        );
+        return json(res, 200, { user: { id: existingUser.id, email: existingUser.email } });
+      }
 
-      await pool.query(
-        "INSERT INTO public.profiles (id, email, role, unit, full_name, cpf, active, must_change_password) VALUES ($1, $2, $3, $4, $5, $6, true, true) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = EXCLUDED.role, unit = EXCLUDED.unit, full_name = EXCLUDED.full_name, cpf = EXCLUDED.cpf, active = true, must_change_password = true",
-        [newUser.id, email, requestedRole, unit || "", full_name || "", cpf || ""]
-      );
-
-      return json(res, 200, { user: { id: newUser.id, email: newUser.email } });
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const encrypted = hashPassword(password);
+        const result = await client.query(
+          "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at) VALUES (gen_random_uuid(), $1, $2, now()) RETURNING *",
+          [normalizedEmail, encrypted]
+        );
+        const newUser = result.rows[0];
+        await client.query(
+          "INSERT INTO public.profiles (id, email, role, unit, full_name, cpf, active, must_change_password) VALUES ($1, $2, $3, $4, $5, $6, true, true) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = EXCLUDED.role, unit = EXCLUDED.unit, full_name = EXCLUDED.full_name, cpf = EXCLUDED.cpf, active = true, must_change_password = true",
+          [newUser.id, normalizedEmail, requestedRole, unit || "", full_name || "", cpf || ""]
+        );
+        await client.query("COMMIT");
+        return json(res, 200, { user: { id: newUser.id, email: newUser.email } });
+      } catch (e) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw e;
+      } finally {
+        client.release();
+      }
     }
 
     if (action === "toggle") {
@@ -2496,6 +2555,28 @@ verify_installation() {
     sleep 1
   done
   if [ "$auth_ok" = true ]; then success "Auth respondendo"; else fail "Auth não respondeu"; fi
+
+  # Teste real: login do admin padrão + criação de usuário pela API administrativa local.
+  local login_payload login_response access_token probe_email create_payload create_response probe_id
+  probe_email="axisdocs-selftest-$(date +%s)@local.test"
+  login_payload=$(jq -nc --arg email "$ADMIN_EMAIL" --arg password "$ADMIN_PASSWORD" '{email:$email,password:$password}')
+  login_response=$(curl -sS -X POST "http://127.0.0.1:9999/auth/v1/token?grant_type=password" -H "Content-Type: application/json" -d "$login_payload" 2>/dev/null || true)
+  access_token=$(printf '%s' "$login_response" | jq -r '.access_token // empty' 2>/dev/null || true)
+  if [ -z "$access_token" ]; then
+    echo "Resposta do login local: $login_response" >&2
+    fail "Login do administrador local falhou; criação de usuários não foi testada"
+  fi
+
+  create_payload=$(jq -nc --arg email "$probe_email" '{email:$email,password:"Axisdocs123!",role:"Usuário",unit:"Geral",full_name:"Teste AxisDocs",cpf:""}')
+  create_response=$(curl -sS -X POST "http://127.0.0.1:9999/auth/v1/admin/users?action=create" -H "Content-Type: application/json" -H "Authorization: Bearer $access_token" -d "$create_payload" 2>/dev/null || true)
+  probe_id=$(printf '%s' "$create_response" | jq -r '.user.id // empty' 2>/dev/null || true)
+  if [ -z "$probe_id" ]; then
+    echo "Resposta da criação local: $create_response" >&2
+    journalctl -u axisdocs-auth -n 30 --no-pager >&2 || true
+    fail "API local de criação de usuário falhou"
+  fi
+  sudo -u postgres psql -d "$PG_DB" -v ON_ERROR_STOP=1 -c "DELETE FROM auth.users WHERE email = '$probe_email';" >/dev/null 2>&1 || true
+  success "Criação de usuário local validada"
 
   # Verifica Nginx
   local nginx_ok=false
