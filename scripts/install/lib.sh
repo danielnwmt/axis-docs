@@ -848,7 +848,7 @@ async function handleRequest(req, res) {
 
     const encrypted = hashPassword(password);
     const result = await pool.query(
-      "INSERT INTO auth.users (email, encrypted_password, email_confirmed_at) VALUES ($1, $2, now()) RETURNING *",
+      "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at) VALUES (gen_random_uuid(), $1, $2, now()) RETURNING *",
       [email, encrypted]
     );
     const user = result.rows[0];
@@ -1055,7 +1055,7 @@ async function handleRequest(req, res) {
 
       const encrypted = hashPassword(password);
       const result = await pool.query(
-        "INSERT INTO auth.users (email, encrypted_password, email_confirmed_at) VALUES ($1, $2, now()) RETURNING *",
+        "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at) VALUES (gen_random_uuid(), $1, $2, now()) RETURNING *",
         [email, encrypted]
       );
       const newUser = result.rows[0];
