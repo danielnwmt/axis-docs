@@ -2230,6 +2230,15 @@ fi
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
 
+# Antivírus: escaneia o storage antes de cifrar (não bloqueia se clamav não estiver instalado)
+if command -v clamdscan >/dev/null 2>&1; then
+  echo "➡️  Escaneando storage com ClamAV..."
+  if ! clamdscan --fdpass --quiet /var/lib/axisdocs/storage; then
+    echo "❌ ClamAV detectou ameaças no storage. Backup abortado."
+    exit 2
+  fi
+fi
+
 echo "➡️  Backup do banco (cifrado AES-256)..."
 sudo -u postgres pg_dump axisdocs \
   | gpg --batch --yes --symmetric --cipher-algo AES256 \
