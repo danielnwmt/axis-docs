@@ -5,23 +5,35 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function json(data: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function normalizeEmail(email: unknown) {
+  return String(email || "").trim().toLowerCase();
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error("[create-user] Missing server configuration", { hasUrl: !!supabaseUrl, hasKey: !!serviceRoleKey });
+      return json({ error: "Configuração do servidor incompleta" }, 500);
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Não autorizado" }, 401);
     }
 
     // Validate JWT and require active Administrador role
@@ -29,10 +41,7 @@ Deno.serve(async (req) => {
       authHeader.replace("Bearer ", "")
     );
     if (callerError || !callerData?.user) {
-      return new Response(JSON.stringify({ error: "Token inválido" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Token inválido" }, 401);
     }
     const { data: callerProfile } = await supabaseAdmin
       .from("profiles")
@@ -40,10 +49,7 @@ Deno.serve(async (req) => {
       .eq("id", callerData.user.id)
       .maybeSingle();
     if (!callerProfile || !callerProfile.active) {
-      return new Response(JSON.stringify({ error: "Permissão negada" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Permissão negada" }, 403);
     }
     const isAdmin = callerProfile.role === "Administrador";
     const isOperator = callerProfile.role === "Operador";
