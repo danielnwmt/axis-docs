@@ -82,7 +82,7 @@ export default function Search() {
   const handleView = async (result: SearchResult) => {
     if (!result.drive_file_id) return;
     try {
-      const blob = await fetchDriveFileBlob(result.drive_file_id, "view", result.file_type);
+      const blob = await fetchDriveFileBlob(result.drive_file_id, "view", result.file_type, result.title);
       const blobUrl = URL.createObjectURL(blob);
 
       setPreviewType(result.file_type || "application/octet-stream");
@@ -116,7 +116,7 @@ export default function Search() {
   const handleDownload = async (driveFileId: string, fileName: string) => {
     if (!driveFileId) return;
     try {
-      const blob = await fetchDriveFileBlob(driveFileId, "download");
+      const blob = await fetchDriveFileBlob(driveFileId, "download", undefined, fileName);
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = blobUrl;

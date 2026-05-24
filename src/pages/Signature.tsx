@@ -235,7 +235,7 @@ export default function Signature() {
       let blob: Blob;
       if (doc.file_path?.startsWith("drive://")) {
         const driveId = doc.drive_file_id || doc.file_path.replace("drive://", "");
-        blob = await fetchDriveFileBlob(driveId, mode, "application/pdf");
+        blob = await fetchDriveFileBlob(driveId, mode, "application/pdf", doc.title);
       } else {
         const { data, error } = await supabase.storage.from("documents").download(doc.file_path);
         if (error) throw error;

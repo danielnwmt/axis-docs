@@ -1905,12 +1905,12 @@ server {
     gzip_min_length 256;
 
     # ===== Security headers (aplicados a todas as respostas) =====
-    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "camera=(self), microphone=(), geolocation=()" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' https: wss:; worker-src 'self' blob:; frame-ancestors 'self'; base-uri 'self'; object-src 'none'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' https: wss:; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
 
     # PostgREST API
     location /rest/v1/ {
@@ -2230,6 +2230,15 @@ fi
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
 
+# Antivírus: escaneia o storage antes de cifrar (não bloqueia se clamav não estiver instalado)
+if command -v clamdscan >/dev/null 2>&1; then
+  echo "➡️  Escaneando storage com ClamAV..."
+  if ! clamdscan --fdpass --quiet /var/lib/axisdocs/storage; then
+    echo "❌ ClamAV detectou ameaças no storage. Backup abortado."
+    exit 2
+  fi
+fi
+
 echo "➡️  Backup do banco (cifrado AES-256)..."
 sudo -u postgres pg_dump axisdocs \
   | gpg --batch --yes --symmetric --cipher-algo AES256 \
@@ -2277,6 +2286,33 @@ EOF_F2B
   systemctl enable fail2ban >/dev/null 2>&1 || true
   systemctl restart fail2ban || true
   success "fail2ban ativo"
+}
+
+configure_clamav() {
+  log "Instalando e configurando ClamAV (antivírus)"
+  apt_install clamav clamav-daemon clamav-freshclam
+
+  # Atualiza base de assinaturas antes de iniciar o daemon
+  systemctl stop clamav-freshclam >/dev/null 2>&1 || true
+  freshclam || warn "freshclam falhou (sem internet?). O daemon usará base vazia até a próxima atualização."
+  systemctl enable clamav-freshclam clamav-daemon >/dev/null 2>&1 || true
+  systemctl restart clamav-freshclam || true
+  systemctl restart clamav-daemon || true
+
+  # Script utilitário p/ escanear o diretório de storage
+  cat > /usr/local/bin/axisdocs-scan.sh <<'EOF_SCAN'
+#!/bin/bash
+# Uso: axisdocs-scan.sh <caminho>
+# Retorna 0 se limpo, 1 se infectado, 2 se erro
+set -u
+TARGET="${1:-/var/lib/axisdocs/storage}"
+if ! command -v clamdscan >/dev/null 2>&1; then
+  echo "clamdscan não disponível" >&2; exit 2
+fi
+clamdscan --fdpass --quiet "$TARGET"
+EOF_SCAN
+  chmod +x /usr/local/bin/axisdocs-scan.sh
+  success "ClamAV ativo (use: axisdocs-scan.sh <caminho>)"
 }
 
 verify_installation() {
@@ -2374,6 +2410,7 @@ main_install() {
   write_uninstall_script
   write_backup_script
   configure_fail2ban
+  configure_clamav
   verify_installation
   print_success
 }

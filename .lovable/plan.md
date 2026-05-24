@@ -1,83 +1,67 @@
-# Plano de Conformidade LGPD — AxisDocs
+# Plano de segurança — A + B + C + D
 
-Implementação em 4 fases priorizando o que tem maior impacto legal e exige menor refatoração.
+## A) Endurecer CSP (Nginx)
+Arquivo: `scripts/install/lib.sh`
+- Remover `'unsafe-eval'` do `script-src` (Vite build de produção não precisa).
+- Manter `'unsafe-inline'` apenas em `style-src` (Tailwind/shadcn usam estilos inline).
+- Adicionar `script-src 'self'` + hashes para os 2 scripts inline mínimos do `index.html` (não há — só `<script type="module" src="/src/main.tsx">`, então `'self'` basta).
+- Adicionar `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`.
+- Permitir `connect-src` para o próprio host + `https://*.supabase.co` (necessário para Lovable Cloud).
+- `img-src 'self' data: blob: https:` (para PDFs/Drive).
+- `media-src 'self'` (vídeo de login).
+- `worker-src 'self' blob:` (tesseract.js usa Web Workers).
 
----
+## B) MFA / TOTP
+Usa o MFA nativo do Supabase (já disponível, não precisa de tabela nova).
 
-## Fase 1 — Base Legal e Consentimento (obrigatório)
+1. **Migration**: nada — o Supabase armazena fatores em `auth.mfa_factors`.
+2. **Configuração**: chamar `supabase--configure_auth` não cobre MFA; o MFA já vem habilitado por padrão para "TOTP".
+3. **Nova página `/mfa-setup`** (`src/pages/MfaSetup.tsx`):
+   - `supabase.auth.mfa.enroll({ factorType: 'totp' })` → mostra QR code + secret.
+   - Usuário digita código de 6 dígitos (componente `InputOTP` já existe).
+   - `supabase.auth.mfa.challenge` + `verify` → ativa fator.
+4. **Página `/mfa-verify`** após login: se `aal` for `aal1` e existir fator verificado, exige TOTP antes de liberar.
+5. **`ProtectedRoute.tsx`**: checar `supabase.auth.mfa.getAuthenticatorAssuranceLevel()`. Se `currentLevel='aal1'` e `nextLevel='aal2'`, redirecionar para `/mfa-verify`.
+6. **`Settings.tsx`**: adicionar seção "Autenticação em 2 fatores" com botão **Ativar** (→ `/mfa-setup`) ou **Desativar** (`unenroll`).
+7. **Coluna opcional** em `profiles`: `mfa_required boolean default false` — admins podem forçar MFA por usuário (fase 2, deixar fora desta entrega para reduzir escopo).
 
-1. **Página `/privacidade`** (pública): Política de Privacidade com bases legais, dados coletados, finalidade, retenção, direitos do titular, contato do Encarregado (DPO).
-2. **Página `/termos`** (pública): Termos de Uso.
-3. **Aceite obrigatório no 1º login** junto da troca de senha — checkbox "Li e aceito a Política de Privacidade e Termos de Uso".
-4. **Tabela `consents`** registrando: user_id, versão do documento, IP, user-agent, timestamp (prova de consentimento — Art. 8º §1º).
-5. **Banner de cookies** simples (técnicos vs. opcionais), com aceite registrado em localStorage + audit log.
+## C) ClamAV no servidor
+Arquivo: `scripts/install/lib.sh`
+- `apt_install` recebe `clamav clamav-daemon clamav-freshclam`.
+- Nova função `configure_clamav()`:
+  - `systemctl stop clamav-freshclam` → `freshclam` (atualiza base) → `systemctl enable --now clamav-freshclam clamav-daemon`.
+  - Cria `/usr/local/bin/axisdocs-scan-backup.sh` que roda `clamdscan` nos arquivos de `/var/backups/axisdocs` antes de cifrar.
+- Integrar no `write_backup_script()`: antes do `tar`/`pg_dump`, rodar scan no diretório-fonte e abortar se infectado.
 
-## Fase 2 — Direitos do Titular (Art. 18)
+**Limitação honesta**: uploads de documentos sobem direto para Google Drive via edge function (Supabase Cloud), que não tem acesso ao ClamAV local. Para esses, a validação fica em: extensão + MIME + magic bytes (já implementado). ClamAV protege o servidor local (backups, restores, arquivos servidos pelo `serve-drive-file` quando baixados).
 
-Nova página **`/meus-dados`** acessível a qualquer usuário logado, com:
+## D) Auditoria view/download
+Verificar pontos onde documentos são abertos/baixados e garantir `logAudit('Visualizou X', 'view', docId)` / `logAudit('Baixou X', 'download', docId)`.
 
-1. **Exportar meus dados** — botão que gera ZIP com JSON do perfil + lista de documentos + logs próprios (portabilidade).
-2. **Solicitar exclusão da conta** — abre solicitação registrada em `data_requests`; admin recebe alerta para anonimizar (não deleta documentos institucionais, anonimiza `user_id` e `user_email`).
-3. **Histórico de acessos** — mostra os audit_logs do próprio usuário.
-4. **Revogar consentimento** opcional de cookies.
+Pontos a auditar:
+- `src/pages/Documents.tsx` — botões Visualizar e Baixar.
+- `src/components/documents/PdfPreview.tsx` — abertura do viewer.
+- `src/pages/Search.tsx` — clique em resultado.
+- `src/pages/Signature.tsx` — preview do PDF.
+- `src/lib/driveFile.ts` — função central de download → adicionar log com nome do documento.
 
-Tabela `data_requests`: id, user_id, type (`export`|`delete`|`rectify`), status, requested_at, processed_at, processed_by.
+Estratégia: centralizar no `driveFile.ts` (já é o ponto único de fetch) — todo download passa por lá; loga uma vez.
+Para `view`: logar no `PdfPreview` quando o canvas renderiza a 1ª página.
 
-## Fase 3 — Segurança Reforçada (Art. 46)
+## Detalhes técnicos
 
-1. **MFA/2FA obrigatório para Administradores** (TOTP via Supabase Auth `mfa.enroll`).
-2. **Política de senha forte** (mín 10 caracteres, maiúscula, número, símbolo) + ativar HIBP check.
-3. **Bloqueio após N tentativas** falhas (já parcial no Supabase; documentar).
-4. **Sessão com timeout** de inatividade (30 min) — logout automático.
-5. **Função `anonymize_user(uuid)`** que substitui email/nome por hash em profiles e audit_logs.
+- CSP exata (linha única, sem `unsafe-eval`):
+  ```
+  default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; media-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';
+  ```
+- MFA: requer `@supabase/supabase-js >= 2.40` (já temos).
+- ClamAV ocupa ~1 GB de RAM com base atualizada; aceitável em servidor dedicado.
+- `auditLog` já existe e usa RPC `insert_audit_log` (security definer) — não precisa nova RPC.
 
-## Fase 4 — Governança e Retenção
+## Ordem de execução
+1. CSP (lib.sh) — risco baixo, só config.
+2. ClamAV (lib.sh) — só infra.
+3. Auditoria view/download (frontend) — risco zero.
+4. MFA — maior superfície de mudança; faço por último.
 
-1. **Tabela `retention_policies`** por categoria de documento (ex.: contrato = 5 anos, recibo = 90 dias).
-2. **Edge function `purge-expired`** agendada (pg_cron diário) que move/anonimiza documentos vencidos e registra em audit.
-3. **Página admin `/lgpd`**: gerenciar políticas de retenção, ver solicitações de titulares, exportar RIPD (Relatório de Impacto), configurar dados do Encarregado (nome, email, telefone).
-4. **Notificação de incidente** — botão admin "Registrar incidente" gera template de comunicação à ANPD (Art. 48).
-5. **Rodapé global** com link para Política de Privacidade e contato do DPO.
-
----
-
-## Estrutura Técnica
-
-### Novas tabelas
-- `consents` (user_id, document_type, version, ip, user_agent, accepted_at)
-- `data_requests` (user_id, type, status, payload, requested_at, processed_at)
-- `retention_policies` (category, retention_days, action: anonymize|delete)
-- `privacy_incidents` (title, description, affected_users_count, reported_to_anpd_at, created_by)
-- `dpo_config` (singleton: name, email, phone, updated_at)
-
-### RLS
-- `consents`, `data_requests`: usuário vê os próprios; admin vê tudo.
-- `retention_policies`, `privacy_incidents`, `dpo_config`: somente Administrador.
-
-### Funções/Triggers
-- `record_consent(version, doc_type)` — RPC SECURITY DEFINER captura IP via `request.headers`.
-- `anonymize_user(uuid)` — SECURITY DEFINER, somente admin.
-- `request_data_export(user_id)` — gera JSON consolidado.
-
-### Páginas/Rotas
-- `/privacidade`, `/termos` (públicas, estáticas)
-- `/meus-dados` (qualquer usuário logado)
-- `/lgpd` (somente admin) — adicionar no AppSidebar
-- Modificar `ChangePassword` para incluir aceite obrigatório
-- Adicionar `CookieBanner` no `AppLayout`
-
-### i18n
-Todos os textos novos em pt-BR / en / es.
-
----
-
-## Entregas por fase
-
-Posso implementar **tudo de uma vez** (grande) ou **fase por fase** com revisão entre cada uma (recomendado).
-
-**Confirme:**
-- (A) Implementar tudo agora, OU
-- (B) Começar pela Fase 1 (base legal + consentimento) e seguir?
-
-Também preciso saber:
-- Nome, email e telefone do **Encarregado de Dados (DPO)** — posso deixar placeholder e você edita depois na tela admin?
+Confirma para eu aplicar tudo?

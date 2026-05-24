@@ -14,7 +14,7 @@ import { MyCertificateSection } from "@/components/settings/MyCertificateSection
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | "minhasenha" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | "minhasenha" | "mfa" | null;
 
 // Apenas Administrador
 const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "licenca"];
@@ -30,6 +30,7 @@ const sectionCards = [
 
   { id: "meucertificado" as Section, icon: ShieldCheck, title: "Meu Certificado", description: "Cadastre seu certificado A1 (.pfx) ICP-Brasil para assinar documentos" },
   { id: "minhasenha" as Section, icon: KeyRound, title: "Minha Senha", description: "Alterar a sua senha de acesso ao sistema" },
+  { id: "mfa" as Section, icon: ShieldCheck, title: "Autenticação 2 Fatores", description: "Ative o segundo fator (TOTP) usando Google Authenticator, Authy, 1Password etc." },
   { id: "backup" as Section, icon: DatabaseBackup, title: "Backup & Restauração", description: "Exportar e importar usuários, auditoria e referências de documentos" },
   { id: "licenca" as Section, icon: KeyRound, title: "Licença", description: "Ativar e consultar o status da licença do AxisDocs" },
   { id: "mobile" as Section, icon: Smartphone, title: "Acesso Mobile", description: "QR Code para abrir o sistema no aplicativo" },
@@ -1125,6 +1126,80 @@ function LicencaSection() {
   );
 }
 
+function MfaSection() {
+  const [loading, setLoading] = useState(true);
+  const [hasFactor, setHasFactor] = useState(false);
+  const [factorId, setFactorId] = useState<string>("");
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await supabase.auth.mfa.listFactors();
+      const verified = (data?.totp || []).find((f: any) => f.status === "verified");
+      setHasFactor(!!verified);
+      setFactorId(verified?.id || "");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleDisable = async () => {
+    if (!factorId) return;
+    if (!confirm("Desativar a autenticação em 2 fatores? Você poderá ativá-la novamente depois.")) return;
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId });
+      if (error) throw error;
+      toast({ title: "2FA desativado", description: "O segundo fator foi removido da sua conta." });
+      await load();
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
+  if (loading) {
+    return <div className="text-sm text-muted-foreground">Carregando...</div>;
+  }
+
+  return (
+    <div className="space-y-4 max-w-xl">
+      <div className="p-4 rounded-lg border border-border bg-secondary/30">
+        <div className="flex items-center gap-2 mb-2">
+          {hasFactor ? (
+            <>
+              <ShieldCheck className="w-5 h-5 text-success" />
+              <span className="font-semibold text-foreground">2FA ativo</span>
+            </>
+          ) : (
+            <>
+              <ShieldAlert className="w-5 h-5 text-warning" />
+              <span className="font-semibold text-foreground">2FA não está ativo</span>
+            </>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {hasFactor
+            ? "A cada login será solicitado um código de 6 dígitos do seu aplicativo autenticador."
+            : "Recomendamos ativar a autenticação em 2 fatores para proteger sua conta contra acessos indevidos."}
+        </p>
+      </div>
+
+      {hasFactor ? (
+        <Button variant="destructive" onClick={handleDisable} className="gap-2">
+          <ShieldAlert className="w-4 h-4" /> Desativar 2FA
+        </Button>
+      ) : (
+        <Button onClick={() => (window.location.href = "/mfa-setup")} className="gap-2">
+          <ShieldCheck className="w-4 h-4" /> Ativar 2FA
+        </Button>
+      )}
+    </div>
+  );
+}
+
+
+
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<Section>(null);
   const { user } = useAuth();
@@ -1159,6 +1234,7 @@ export default function Settings() {
       case "licenca": return <LicencaSection />;
       case "mobile": return <MobileAccessSection />;
       case "minhasenha": return <MyPasswordSection />;
+      case "mfa": return <MfaSection />;
       default: return null;
     }
   };

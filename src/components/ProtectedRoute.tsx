@@ -23,6 +23,17 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     enabled: !!user,
   });
 
+  // Checa nível de garantia de autenticação (MFA)
+  const { data: aal, isLoading: aalLoading } = useQuery({
+    queryKey: ["mfa-aal", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      return data;
+    },
+    enabled: !!user,
+    staleTime: 0,
+  });
+
   const isInactive = !!profile && profile.active === false;
 
   useEffect(() => {
@@ -36,7 +47,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     }
   }, [isInactive, signOut]);
 
-  if (loading || (user && profileLoading)) {
+  if (loading || (user && (profileLoading || aalLoading))) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
@@ -46,6 +57,15 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!user || isInactive) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Se o usuário tem fator MFA verificado mas a sessão ainda é aal1, força verificação
+  if (
+    aal?.currentLevel === "aal1" &&
+    aal?.nextLevel === "aal2" &&
+    location.pathname !== "/mfa-verify"
+  ) {
+    return <Navigate to="/mfa-verify" replace />;
   }
 
   if (
