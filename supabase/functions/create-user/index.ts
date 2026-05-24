@@ -60,22 +60,17 @@ Deno.serve(async (req) => {
     // Operador can only create users; everything else is admin-only
     if (!isAdmin) {
       if (!(isOperator && action === "create")) {
-        return new Response(JSON.stringify({ error: "Permissão negada" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return json({ error: "Permissão negada" }, 403);
       }
     }
 
 
     if (req.method === "POST" && action === "create") {
       const { email, password, role, unit, full_name, cpf } = await req.json();
+      const normalizedEmail = normalizeEmail(email);
 
-      if (!email || !password) {
-        return new Response(JSON.stringify({ error: "E-mail e senha são obrigatórios" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (!normalizedEmail || !password) {
+        return json({ error: "E-mail e senha são obrigatórios" }, 400);
       }
 
       const requestedRole = role || "Usuário";
@@ -83,29 +78,55 @@ Deno.serve(async (req) => {
         ? ["Administrador", "Operador", "Usuário"]
         : ["Operador", "Usuário"];
       if (!allowedRoles.includes(requestedRole)) {
-        return new Response(JSON.stringify({ error: "Perfil não permitido para o seu nível de acesso" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return json({ error: "Perfil não permitido para o seu nível de acesso" }, 403);
       }
 
+      const { data: existingProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("id,email")
+        .ilike("email", normalizedEmail)
+        .maybeSingle();
+      if (existingProfile) {
+        return json({ error: "Usuário já cadastrado" }, 400);
+      }
+
+      const { data: listData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      if (listError) {
+        console.error("[create-user] listUsers failed", listError);
+        return json({ error: listError.message }, 400);
+      }
+      const existingAuthUser = listData.users.find((u: any) => normalizeEmail(u.email) === normalizedEmail);
+      if (existingAuthUser) {
+        const { error: repairError } = await supabaseAdmin.from("profiles").upsert({
+          id: existingAuthUser.id,
+          email: normalizedEmail,
+          role: requestedRole,
+          unit: unit || "",
+          full_name: full_name || "",
+          cpf: cpf || "",
+          active: true,
+          must_change_password: true,
+        });
+        if (repairError) {
+          console.error("[create-user] orphan profile repair failed", repairError);
+          return json({ error: repairError.message }, 400);
+        }
+        return json({ user: existingAuthUser });
+      }
 
       const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email,
+        email: normalizedEmail,
         password,
         email_confirm: true,
       });
 
       if (createError) {
-        return new Response(JSON.stringify({ error: createError.message }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return json({ error: createError.message }, 400);
       }
 
-      await supabaseAdmin.from("profiles").insert({
+      const { error: profileError } = await supabaseAdmin.from("profiles").upsert({
         id: userData.user.id,
-        email,
+        email: normalizedEmail,
         role: requestedRole,
         unit: unit || "",
         full_name: full_name || "",
@@ -114,10 +135,15 @@ Deno.serve(async (req) => {
         must_change_password: true,
       });
 
-      return new Response(JSON.stringify({ user: userData.user }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (profileError) {
+        console.error("[create-user] profile creation failed", profileError);
+        await supabaseAdmin.auth.admin.deleteUser(userData.user.id).catch((rollbackError: unknown) => {
+          console.error("[create-user] auth rollback failed", rollbackError);
+        });
+        return json({ error: profileError.message }, 400);
+      }
+
+      return json({ user: userData.user });
     }
 
     if (req.method === "POST" && action === "ensure-profile") {
