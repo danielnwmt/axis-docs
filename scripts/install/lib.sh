@@ -1045,6 +1045,7 @@ async function handleRequest(req, res) {
     if (action === "create") {
       const { email, password, role, unit, full_name, cpf } = body;
       if (!email || !password) return json(res, 400, { error: "E-mail e senha são obrigatórios" });
+      const normalizedEmail = String(email).trim().toLowerCase();
 
       const requestedRole = role || "Usuário";
       const allowedRoles = isAdmin
@@ -1054,22 +1055,41 @@ async function handleRequest(req, res) {
         return json(res, 403, { error: "Perfil não permitido para o seu nível de acesso" });
       }
 
-      const existing = await pool.query("SELECT id FROM auth.users WHERE email = $1", [email]);
-      if (existing.rows.length > 0) return json(res, 400, { error: "Usuário já cadastrado" });
-
-      const encrypted = hashPassword(password);
-      const result = await pool.query(
-        "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at) VALUES (gen_random_uuid(), $1, $2, now()) RETURNING *",
-        [email, encrypted]
+      const existing = await pool.query(
+        "SELECT u.id, u.email, p.id AS profile_id FROM auth.users u LEFT JOIN public.profiles p ON p.id = u.id WHERE lower(u.email) = lower($1) LIMIT 1",
+        [normalizedEmail]
       );
-      const newUser = result.rows[0];
+      if (existing.rows.length > 0) {
+        const existingUser = existing.rows[0];
+        if (existingUser.profile_id) return json(res, 400, { error: "Usuário já cadastrado" });
+        await pool.query(
+          "INSERT INTO public.profiles (id, email, role, unit, full_name, cpf, active, must_change_password) VALUES ($1, $2, $3, $4, $5, $6, true, true) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = EXCLUDED.role, unit = EXCLUDED.unit, full_name = EXCLUDED.full_name, cpf = EXCLUDED.cpf, active = true, must_change_password = true",
+          [existingUser.id, normalizedEmail, requestedRole, unit || "", full_name || "", cpf || ""]
+        );
+        return json(res, 200, { user: { id: existingUser.id, email: existingUser.email } });
+      }
 
-      await pool.query(
-        "INSERT INTO public.profiles (id, email, role, unit, full_name, cpf, active, must_change_password) VALUES ($1, $2, $3, $4, $5, $6, true, true) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = EXCLUDED.role, unit = EXCLUDED.unit, full_name = EXCLUDED.full_name, cpf = EXCLUDED.cpf, active = true, must_change_password = true",
-        [newUser.id, email, requestedRole, unit || "", full_name || "", cpf || ""]
-      );
-
-      return json(res, 200, { user: { id: newUser.id, email: newUser.email } });
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const encrypted = hashPassword(password);
+        const result = await client.query(
+          "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at) VALUES (gen_random_uuid(), $1, $2, now()) RETURNING *",
+          [normalizedEmail, encrypted]
+        );
+        const newUser = result.rows[0];
+        await client.query(
+          "INSERT INTO public.profiles (id, email, role, unit, full_name, cpf, active, must_change_password) VALUES ($1, $2, $3, $4, $5, $6, true, true) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = EXCLUDED.role, unit = EXCLUDED.unit, full_name = EXCLUDED.full_name, cpf = EXCLUDED.cpf, active = true, must_change_password = true",
+          [newUser.id, normalizedEmail, requestedRole, unit || "", full_name || "", cpf || ""]
+        );
+        await client.query("COMMIT");
+        return json(res, 200, { user: { id: newUser.id, email: newUser.email } });
+      } catch (e) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw e;
+      } finally {
+        client.release();
+      }
     }
 
     if (action === "toggle") {
