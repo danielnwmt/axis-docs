@@ -280,7 +280,8 @@ export default function Users() {
             )}
             {users.map((user) => (
               <tr key={user.id} className="border-b border-border hover:bg-secondary/30 transition-colors">
-                <td className="px-5 py-3 text-foreground">{user.email}</td>
+                <td className="px-5 py-3 text-foreground">{user.full_name || "—"}</td>
+                <td className="px-5 py-3 text-muted-foreground">{user.email}</td>
                 <td className="px-5 py-3">
                   <Badge variant="secondary">{user.role}</Badge>
                 </td>
