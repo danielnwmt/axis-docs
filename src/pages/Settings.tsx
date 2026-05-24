@@ -335,14 +335,39 @@ function ParametrosSection() {
     tamanhoMaxMB: "50",
     autoOCR: true,
   });
+  const [updating, setUpdating] = useState(false);
+  const [versionInfo, setVersionInfo] = useState<{ version: string; commit?: string; built_at?: string }>({ version: "" });
+
+  useEffect(() => {
+    import("@/lib/version").then(async (m) => {
+      setVersionInfo({ version: m.APP_VERSION });
+      const info = await m.fetchSystemVersion();
+      setVersionInfo(info);
+    });
+  }, []);
 
   const handleSave = () => {
     localStorage.removeItem("allow_unsigned_uploads");
     toast({ title: "Parâmetros salvos com sucesso!" });
   };
 
-  const handleSystemUpdate = () => {
-    toast({ title: "Atualização do sistema", description: "No servidor, execute: sudo /opt/axisdocs/update.sh" });
+  const handleSystemUpdate = async () => {
+    if (!confirm("Deseja atualizar o AxisDocs agora?\n\nO sistema buscará a última versão no Git (danielnwmt/axis-docs, branch main) e refará o build.\nIsso pode levar alguns minutos e a página será recarregada ao final.")) return;
+    setUpdating(true);
+    try {
+      const { triggerSystemUpdate } = await import("@/lib/version");
+      const res = await triggerSystemUpdate();
+      if (!res.ok) {
+        toast({ title: "Falha ao iniciar atualização", description: res.message || "Verifique se você está em uma instalação local.", variant: "destructive" });
+        setUpdating(false);
+        return;
+      }
+      toast({ title: "Atualização iniciada", description: "Aguarde o rebuild concluir. A página recarregará automaticamente em ~90s." });
+      setTimeout(() => window.location.reload(), 90_000);
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+      setUpdating(false);
+    }
   };
 
   const handleSystemBackup = () => {
@@ -377,17 +402,35 @@ function ParametrosSection() {
         <Save className="w-4 h-4 mr-2" /> Salvar
       </Button>
 
-
       <div className="pt-4 mt-4 border-t border-border space-y-3">
+        <div>
+          <Label>Versão do sistema</Label>
+          <div className="text-sm text-foreground mt-1">
+            <span className="font-mono font-semibold">v{versionInfo.version || "—"}</span>
+            {versionInfo.commit && (
+              <span className="text-xs text-muted-foreground ml-2">• commit {versionInfo.commit}</span>
+            )}
+            {versionInfo.built_at && (
+              <span className="text-xs text-muted-foreground ml-2">
+                • build {new Date(versionInfo.built_at).toLocaleString("pt-BR")}
+              </span>
+            )}
+          </div>
+        </div>
+
         <Label>Manutenção do sistema</Label>
         <div className="flex flex-col sm:flex-row gap-2">
-          <Button type="button" variant="outline" onClick={handleSystemUpdate} className="gap-2">
-            <RefreshCw className="w-4 h-4" /> Atualizar sistema
+          <Button type="button" variant="outline" onClick={handleSystemUpdate} disabled={updating} className="gap-2">
+            <RefreshCw className={`w-4 h-4 ${updating ? "animate-spin" : ""}`} />
+            {updating ? "Atualizando..." : "Atualizar sistema"}
           </Button>
           <Button type="button" variant="outline" onClick={handleSystemBackup} className="gap-2">
             <DatabaseBackup className="w-4 h-4" /> Fazer backup
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          A atualização busca a última versão em <span className="font-mono">danielnwmt/axis-docs</span> (branch main) e refaz o build.
+        </p>
       </div>
     </div>
   );
