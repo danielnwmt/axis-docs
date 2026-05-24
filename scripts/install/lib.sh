@@ -1031,6 +1031,28 @@ async function handleRequest(req, res) {
       return json(res, 200, { success: true });
     }
 
+    if (action === "update") {
+      const { userId, role, unit, full_name, cpf } = body;
+      if (!userId) return json(res, 400, { error: "ID do usuário é obrigatório" });
+      const allowedRoles = isAdmin
+        ? ["Administrador", "Operador", "Usuário"]
+        : ["Operador", "Usuário"];
+      const sets = [];
+      const vals = [];
+      let i = 1;
+      if (typeof role === "string") {
+        if (!allowedRoles.includes(role)) return json(res, 403, { error: "Perfil não permitido para o seu nível de acesso" });
+        sets.push(`role = $${i++}`); vals.push(role);
+      }
+      if (typeof unit === "string") { sets.push(`unit = $${i++}`); vals.push(unit); }
+      if (typeof full_name === "string") { sets.push(`full_name = $${i++}`); vals.push(full_name); }
+      if (typeof cpf === "string") { sets.push(`cpf = $${i++}`); vals.push(cpf); }
+      if (sets.length === 0) return json(res, 200, { success: true });
+      vals.push(userId);
+      await pool.query(`UPDATE public.profiles SET ${sets.join(", ")} WHERE id = $${i}`, vals);
+      return json(res, 200, { success: true });
+    }
+
     return json(res, 400, { error: "Ação inválida" });
   }
 
