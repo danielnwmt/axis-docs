@@ -359,8 +359,18 @@ export default function Users() {
               <Input type="text" placeholder="Nome do usuário" value={fullName} onChange={(e) => setFullName(e.target.value)} required maxLength={120} />
             </div>
             <div className="space-y-2">
-              <Label>CPF</Label>
-              <Input type="text" inputMode="numeric" placeholder="000.000.000-00" value={cpf} onChange={(e) => setCpf(maskCpf(e.target.value))} required />
+              <Label>Tipo de documento</Label>
+              <Select value={docType} onValueChange={(v) => { setDocType(v as any); setCpf(""); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cpf">CPF</SelectItem>
+                  <SelectItem value="cnpj">CNPJ</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{docType === "cpf" ? "CPF" : "CNPJ"}</Label>
+              <Input type="text" inputMode="numeric" placeholder={docType === "cpf" ? "000.000.000-00" : "00.000.000/0000-00"} value={cpf} onChange={(e) => setCpf(maskDoc(e.target.value, docType))} required />
             </div>
             <div className="space-y-2">
               <Label>E-mail</Label>
