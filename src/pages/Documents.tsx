@@ -98,7 +98,7 @@ export default function Documents() {
       return;
     }
     try {
-      const blob = await fetchDriveFileBlob(doc.drive_file_id, "view", doc.file_type);
+      const blob = await fetchDriveFileBlob(doc.drive_file_id, "view", doc.file_type, doc.title);
       const blobUrl = URL.createObjectURL(blob);
 
       setPreviewType(doc.file_type || "application/octet-stream");
@@ -107,7 +107,6 @@ export default function Documents() {
         if (currentUrl) URL.revokeObjectURL(currentUrl);
         return blobUrl;
       });
-      logAudit("Visualizou documento", "view", doc.title);
     } catch {
       toast({ title: "Erro", description: "Não foi possível visualizar o arquivo.", variant: "destructive" });
     }
