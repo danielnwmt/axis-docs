@@ -343,9 +343,13 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   active boolean NOT NULL DEFAULT true,
   role text NOT NULL DEFAULT 'Usuário',
   unit text NOT NULL DEFAULT '',
+  full_name text NOT NULL DEFAULT '',
+  cpf text NOT NULL DEFAULT '',
   email text NOT NULL DEFAULT ''
 );
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT true;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS full_name text NOT NULL DEFAULT '';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS cpf text NOT NULL DEFAULT '';
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Tabela de categorias documentais
@@ -942,10 +946,24 @@ async function handleRequest(req, res) {
     if (!claims) return json(res, 401, { error: "Token inválido" });
 
     // Verifica se quem chama é Administrador ou Operador ativo
-    const adminCheck = await pool.query(
-      "SELECT role, active FROM public.profiles WHERE id = $1",
+    let adminCheck = await pool.query(
+      "SELECT id, role, active FROM public.profiles WHERE id = $1",
       [claims.sub]
     );
+    if (adminCheck.rows.length === 0 && claims.email) {
+      adminCheck = await pool.query(
+        `SELECT p.id, p.role, p.active
+           FROM public.profiles p
+           LEFT JOIN auth.users u ON u.id = p.id
+          WHERE lower(u.email) = lower($1) OR lower(p.email) = lower($1)
+          ORDER BY p.created_at DESC
+          LIMIT 1`,
+        [claims.email]
+      );
+      if (adminCheck.rows.length > 0) {
+        console.warn("[ADMIN] JWT sub sem perfil; perfil recuperado por e-mail:", claims.email);
+      }
+    }
     if (adminCheck.rows.length === 0) {
       console.warn("[ADMIN] Perfil não encontrado para JWT sub:", claims.sub);
       return json(res, 403, { error: "Perfil não encontrado para o usuário autenticado. Faça logout e login novamente." });

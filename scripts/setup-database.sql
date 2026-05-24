@@ -11,8 +11,12 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   role text NOT NULL DEFAULT 'Usuário',
   must_change_password boolean NOT NULL DEFAULT true,
   unit text NOT NULL DEFAULT '',
+  full_name text NOT NULL DEFAULT '',
+  cpf text NOT NULL DEFAULT '',
   email text NOT NULL DEFAULT ''
 );
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS full_name text NOT NULL DEFAULT '';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS cpf text NOT NULL DEFAULT '';
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Tabela de categorias documentais
