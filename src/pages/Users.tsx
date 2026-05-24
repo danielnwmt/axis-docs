@@ -77,6 +77,7 @@ export default function Users() {
   const [resetLoading, setResetLoading] = useState(false);
   const [editTarget, setEditTarget] = useState<UserProfile | null>(null);
   const [editFullName, setEditFullName] = useState("");
+  const [editDocType, setEditDocType] = useState<"cpf" | "cnpj">("cpf");
   const [editCpf, setEditCpf] = useState("");
   const [editRole, setEditRole] = useState("Usuário");
   const [editUnits, setEditUnits] = useState<string[]>([]);
