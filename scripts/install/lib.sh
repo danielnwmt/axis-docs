@@ -267,6 +267,24 @@ CREATE TABLE IF NOT EXISTS auth.users (
   role text NOT NULL DEFAULT 'authenticated',
   aud text NOT NULL DEFAULT 'authenticated'
 );
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS id uuid;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS encrypted_password text NOT NULL DEFAULT '';
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email_confirmed_at timestamptz;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS raw_user_meta_data jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'authenticated';
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS aud text NOT NULL DEFAULT 'authenticated';
+UPDATE auth.users SET id = gen_random_uuid() WHERE id IS NULL;
+UPDATE auth.users SET encrypted_password = '' WHERE encrypted_password IS NULL;
+UPDATE auth.users SET created_at = now() WHERE created_at IS NULL;
+UPDATE auth.users SET updated_at = now() WHERE updated_at IS NULL;
+UPDATE auth.users SET raw_user_meta_data = '{}'::jsonb WHERE raw_user_meta_data IS NULL;
+UPDATE auth.users SET role = 'authenticated' WHERE role IS NULL;
+UPDATE auth.users SET aud = 'authenticated' WHERE aud IS NULL;
+ALTER TABLE auth.users ALTER COLUMN id SET DEFAULT gen_random_uuid();
+ALTER TABLE auth.users ALTER COLUMN id SET NOT NULL;
 
 -- Tabela de sessões/refresh tokens
 CREATE TABLE IF NOT EXISTS auth.refresh_tokens (
@@ -277,6 +295,12 @@ CREATE TABLE IF NOT EXISTS auth.refresh_tokens (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS id bigserial;
+ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS token text;
+ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS revoked boolean DEFAULT false;
+ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE auth.refresh_tokens ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
 -- Roles do PostgREST
 DO $$ BEGIN
