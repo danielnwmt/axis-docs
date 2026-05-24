@@ -264,6 +264,7 @@ export default function Users() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-secondary/50">
+              <th className="text-left px-5 py-3 font-semibold text-foreground">Nome</th>
               <th className="text-left px-5 py-3 font-semibold text-foreground">E-mail</th>
               <th className="text-left px-5 py-3 font-semibold text-foreground">Perfil</th>
               <th className="text-left px-5 py-3 font-semibold text-foreground">Unidade</th>
@@ -274,7 +275,7 @@ export default function Users() {
           <tbody>
             {users.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-5 py-8 text-center text-muted-foreground">Nenhum usuário encontrado</td>
+                <td colSpan={6} className="px-5 py-8 text-center text-muted-foreground">Nenhum usuário encontrado</td>
               </tr>
             )}
             {users.map((user) => (
