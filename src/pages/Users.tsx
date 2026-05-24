@@ -64,6 +64,7 @@ export default function Users() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [docType, setDocType] = useState<"cpf" | "cnpj">("cpf");
   const [cpf, setCpf] = useState("");
   const [role, setRole] = useState("Usuário");
   const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
