@@ -2279,6 +2279,33 @@ EOF_F2B
   success "fail2ban ativo"
 }
 
+configure_clamav() {
+  log "Instalando e configurando ClamAV (antivírus)"
+  apt_install clamav clamav-daemon clamav-freshclam
+
+  # Atualiza base de assinaturas antes de iniciar o daemon
+  systemctl stop clamav-freshclam >/dev/null 2>&1 || true
+  freshclam || warn "freshclam falhou (sem internet?). O daemon usará base vazia até a próxima atualização."
+  systemctl enable clamav-freshclam clamav-daemon >/dev/null 2>&1 || true
+  systemctl restart clamav-freshclam || true
+  systemctl restart clamav-daemon || true
+
+  # Script utilitário p/ escanear o diretório de storage
+  cat > /usr/local/bin/axisdocs-scan.sh <<'EOF_SCAN'
+#!/bin/bash
+# Uso: axisdocs-scan.sh <caminho>
+# Retorna 0 se limpo, 1 se infectado, 2 se erro
+set -u
+TARGET="${1:-/var/lib/axisdocs/storage}"
+if ! command -v clamdscan >/dev/null 2>&1; then
+  echo "clamdscan não disponível" >&2; exit 2
+fi
+clamdscan --fdpass --quiet "$TARGET"
+EOF_SCAN
+  chmod +x /usr/local/bin/axisdocs-scan.sh
+  success "ClamAV ativo (use: axisdocs-scan.sh <caminho>)"
+}
+
 verify_installation() {
   log "Validando serviços"
 
