@@ -116,7 +116,7 @@ export default function Search() {
   const handleDownload = async (driveFileId: string, fileName: string) => {
     if (!driveFileId) return;
     try {
-      const blob = await fetchDriveFileBlob(driveFileId, "download");
+      const blob = await fetchDriveFileBlob(driveFileId, "download", undefined, fileName);
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = blobUrl;
