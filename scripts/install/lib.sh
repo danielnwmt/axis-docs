@@ -1777,12 +1777,46 @@ async function licenseTempUnlock(req, res, claims) {
   return json(res, result.ok ? 200 : 400, result);
 }
 
+async function systemVersion(req, res) {
+  let commit, built_at, branch;
+  try {
+    const raw = fs.readFileSync(path.join(APP_DIR, "VERSION"), "utf8");
+    raw.split(/\r?\n/).forEach((line) => {
+      const m = line.match(/^([A-Z_]+)=(.+)$/);
+      if (!m) return;
+      if (m[1] === "COMMIT") commit = m[2];
+      if (m[1] === "BUILT_AT") built_at = m[2];
+      if (m[1] === "BRANCH") branch = m[2];
+    });
+  } catch {}
+  return json(res, 200, { commit, built_at, branch });
+}
+
+async function systemUpdate(req, res, claims) {
+  if (!(await requireAdmin(claims))) return json(res, 403, { ok: false, message: "Apenas administradores" });
+  const updateScript = path.join(APP_DIR, "update.sh");
+  if (!fs.existsSync(updateScript)) {
+    return json(res, 400, { ok: false, message: "Script update.sh não encontrado. Use a instalação local." });
+  }
+  try {
+    const out = fs.openSync("/var/log/axisdocs-update.log", "a");
+    const child = spawn("bash", [updateScript], { detached: true, stdio: ["ignore", out, out] });
+    child.unref();
+    return json(res, 200, { ok: true, pid: child.pid, message: "Atualização iniciada em background" });
+  } catch (e) {
+    return json(res, 500, { ok: false, message: e.message });
+  }
+}
+
 async function handle(req, res) {
   if (req.method === "OPTIONS") { res.writeHead(204, CORS); return res.end(); }
   const url = new URL(req.url, "http://localhost");
   const fnPath = url.pathname.replace(/^\/functions\/v1\//, "");
 
-  // Todas requerem JWT
+  // system-version é público (mostra versão da instalação)
+  if (fnPath === "system-version") return await systemVersion(req, res);
+
+  // Demais requerem JWT
   const claims = getAuth(req);
   if (!claims) return json(res, 401, { error: "Não autorizado" });
 
@@ -1792,6 +1826,7 @@ async function handle(req, res) {
     if (fnPath === "delete-from-drive" && req.method === "POST") return await deleteFromDrive(req, res, claims);
     if (fnPath === "validate-license" && req.method === "POST") return await validateLicense(req, res, claims);
     if (fnPath === "license-temp-unlock" && req.method === "POST") return await licenseTempUnlock(req, res, claims);
+    if (fnPath === "system-update" && req.method === "POST") return await systemUpdate(req, res, claims);
     return json(res, 404, { error: `Função '${fnPath}' não disponível na instalação local` });
   } catch (e) {
     console.error("[FUNCTION ERROR]", fnPath, e);
