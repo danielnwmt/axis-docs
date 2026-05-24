@@ -642,6 +642,17 @@ APPSQL
 
   # Permissões do owner
   sudo -u postgres psql -d "$PG_DB" -c "GRANT $PG_USER TO authenticator;" 2>/dev/null || true
+  # O servidor local de autenticação conecta como $PG_USER e precisa ser owner das tabelas da aplicação.
+  # O PostgREST continua aplicando RLS normalmente porque troca para anon/authenticated/service_role por JWT.
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.profiles OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.categories OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.units OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.documents OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.audit_logs OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.license_config OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL ROUTINES IN SCHEMA public TO $PG_USER;" 2>/dev/null || true
   # CRÍTICO: PostgREST conecta como $PG_USER e precisa poder fazer SET ROLE para anon/authenticated/service_role
   sudo -u postgres psql -d "$PG_DB" -c "GRANT anon TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "GRANT authenticated TO $PG_USER;" 2>/dev/null || true
