@@ -18,6 +18,8 @@ import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import Signature from "./pages/Signature";
 import ChangePassword from "./pages/ChangePassword";
+import MfaSetup from "./pages/MfaSetup";
+import MfaVerify from "./pages/MfaVerify";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Help from "./pages/Help";
