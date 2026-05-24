@@ -950,24 +950,50 @@ async function handleRequest(req, res) {
       "SELECT id, role, active FROM public.profiles WHERE id = $1",
       [claims.sub]
     );
-    if (adminCheck.rows.length === 0 && claims.email) {
-      adminCheck = await pool.query(
-        `SELECT p.id, p.role, p.active
-           FROM public.profiles p
-           LEFT JOIN auth.users u ON u.id = p.id
-          WHERE lower(u.email) = lower($1) OR lower(p.email) = lower($1)
-          ORDER BY p.created_at DESC
-          LIMIT 1`,
-        [claims.email]
-      );
-      if (adminCheck.rows.length > 0) {
-        console.warn("[ADMIN] JWT sub sem perfil; perfil recuperado por e-mail:", claims.email);
+
+    // Auto-heal: se não há profile para o sub do JWT, tenta recuperar/criar
+    if (adminCheck.rows.length === 0) {
+      // Busca usuário em auth.users pelo sub
+      const authUser = await pool.query("SELECT id, email FROM auth.users WHERE id = $1", [claims.sub]);
+      const userEmail = authUser.rows[0]?.email || claims.email;
+
+      if (userEmail) {
+        // Tenta achar profile por e-mail (id pode estar dessincronizado após reinstalação)
+        const byEmail = await pool.query(
+          "SELECT id, role, active FROM public.profiles WHERE lower(email) = lower($1) ORDER BY created_at DESC LIMIT 1",
+          [userEmail]
+        );
+
+        if (byEmail.rows.length > 0 && byEmail.rows[0].id !== claims.sub) {
+          // Realinha o id do profile com o sub atual do auth.users
+          await pool.query("DELETE FROM public.profiles WHERE id = $1", [claims.sub]);
+          await pool.query("UPDATE public.profiles SET id = $1 WHERE id = $2", [claims.sub, byEmail.rows[0].id]);
+          console.warn("[ADMIN] Profile id realinhado para sub do JWT:", claims.sub, "email:", userEmail);
+        } else if (byEmail.rows.length === 0) {
+          // Não existe profile: cria. Promove a Administrador se ainda não houver admin ativo.
+          const adminExists = await pool.query(
+            "SELECT 1 FROM public.profiles WHERE role = 'Administrador' AND active = true LIMIT 1"
+          );
+          const newRole = adminExists.rows.length === 0 ? "Administrador" : "Usuário";
+          await pool.query(
+            "INSERT INTO public.profiles (id, email, role, unit, active, must_change_password) VALUES ($1, $2, $3, 'Geral', true, false) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, active = true",
+            [claims.sub, userEmail, newRole]
+          );
+          console.warn("[ADMIN] Profile criado automaticamente:", userEmail, "role:", newRole);
+        }
+
+        adminCheck = await pool.query(
+          "SELECT id, role, active FROM public.profiles WHERE id = $1",
+          [claims.sub]
+        );
       }
     }
+
     if (adminCheck.rows.length === 0) {
-      console.warn("[ADMIN] Perfil não encontrado para JWT sub:", claims.sub);
+      console.warn("[ADMIN] Perfil não encontrado para JWT sub:", claims.sub, "email:", claims.email);
       return json(res, 403, { error: "Perfil não encontrado para o usuário autenticado. Faça logout e login novamente." });
     }
+
     const callerRole = (adminCheck.rows[0]?.role || "").toString().trim();
     const callerActive = !!adminCheck.rows[0]?.active;
     const isAdmin = callerRole.toLowerCase() === "administrador";
