@@ -30,6 +30,7 @@ const sectionCards = [
 
   { id: "meucertificado" as Section, icon: ShieldCheck, title: "Meu Certificado", description: "Cadastre seu certificado A1 (.pfx) ICP-Brasil para assinar documentos" },
   { id: "minhasenha" as Section, icon: KeyRound, title: "Minha Senha", description: "Alterar a sua senha de acesso ao sistema" },
+  { id: "mfa" as Section, icon: ShieldCheck, title: "Autenticação 2 Fatores", description: "Ative o segundo fator (TOTP) usando Google Authenticator, Authy, 1Password etc." },
   { id: "backup" as Section, icon: DatabaseBackup, title: "Backup & Restauração", description: "Exportar e importar usuários, auditoria e referências de documentos" },
   { id: "licenca" as Section, icon: KeyRound, title: "Licença", description: "Ativar e consultar o status da licença do AxisDocs" },
   { id: "mobile" as Section, icon: Smartphone, title: "Acesso Mobile", description: "QR Code para abrir o sistema no aplicativo" },
