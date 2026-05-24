@@ -118,7 +118,7 @@ export default function Documents() {
       return;
     }
     try {
-      const blob = await fetchDriveFileBlob(doc.drive_file_id, "download", doc.file_type);
+      const blob = await fetchDriveFileBlob(doc.drive_file_id, "download", doc.file_type, doc.title);
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = blobUrl;
@@ -127,7 +127,6 @@ export default function Documents() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
-      logAudit("Baixou documento", "download", doc.title);
     } catch {
       toast({ title: "Erro", description: "Não foi possível baixar o arquivo.", variant: "destructive" });
     }
