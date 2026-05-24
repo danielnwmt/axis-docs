@@ -1234,6 +1234,7 @@ export default function Settings() {
       case "licenca": return <LicencaSection />;
       case "mobile": return <MobileAccessSection />;
       case "minhasenha": return <MyPasswordSection />;
+      case "mfa": return <MfaSection />;
       default: return null;
     }
   };
