@@ -82,7 +82,7 @@ export default function Search() {
   const handleView = async (result: SearchResult) => {
     if (!result.drive_file_id) return;
     try {
-      const blob = await fetchDriveFileBlob(result.drive_file_id, "view", result.file_type);
+      const blob = await fetchDriveFileBlob(result.drive_file_id, "view", result.file_type, result.title);
       const blobUrl = URL.createObjectURL(blob);
 
       setPreviewType(result.file_type || "application/octet-stream");
