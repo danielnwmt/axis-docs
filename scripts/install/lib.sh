@@ -1375,9 +1375,11 @@ const path = require("path");
 const crypto = require("crypto");
 const { URL } = require("url");
 const { Client } = require("pg");
+const { spawn } = require("child_process");
 
 const PORT = 5556;
 const STORAGE_DIR = "/var/lib/axisdocs/storage";
+const APP_DIR = "/opt/axisdocs";
 const JWT_SECRET = process.env.JWT_SECRET;
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -1775,12 +1777,46 @@ async function licenseTempUnlock(req, res, claims) {
   return json(res, result.ok ? 200 : 400, result);
 }
 
+async function systemVersion(req, res) {
+  let commit, built_at, branch;
+  try {
+    const raw = fs.readFileSync(path.join(APP_DIR, "VERSION"), "utf8");
+    raw.split(/\r?\n/).forEach((line) => {
+      const m = line.match(/^([A-Z_]+)=(.+)$/);
+      if (!m) return;
+      if (m[1] === "COMMIT") commit = m[2];
+      if (m[1] === "BUILT_AT") built_at = m[2];
+      if (m[1] === "BRANCH") branch = m[2];
+    });
+  } catch {}
+  return json(res, 200, { commit, built_at, branch });
+}
+
+async function systemUpdate(req, res, claims) {
+  if (!(await requireAdmin(claims))) return json(res, 403, { ok: false, message: "Apenas administradores" });
+  const updateScript = path.join(APP_DIR, "update.sh");
+  if (!fs.existsSync(updateScript)) {
+    return json(res, 400, { ok: false, message: "Script update.sh não encontrado. Use a instalação local." });
+  }
+  try {
+    const out = fs.openSync("/var/log/axisdocs-update.log", "a");
+    const child = spawn("bash", [updateScript], { detached: true, stdio: ["ignore", out, out] });
+    child.unref();
+    return json(res, 200, { ok: true, pid: child.pid, message: "Atualização iniciada em background" });
+  } catch (e) {
+    return json(res, 500, { ok: false, message: e.message });
+  }
+}
+
 async function handle(req, res) {
   if (req.method === "OPTIONS") { res.writeHead(204, CORS); return res.end(); }
   const url = new URL(req.url, "http://localhost");
   const fnPath = url.pathname.replace(/^\/functions\/v1\//, "");
 
-  // Todas requerem JWT
+  // system-version é público (mostra versão da instalação)
+  if (fnPath === "system-version") return await systemVersion(req, res);
+
+  // Demais requerem JWT
   const claims = getAuth(req);
   if (!claims) return json(res, 401, { error: "Não autorizado" });
 
@@ -1790,6 +1826,7 @@ async function handle(req, res) {
     if (fnPath === "delete-from-drive" && req.method === "POST") return await deleteFromDrive(req, res, claims);
     if (fnPath === "validate-license" && req.method === "POST") return await validateLicense(req, res, claims);
     if (fnPath === "license-temp-unlock" && req.method === "POST") return await licenseTempUnlock(req, res, claims);
+    if (fnPath === "system-update" && req.method === "POST") return await systemUpdate(req, res, claims);
     return json(res, 404, { error: `Função '${fnPath}' não disponível na instalação local` });
   } catch (e) {
     console.error("[FUNCTION ERROR]", fnPath, e);
@@ -2104,6 +2141,13 @@ set -euo pipefail
 
 APP_DIR="/opt/axisdocs"
 CRED_FILE="/etc/axisdocs/credentials"
+REPO_URL="${AXISDOCS_REPO_URL:-https://github.com/danielnwmt/axis-docs.git}"
+REPO_BRANCH="${AXISDOCS_REPO_BRANCH:-main}"
+LOG_FILE="/var/log/axisdocs-update.log"
+
+mkdir -p "$(dirname "$LOG_FILE")"
+exec >>"$LOG_FILE" 2>&1
+echo "===== $(date '+%F %T') Iniciando atualização ====="
 
 if [ "$EUID" -ne 0 ]; then
   echo "❌ Execute como root: sudo bash update.sh"
@@ -2112,15 +2156,36 @@ fi
 
 if [ ! -f "$CRED_FILE" ]; then
   echo "❌ Arquivo de credenciais não encontrado: $CRED_FILE"
-  echo "   Rode o install.sh completo primeiro."
   exit 1
 fi
 
-# Recupera credenciais locais (gravadas pelo install.sh)
 # shellcheck disable=SC1090
 source "$CRED_FILE"
 
-# Determina a URL da API local (mesma origem servida pelo Nginx)
+if ! command -v git >/dev/null 2>&1; then
+  apt-get update -qq && apt-get install -y -qq git
+fi
+
+# Sincroniza o código com o repositório Git oficial
+if [ -d "$APP_DIR/.git" ]; then
+  echo "➡️  git fetch + reset em $APP_DIR (branch $REPO_BRANCH)"
+  cd "$APP_DIR"
+  git fetch --depth 1 origin "$REPO_BRANCH"
+  git reset --hard "origin/$REPO_BRANCH"
+  git clean -fd -e .env -e node_modules -e dist
+else
+  echo "➡️  Clonando $REPO_URL ($REPO_BRANCH) em $APP_DIR"
+  # Preserva .env e arquivos sensíveis
+  TMP_BACKUP="$(mktemp -d)"
+  [ -f "$APP_DIR/.env" ] && cp "$APP_DIR/.env" "$TMP_BACKUP/.env" || true
+  rm -rf "$APP_DIR.old" || true
+  if [ -d "$APP_DIR" ]; then mv "$APP_DIR" "$APP_DIR.old"; fi
+  git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR"
+  [ -f "$TMP_BACKUP/.env" ] && cp "$TMP_BACKUP/.env" "$APP_DIR/.env" || true
+  rm -rf "$TMP_BACKUP"
+fi
+
+# Determina URL da API local
 if [ -n "${APP_DOMAIN:-}" ]; then
   if [ -d /etc/letsencrypt/live/"$APP_DOMAIN" ]; then
     API_BASE="https://$APP_DOMAIN"
@@ -2181,17 +2246,26 @@ cd "$APP_DIR"
 npm install --no-fund --no-audit
 npm run build
 
-# Confirma que nenhuma URL da Lovable Cloud sobrou no build
+# Grava arquivo VERSION com commit + data
+COMMIT_HASH="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+cat > "$APP_DIR/VERSION" <<EOF_VER
+COMMIT=$COMMIT_HASH
+BUILT_AT=$BUILT_AT
+BRANCH=$REPO_BRANCH
+EOF_VER
+
 if grep -rq "supabase.co" "$APP_DIR/dist/" 2>/dev/null; then
-  echo "⚠️  AVISO: ainda há referências a supabase.co em dist/. Verifique o .env."
+  echo "⚠️  AVISO: ainda há referências a supabase.co em dist/."
   grep -rl "supabase.co" "$APP_DIR/dist/" | head
 else
   echo "✅ Build limpo — sem referências à Lovable Cloud."
 fi
 
+systemctl restart axisdocs-functions 2>/dev/null || true
 nginx -t
 systemctl reload nginx
-echo "✅ Rebuild concluído! Banco 100% local."
+echo "✅ Atualização concluída ($COMMIT_HASH @ $BUILT_AT)"
 EOF_UPDATE
 
   chmod +x "$APP_DIR/update.sh"
