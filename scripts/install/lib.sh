@@ -946,12 +946,20 @@ async function handleRequest(req, res) {
       "SELECT role, active FROM public.profiles WHERE id = $1",
       [claims.sub]
     );
+    if (adminCheck.rows.length === 0) {
+      console.warn("[ADMIN] Perfil não encontrado para JWT sub:", claims.sub);
+      return json(res, 403, { error: "Perfil não encontrado para o usuário autenticado. Faça logout e login novamente." });
+    }
     const callerRole = (adminCheck.rows[0]?.role || "").toString().trim();
     const callerActive = !!adminCheck.rows[0]?.active;
     const isAdmin = callerRole.toLowerCase() === "administrador";
     const isOperator = callerRole.toLowerCase() === "operador";
-    if (adminCheck.rows.length === 0 || !callerActive || (!isAdmin && !isOperator)) {
-      return json(res, 403, { error: "Apenas administradores podem executar esta ação" });
+    if (!callerActive) {
+      return json(res, 403, { error: "Sua conta está inativa. Contate o administrador." });
+    }
+    if (!isAdmin && !isOperator) {
+      console.warn("[ADMIN] Role insuficiente:", JSON.stringify(callerRole));
+      return json(res, 403, { error: `Permissão negada: seu perfil é "${callerRole}". Apenas Administrador/Operador podem executar esta ação.` });
     }
 
     const action = parsed.query.action;
