@@ -124,8 +124,8 @@ BEGIN
   RETURNING id INTO _uid;
 
   INSERT INTO public.profiles (id, email, role, unit, active, must_change_password)
-  VALUES (_uid, '${ADMIN_EMAIL}', 'Administrador', '', true, true)
-  ON CONFLICT (id) DO UPDATE SET role = 'Administrador', active = true, must_change_password = true;
+  VALUES (_uid, '${ADMIN_EMAIL}', 'Administrador', 'Geral', true, true)
+  ON CONFLICT (id) DO UPDATE SET role = 'Administrador', unit = 'Geral', active = true, must_change_password = true;
 END \$\$;
 ADMINSQL
 
