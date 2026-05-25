@@ -662,11 +662,31 @@ function BackupSection() {
     }
   };
 
+  const callBackupFn = async (action: string, body?: unknown) => {
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token;
+    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/backup-restore?action=${action}`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+        "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const raw = await resp.text();
+    let parsed: any = null;
+    try { parsed = raw ? JSON.parse(raw) : null; } catch { /* ignore */ }
+    if (!resp.ok) throw new Error(parsed?.error || raw || `HTTP ${resp.status}`);
+    return parsed;
+  };
+
   const handleExportDrive = async () => {
     setExportingDrive(true);
     try {
-      const { data, error } = await supabase.functions.invoke("backup-restore?action=export-to-drive", { method: "POST" });
-      if (error) throw error;
+      const data = await callBackupFn("export-to-drive");
       toast({ title: "Backup enviado ao Google Drive", description: `Expira em ${(data as any).file?.retention_days} dias.` });
       loadFiles();
     } catch (err: unknown) {
@@ -679,8 +699,7 @@ function BackupSection() {
   const handleCleanupNow = async () => {
     setCleaning(true);
     try {
-      const { data, error } = await supabase.functions.invoke("backup-restore?action=cleanup-now", { method: "POST" });
-      if (error) throw error;
+      const data = await callBackupFn("cleanup-now");
       toast({ title: "Limpeza concluída", description: `${(data as any).deleted || 0} arquivo(s) removido(s).` });
       loadFiles();
     } catch (err: unknown) {
@@ -693,10 +712,7 @@ function BackupSection() {
   const handleDeleteBackup = async (id: string) => {
     if (!confirm("Excluir este backup do Google Drive?")) return;
     try {
-      const { error } = await supabase.functions.invoke("backup-restore?action=delete-drive-backup", {
-        method: "POST", body: { id },
-      });
-      if (error) throw error;
+      await callBackupFn("delete-drive-backup", { id });
       toast({ title: "Backup excluído" });
       loadFiles();
     } catch (err: unknown) {
@@ -707,10 +723,7 @@ function BackupSection() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("backup-restore?action=export", {
-        method: "POST",
-      });
-      if (error) throw error;
+      const data = await callBackupFn("export");
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -719,13 +732,14 @@ function BackupSection() {
       a.download = `axisdocs-backup-${ts}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: "Backup gerado", description: `${data.profiles?.length || 0} usuários, ${data.documents?.length || 0} documentos, ${data.audit_logs?.length || 0} auditorias.` });
+      toast({ title: "Backup gerado", description: `Arquivo cifrado salvo.` });
     } catch (err: unknown) {
       toast({ title: "Erro ao exportar", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
     } finally {
       setExporting(false);
     }
   };
+
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
