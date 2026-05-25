@@ -528,6 +528,41 @@ ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS encryption_algo text DE
 ALTER TABLE public.backup_files ENABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS idx_backup_files_expires ON public.backup_files (expires_at) WHERE deleted_at IS NULL;
 
+-- Tabela de certificados digitais do usuário
+CREATE TABLE IF NOT EXISTS public.user_certificates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL UNIQUE,
+  pfx_encrypted bytea NOT NULL,
+  pfx_iv bytea NOT NULL,
+  pfx_auth_tag bytea NOT NULL,
+  subject_cn text NOT NULL DEFAULT '',
+  cpf text NOT NULL DEFAULT '',
+  issuer text NOT NULL DEFAULT '',
+  valid_from timestamptz,
+  valid_to timestamptz,
+  fingerprint_sha256 text NOT NULL DEFAULT '',
+  signature_logo text,
+  signature_logo_size_pct integer NOT NULL DEFAULT 22,
+  uploaded_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS pfx_encrypted bytea;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS pfx_iv bytea;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS pfx_auth_tag bytea;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS subject_cn text NOT NULL DEFAULT '';
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS cpf text NOT NULL DEFAULT '';
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS issuer text NOT NULL DEFAULT '';
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS valid_from timestamptz;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS valid_to timestamptz;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS fingerprint_sha256 text NOT NULL DEFAULT '';
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS signature_logo text;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS signature_logo_size_pct integer NOT NULL DEFAULT 22;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS uploaded_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.user_certificates ENABLE ROW LEVEL SECURITY;
+CREATE UNIQUE INDEX IF NOT EXISTS user_certificates_user_id_key ON public.user_certificates(user_id);
+
 -- Funções
 CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role text)
 RETURNS boolean
@@ -703,6 +738,25 @@ DO $$ BEGIN
     CREATE POLICY "Admins delete backup files" ON public.backup_files
       FOR DELETE TO authenticated USING (has_role(auth.uid(), 'Administrador'));
   END IF;
+
+  -- User Certificates
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users read own certificate metadata' AND tablename = 'user_certificates') THEN
+    CREATE POLICY "Users read own certificate metadata" ON public.user_certificates
+      FOR SELECT TO authenticated USING (auth.uid() = user_id OR has_role(auth.uid(), 'Administrador'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users insert own certificate' AND tablename = 'user_certificates') THEN
+    CREATE POLICY "Users insert own certificate" ON public.user_certificates
+      FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users update own certificate' AND tablename = 'user_certificates') THEN
+    CREATE POLICY "Users update own certificate" ON public.user_certificates
+      FOR UPDATE TO authenticated USING (auth.uid() = user_id)
+      WITH CHECK (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users delete own certificate' AND tablename = 'user_certificates') THEN
+    CREATE POLICY "Users delete own certificate" ON public.user_certificates
+      FOR DELETE TO authenticated USING (auth.uid() = user_id);
+  END IF;
 END $$;
 
 -- Dados padrão: idempotente mesmo em instalações locais antigas
@@ -743,6 +797,7 @@ APPSQL
   sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.license_config OWNER TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.backup_settings OWNER TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.backup_files OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.user_certificates OWNER TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL ROUTINES IN SCHEMA public TO $PG_USER;" 2>/dev/null || true
@@ -2905,6 +2960,40 @@ ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS encryption_algo text DE
 ALTER TABLE public.backup_files ENABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS idx_backup_files_expires ON public.backup_files (expires_at) WHERE deleted_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS public.user_certificates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL UNIQUE,
+  pfx_encrypted bytea NOT NULL,
+  pfx_iv bytea NOT NULL,
+  pfx_auth_tag bytea NOT NULL,
+  subject_cn text NOT NULL DEFAULT '',
+  cpf text NOT NULL DEFAULT '',
+  issuer text NOT NULL DEFAULT '',
+  valid_from timestamptz,
+  valid_to timestamptz,
+  fingerprint_sha256 text NOT NULL DEFAULT '',
+  signature_logo text,
+  signature_logo_size_pct integer NOT NULL DEFAULT 22,
+  uploaded_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS pfx_encrypted bytea;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS pfx_iv bytea;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS pfx_auth_tag bytea;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS subject_cn text NOT NULL DEFAULT '';
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS cpf text NOT NULL DEFAULT '';
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS issuer text NOT NULL DEFAULT '';
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS valid_from timestamptz;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS valid_to timestamptz;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS fingerprint_sha256 text NOT NULL DEFAULT '';
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS signature_logo text;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS signature_logo_size_pct integer NOT NULL DEFAULT 22;
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS uploaded_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.user_certificates ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.user_certificates ENABLE ROW LEVEL SECURITY;
+CREATE UNIQUE INDEX IF NOT EXISTS user_certificates_user_id_key ON public.user_certificates(user_id);
+
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins read backup settings' AND tablename = 'backup_settings') THEN
     CREATE POLICY "Admins read backup settings" ON public.backup_settings FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Administrador'));
@@ -2927,6 +3016,18 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins delete backup files' AND tablename = 'backup_files') THEN
     CREATE POLICY "Admins delete backup files" ON public.backup_files FOR DELETE TO authenticated USING (has_role(auth.uid(), 'Administrador'));
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users read own certificate metadata' AND tablename = 'user_certificates') THEN
+    CREATE POLICY "Users read own certificate metadata" ON public.user_certificates FOR SELECT TO authenticated USING (auth.uid() = user_id OR has_role(auth.uid(), 'Administrador'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users insert own certificate' AND tablename = 'user_certificates') THEN
+    CREATE POLICY "Users insert own certificate" ON public.user_certificates FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users update own certificate' AND tablename = 'user_certificates') THEN
+    CREATE POLICY "Users update own certificate" ON public.user_certificates FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users delete own certificate' AND tablename = 'user_certificates') THEN
+    CREATE POLICY "Users delete own certificate" ON public.user_certificates FOR DELETE TO authenticated USING (auth.uid() = user_id);
+  END IF;
 END $$;
 
 INSERT INTO public.backup_settings (retention_days, auto_cleanup)
@@ -2935,6 +3036,7 @@ WHERE NOT EXISTS (SELECT 1 FROM public.backup_settings);
 SQL
 sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.backup_settings OWNER TO $PG_USER;" 2>/dev/null || true
 sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.backup_files OWNER TO $PG_USER;" 2>/dev/null || true
+sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.user_certificates OWNER TO $PG_USER;" 2>/dev/null || true
 systemctl restart postgrest 2>/dev/null || true
 
 echo "➡️  Reconstruindo AxisDocs..."
