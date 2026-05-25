@@ -2119,10 +2119,18 @@ async function performDriveBackup(db, createdBy) {
   if (!cfg.rootFolderId) throw new Error("Pasta raiz do Google Drive não configurada.");
   const token = await getGoogleAccessToken(cfg.serviceAccount);
   const rootId = extractFolderId(cfg.rootFolderId);
-  const backupsFolderId = settings?.drive_folder_id || await findOrCreateFolder(token, "Backups", rootId);
-  if (!settings?.drive_folder_id && settings?.id) {
-    await db.query("UPDATE public.backup_settings SET drive_folder_id=$1, updated_at=now() WHERE id=$2", [backupsFolderId, settings.id]);
+  let baseFolderId = settings?.drive_folder_id;
+  if (!baseFolderId) {
+    baseFolderId = await findOrCreateFolder(token, "AxisDocs-Backups", rootId);
+    if (settings?.id) {
+      await db.query("UPDATE public.backup_settings SET drive_folder_id=$1, updated_at=now() WHERE id=$2", [baseFolderId, settings.id]);
+    }
   }
+  const _sp = new Date(Date.now() - 3 * 3600000);
+  const _year = String(_sp.getUTCFullYear());
+  const _month = String(_sp.getUTCMonth() + 1).padStart(2, "0");
+  const _yearId = await findOrCreateFolder(token, _year, baseFolderId);
+  const backupsFolderId = await findOrCreateFolder(token, _month, _yearId);
   const backup = await buildBackupJson(db);
   const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
   const fileName = `axisdocs-backup-${ts}.enc.json`;
