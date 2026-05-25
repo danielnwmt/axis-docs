@@ -256,10 +256,7 @@ Deno.serve(async (req) => {
       const cfg = await loadDriveConfig(admin);
       const token = await getDriveToken(cfg.serviceAccount);
       const rootId = extractFolderId(cfg.rootFolderId);
-      const backupsFolderId = settings?.drive_folder_id || await ensureFolder(token, "Backups", rootId);
-      if (!settings?.drive_folder_id) {
-        await admin.from("backup_settings").update({ drive_folder_id: backupsFolderId, updated_at: new Date().toISOString() }).eq("id", settings?.id);
-      }
+      const backupsFolderId = await resolveBackupFolder(admin, token, settings, rootId);
       const backup = await buildBackupJson(admin);
       const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
       const fileName = `axisdocs-backup-${ts}.enc.json`;
