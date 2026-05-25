@@ -1941,6 +1941,7 @@ Restart=always
 RestartSec=5
 Environment=JWT_SECRET=$JWT_SECRET
 Environment=DATABASE_URL=postgres://$PG_USER:$PG_PASS@localhost:5432/$PG_DB
+Environment=CERT_ENCRYPTION_KEY=$CERT_ENCRYPTION_KEY
 WorkingDirectory=/opt/axisdocs-functions
 
 [Install]
