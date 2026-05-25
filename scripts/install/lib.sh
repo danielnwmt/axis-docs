@@ -2120,8 +2120,8 @@ async function uploadCertificate(req, res, claims) {
     const ue = await db.query("SELECT email FROM auth.users WHERE id=$1", [claims.sub]);
     await db.query(
       `INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
-       VALUES ($1,$2,'Certificado A1 ICP-Brasil cadastrado','edit',$1,$3)`,
-      [claims.sub, ue.rows[0] && ue.rows[0].email || "", JSON.stringify({ subject_cn: subjectCn, cpf, issuer: issuerCn, valid_to: validTo, fingerprint })]
+       VALUES ($1,$2,'Certificado A1 ICP-Brasil cadastrado','edit',$4,$3)`,
+      [claims.sub, ue.rows[0] && ue.rows[0].email || "", JSON.stringify({ subject_cn: subjectCn, cpf, issuer: issuerCn, valid_to: validTo, fingerprint }), claims.sub]
     );
     return json(res, 200, { ok: true, subject_cn: subjectCn, cpf, issuer: issuerCn, valid_from: validFrom, valid_to: validTo, fingerprint_sha256: fingerprint });
   });
@@ -2168,8 +2168,8 @@ async function changeCertificatePassword(req, res, claims) {
     const ue = await db.query("SELECT email FROM auth.users WHERE id=$1", [claims.sub]);
     await db.query(
       `INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
-       VALUES ($1,$2,'Senha do certificado A1 alterada','edit',$1,'Re-encriptação do .pfx com nova senha')`,
-      [claims.sub, ue.rows[0] && ue.rows[0].email || ""]
+       VALUES ($1,$2,'Senha do certificado A1 alterada','edit',$3,'Re-encriptação do .pfx com nova senha')`,
+      [claims.sub, ue.rows[0] && ue.rows[0].email || "", claims.sub]
     );
     return json(res, 200, { ok: true });
   });
