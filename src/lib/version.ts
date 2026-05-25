@@ -26,9 +26,10 @@ export async function fetchSystemVersion(): Promise<SystemVersionInfo> {
 export async function triggerSystemUpdate(): Promise<{ ok: boolean; message?: string }> {
   try {
     const res = await fetch("/api/system/update", { method: "POST" });
-    if (res.status === 404) {
+    if (res.status === 404 || res.status === 405 || res.status === 501) {
       return { ok: false, message: "Atualização disponível apenas na instalação local (servidor Ubuntu)." };
     }
+
     if (!res.ok) {
       return { ok: false, message: `Erro ${res.status} ao iniciar atualização.` };
     }
