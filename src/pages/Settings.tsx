@@ -736,14 +736,30 @@ function BackupSection() {
     }
     setImporting(true);
     try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+
       const text = await file.text();
       const backup = JSON.parse(text);
-      const { data, error } = await supabase.functions.invoke("backup-restore?action=import", {
+
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/backup-restore?action=import`;
+      const resp = await fetch(url, {
         method: "POST",
-        body: { backup },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({ backup }),
       });
-      if (error) throw error;
-      setLastStats(data.stats);
+      const raw = await resp.text();
+      let parsed: any = null;
+      try { parsed = raw ? JSON.parse(raw) : null; } catch { /* ignore */ }
+      if (!resp.ok) {
+        throw new Error(parsed?.error || raw || `HTTP ${resp.status}`);
+      }
+      setLastStats(parsed?.stats);
       toast({ title: "Backup restaurado com sucesso!" });
     } catch (err: unknown) {
       toast({ title: "Erro ao restaurar", description: err instanceof Error ? err.message : "Arquivo inválido", variant: "destructive" });
