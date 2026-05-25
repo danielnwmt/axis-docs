@@ -12,7 +12,8 @@ export type SystemVersionInfo = {
 
 export async function fetchSystemVersion(): Promise<SystemVersionInfo> {
   try {
-    const res = await fetch("/api/system/version", { cache: "no-store" });
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/system-version`;
+    const res = await fetch(url, { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       return { version: APP_VERSION, ...data };
@@ -25,17 +26,28 @@ export async function fetchSystemVersion(): Promise<SystemVersionInfo> {
 
 export async function triggerSystemUpdate(): Promise<{ ok: boolean; message?: string }> {
   try {
-    const res = await fetch("/api/system/update", { method: "POST" });
-    if (res.status === 404 || res.status === 405 || res.status === 501) {
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token;
+    if (!token) return { ok: false, message: "Sessão expirada. Faça login novamente." };
+
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/system-update`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        "Content-Type": "application/json",
+      },
+    });
+    if (res.status === 404) {
       return { ok: false, message: "Atualização disponível apenas na instalação local (servidor Ubuntu)." };
     }
-
-    if (!res.ok) {
-      return { ok: false, message: `Erro ${res.status} ao iniciar atualização.` };
-    }
     const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, message: data?.message || data?.error || `Erro ${res.status} ao iniciar atualização.` };
+    }
     return { ok: true, ...data };
-  } catch (e: any) {
+  } catch {
     return { ok: false, message: "Atualização disponível apenas na instalação local (servidor Ubuntu)." };
   }
 }
