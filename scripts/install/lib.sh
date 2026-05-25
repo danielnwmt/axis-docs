@@ -674,6 +674,7 @@ generate_jwt_keys() {
   log "Gerando chaves JWT"
 
   JWT_SECRET=$(openssl rand -hex 32)
+  CERT_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
   # Gera anon key (JWT com role=anon)
   ANON_KEY=$(node -e "
