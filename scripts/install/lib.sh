@@ -476,6 +476,58 @@ ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS updated_at timestampt
 ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS updated_by uuid;
 ALTER TABLE public.license_config ENABLE ROW LEVEL SECURITY;
 
+-- Tabelas de backup
+CREATE TABLE IF NOT EXISTS public.backup_settings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  retention_days integer NOT NULL DEFAULT 5,
+  drive_folder_id text,
+  auto_cleanup boolean NOT NULL DEFAULT true,
+  schedule_time time NOT NULL DEFAULT '02:00:00',
+  schedule_enabled boolean NOT NULL DEFAULT false,
+  last_scheduled_run date,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid
+);
+ALTER TABLE public.backup_settings ADD COLUMN IF NOT EXISTS retention_days integer NOT NULL DEFAULT 5;
+ALTER TABLE public.backup_settings ADD COLUMN IF NOT EXISTS drive_folder_id text;
+ALTER TABLE public.backup_settings ADD COLUMN IF NOT EXISTS auto_cleanup boolean NOT NULL DEFAULT true;
+ALTER TABLE public.backup_settings ADD COLUMN IF NOT EXISTS schedule_time time NOT NULL DEFAULT '02:00:00';
+ALTER TABLE public.backup_settings ADD COLUMN IF NOT EXISTS schedule_enabled boolean NOT NULL DEFAULT false;
+ALTER TABLE public.backup_settings ADD COLUMN IF NOT EXISTS last_scheduled_run date;
+ALTER TABLE public.backup_settings ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.backup_settings ADD COLUMN IF NOT EXISTS updated_by uuid;
+ALTER TABLE public.backup_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.backup_files (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  drive_file_id text NOT NULL,
+  drive_link text,
+  file_name text NOT NULL,
+  file_size bigint DEFAULT 0,
+  retention_days integer NOT NULL DEFAULT 5,
+  expires_at timestamptz NOT NULL,
+  deleted_at timestamptz,
+  created_by uuid,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  sha256 text DEFAULT '',
+  encrypted boolean NOT NULL DEFAULT false,
+  encryption_algo text DEFAULT ''
+);
+ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS drive_file_id text;
+ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS drive_link text;
+ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS file_name text;
+ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS file_size bigint DEFAULT 0;
+ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS retention_days integer NOT NULL DEFAULT 5;
+ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS expires_at timestamptz;
+ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS created_by uuid;
+ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS sha256 text DEFAULT '';
+ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS encrypted boolean NOT NULL DEFAULT false;
+ALTER TABLE public.backup_files ADD COLUMN IF NOT EXISTS encryption_algo text DEFAULT '';
+ALTER TABLE public.backup_files ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_backup_files_expires ON public.backup_files (expires_at) WHERE deleted_at IS NULL;
+
 -- Funções
 CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role text)
 RETURNS boolean
@@ -617,6 +669,40 @@ DO $$ BEGIN
     CREATE POLICY "Admins update license config" ON public.license_config
       FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'Administrador'));
   END IF;
+
+  -- Backup Settings
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins read backup settings' AND tablename = 'backup_settings') THEN
+    CREATE POLICY "Admins read backup settings" ON public.backup_settings
+      FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Administrador'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins insert backup settings' AND tablename = 'backup_settings') THEN
+    CREATE POLICY "Admins insert backup settings" ON public.backup_settings
+      FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'Administrador'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins update backup settings' AND tablename = 'backup_settings') THEN
+    CREATE POLICY "Admins update backup settings" ON public.backup_settings
+      FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'Administrador'))
+      WITH CHECK (has_role(auth.uid(), 'Administrador'));
+  END IF;
+
+  -- Backup Files
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins read backup files' AND tablename = 'backup_files') THEN
+    CREATE POLICY "Admins read backup files" ON public.backup_files
+      FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Administrador'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins insert backup files' AND tablename = 'backup_files') THEN
+    CREATE POLICY "Admins insert backup files" ON public.backup_files
+      FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'Administrador'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins update backup files' AND tablename = 'backup_files') THEN
+    CREATE POLICY "Admins update backup files" ON public.backup_files
+      FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'Administrador'))
+      WITH CHECK (has_role(auth.uid(), 'Administrador'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins delete backup files' AND tablename = 'backup_files') THEN
+    CREATE POLICY "Admins delete backup files" ON public.backup_files
+      FOR DELETE TO authenticated USING (has_role(auth.uid(), 'Administrador'));
+  END IF;
 END $$;
 
 -- Dados padrão: idempotente mesmo em instalações locais antigas
@@ -639,6 +725,10 @@ FROM (VALUES
   ('Licitações'), ('Controle Interno'), ('Tributos'), ('Agricultura')
 ) AS v(name)
 WHERE NOT EXISTS (SELECT 1 FROM public.units u WHERE lower(u.name) = lower(v.name));
+
+INSERT INTO public.backup_settings (retention_days, auto_cleanup)
+SELECT 5, true
+WHERE NOT EXISTS (SELECT 1 FROM public.backup_settings);
 APPSQL
 
   # Permissões do owner
@@ -651,6 +741,8 @@ APPSQL
   sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.documents OWNER TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.audit_logs OWNER TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.license_config OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.backup_settings OWNER TO $PG_USER;" 2>/dev/null || true
+  sudo -u postgres psql -d "$PG_DB" -c "ALTER TABLE public.backup_files OWNER TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO $PG_USER;" 2>/dev/null || true
   sudo -u postgres psql -d "$PG_DB" -c "GRANT ALL ON ALL ROUTINES IN SCHEMA public TO $PG_USER;" 2>/dev/null || true
