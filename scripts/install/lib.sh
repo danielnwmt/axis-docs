@@ -2028,6 +2028,268 @@ async function changeCertificatePassword(req, res, claims) {
   });
 }
 
+// ============ Backup / Restore (local) ============
+const SETTINGS_DIR = path.join(STORAGE_DIR, "settings");
+
+function backupKey() {
+  const secret = process.env.CERT_ENCRYPTION_KEY || "";
+  if (!secret) throw new Error("CERT_ENCRYPTION_KEY não configurado.");
+  return crypto.createHash("sha256").update(secret).digest();
+}
+function sha256Hex(s) { return crypto.createHash("sha256").update(s).digest("hex"); }
+function encryptBackupPayload(plain) {
+  const key = backupKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const ct = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  const sha256 = sha256Hex(plain);
+  const envelope = JSON.stringify({
+    axisdocs_backup: true, encrypted: true, algo: "AES-256-GCM",
+    iv: iv.toString("base64"),
+    data: Buffer.concat([ct, tag]).toString("base64"),
+    sha256, generated_at: new Date().toISOString(),
+  }, null, 2);
+  return { envelope, sha256 };
+}
+function decryptBackupPayload(input) {
+  if (!input || typeof input !== "object") throw new Error("Backup inválido");
+  if (!input.encrypted) return input;
+  if (input.algo !== "AES-256-GCM") throw new Error("Algoritmo não suportado");
+  const key = backupKey();
+  const iv = Buffer.from(input.iv, "base64");
+  const raw = Buffer.from(input.data, "base64");
+  const ct = raw.slice(0, raw.length - 16);
+  const tag = raw.slice(raw.length - 16);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+  const plain = Buffer.concat([decipher.update(ct), decipher.final()]).toString("utf8");
+  if (input.sha256 && input.sha256 !== sha256Hex(plain)) throw new Error("Integridade falhou: SHA-256 não confere.");
+  return JSON.parse(plain);
+}
+
+async function buildBackupJson(db) {
+  const tables = ["profiles","audit_logs","documents","categories","units","backup_settings","backup_files","license_config"];
+  const out = { version: 2, generated_at: new Date().toISOString() };
+  for (const t of tables) {
+    const r = await db.query(`SELECT * FROM public.${t}`);
+    out[t] = r.rows;
+  }
+  const au = await db.query("SELECT id, email, email_confirmed_at, created_at FROM auth.users");
+  out.auth_users = au.rows;
+  const settingsFiles = [];
+  try {
+    if (fs.existsSync(SETTINGS_DIR)) {
+      for (const f of fs.readdirSync(SETTINGS_DIR)) {
+        try { settingsFiles.push({ name: f, content: fs.readFileSync(path.join(SETTINGS_DIR, f), "utf8") }); } catch {}
+      }
+    }
+  } catch {}
+  out.settings_files = settingsFiles;
+  return out;
+}
+
+async function uploadEnvelopeToDrive(token, folderId, fileName, envelope) {
+  const boundary = `b${Date.now()}`;
+  const meta = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: fileName, parents: [folderId] })}\r\n`);
+  const med = Buffer.from(`--${boundary}\r\nContent-Type: application/json\r\n\r\n`);
+  const end = Buffer.from(`\r\n--${boundary}--`);
+  const bodyBuf = Buffer.concat([meta, med, Buffer.from(envelope, "utf8"), end]);
+  const up = await httpRequest("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,size&supportsAllDrives=true", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}`, "Content-Length": bodyBuf.length },
+    body: bodyBuf,
+  });
+  if (up.status >= 300) throw new Error(`Drive upload falhou: ${up.body.toString()}`);
+  return JSON.parse(up.body.toString());
+}
+async function deleteDriveFileById(token, fileId) {
+  const r = await httpRequest(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${token}` },
+  });
+  return r.status < 300 || r.status === 404;
+}
+
+async function performDriveBackup(db, createdBy) {
+  const sRes = await db.query("SELECT * FROM public.backup_settings ORDER BY updated_at DESC LIMIT 1");
+  const settings = sRes.rows[0] || null;
+  const retentionDays = Math.max(1, Number(settings?.retention_days || 5));
+  const cfg = loadDriveConfig();
+  if (!cfg?.serviceAccount?.client_email) throw new Error("Google Drive não configurado.");
+  if (!cfg.rootFolderId) throw new Error("Pasta raiz do Google Drive não configurada.");
+  const token = await getGoogleAccessToken(cfg.serviceAccount);
+  const rootId = extractFolderId(cfg.rootFolderId);
+  const backupsFolderId = settings?.drive_folder_id || await findOrCreateFolder(token, "Backups", rootId);
+  if (!settings?.drive_folder_id && settings?.id) {
+    await db.query("UPDATE public.backup_settings SET drive_folder_id=$1, updated_at=now() WHERE id=$2", [backupsFolderId, settings.id]);
+  }
+  const backup = await buildBackupJson(db);
+  const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const fileName = `axisdocs-backup-${ts}.enc.json`;
+  const { envelope, sha256 } = encryptBackupPayload(JSON.stringify(backup));
+  const driveFile = await uploadEnvelopeToDrive(token, backupsFolderId, fileName, envelope);
+  const expiresAt = new Date(Date.now() + retentionDays * 86400000).toISOString();
+  const ins = await db.query(
+    `INSERT INTO public.backup_files (drive_file_id, drive_link, file_name, file_size, retention_days, expires_at, created_by, sha256, encrypted, encryption_algo)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,'AES-256-GCM') RETURNING *`,
+    [driveFile.id, driveFile.webViewLink, driveFile.name, Number(driveFile.size || envelope.length), retentionDays, expiresAt, createdBy, sha256]
+  );
+  return { row: ins.rows[0], fileName, retentionDays };
+}
+
+async function runBackupCleanup(db, userId, userEmail) {
+  const sRes = await db.query("SELECT * FROM public.backup_settings ORDER BY updated_at DESC LIMIT 1");
+  const settings = sRes.rows[0];
+  if (settings && settings.auto_cleanup === false) return { success: true, deleted: 0, skipped: "auto_cleanup disabled" };
+  const exp = await db.query("SELECT * FROM public.backup_files WHERE deleted_at IS NULL AND expires_at <= now()");
+  if (!exp.rows.length) return { success: true, deleted: 0 };
+  let token;
+  try {
+    const cfg = loadDriveConfig();
+    if (!cfg?.serviceAccount?.client_email) throw new Error("Google Drive não configurado.");
+    token = await getGoogleAccessToken(cfg.serviceAccount);
+  } catch (e) { return { success: false, error: e.message }; }
+  let deleted = 0;
+  for (const row of exp.rows) {
+    try {
+      await deleteDriveFileById(token, row.drive_file_id);
+      await db.query("UPDATE public.backup_files SET deleted_at=now() WHERE id=$1", [row.id]);
+      deleted++;
+    } catch (e) { console.warn("[cleanup]", row.drive_file_id, e.message); }
+  }
+  await db.query(
+    `INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+     VALUES ($1,$2,'Limpeza automática de backups','backup','google-drive',$3)`,
+    [userId || "00000000-0000-0000-0000-000000000000", userEmail || "system@cron", `${deleted} arquivo(s) expirado(s) removido(s).`]
+  );
+  return { success: true, deleted };
+}
+
+async function backupRestore(req, res, claims) {
+  const url = new URL(req.url, "http://localhost");
+  const action = url.searchParams.get("action");
+  if (!(await requireAdmin(claims))) return json(res, 403, { error: "Apenas administradores" });
+
+  return withDb(async (db) => {
+    const ue = await db.query("SELECT email FROM auth.users WHERE id=$1", [claims.sub]);
+    const userEmail = (ue.rows[0] && ue.rows[0].email) || "";
+
+    if (action === "export") {
+      const backup = await buildBackupJson(db);
+      const { envelope, sha256 } = encryptBackupPayload(JSON.stringify(backup));
+      await db.query(
+        `INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+         VALUES ($1,$2,'Backup exportado (cifrado)','backup','sistema',$3)`,
+        [claims.sub, userEmail, `${backup.profiles.length} perfis, ${backup.documents.length} documentos. SHA-256=${sha256.slice(0,16)}…`]
+      );
+      res.writeHead(200, { ...CORS, "Content-Type": "application/json" });
+      return res.end(envelope);
+    }
+
+    if (action === "export-to-drive") {
+      const result = await performDriveBackup(db, claims.sub);
+      await db.query(
+        `INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+         VALUES ($1,$2,'Backup cifrado enviado ao Google Drive','backup',$3,$4)`,
+        [claims.sub, userEmail, result.fileName, `Retenção: ${result.retentionDays} dias.`]
+      );
+      return json(res, 200, { success: true, file: result.row });
+    }
+
+    if (action === "import") {
+      const body = await readJsonBody(req);
+      let backup;
+      try { backup = decryptBackupPayload(body?.backup); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+      const stats = { profiles:0, audit_logs:0, documents:0, categories:0, units:0, backup_settings:0, backup_files:0, license_config:0, settings_files:0 };
+      const upsertRow = async (table, row) => {
+        const cols = Object.keys(row);
+        const vals = cols.map((_, i) => `$${i + 1}`).join(",");
+        const updates = cols.filter(c => c !== "id").map(c => `${c}=EXCLUDED.${c}`).join(",");
+        const sql = `INSERT INTO public.${table} (${cols.join(",")}) VALUES (${vals})
+                     ON CONFLICT (id) DO UPDATE SET ${updates || "id=EXCLUDED.id"}`;
+        await db.query(sql, cols.map(c => row[c]));
+      };
+      const order = ["categories","units","profiles","documents","audit_logs","backup_settings","backup_files","license_config"];
+      for (const t of order) {
+        const rows = backup[t];
+        if (!Array.isArray(rows)) continue;
+        for (const r of rows) {
+          try { await upsertRow(t, r); stats[t]++; } catch (e) { console.warn("[import]", t, e.message); }
+        }
+      }
+      if (Array.isArray(backup.settings_files)) {
+        try { fs.mkdirSync(SETTINGS_DIR, { recursive: true }); } catch {}
+        for (const f of backup.settings_files) {
+          try { fs.writeFileSync(path.join(SETTINGS_DIR, f.name), f.content); stats.settings_files++; } catch {}
+        }
+      }
+      await db.query(
+        `INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+         VALUES ($1,$2,'Backup restaurado','restore','sistema',$3)`,
+        [claims.sub, userEmail, JSON.stringify(stats)]
+      );
+      return json(res, 200, { success: true, stats });
+    }
+
+    if (action === "cleanup-now") {
+      const r = await runBackupCleanup(db, claims.sub, userEmail);
+      return json(res, 200, r);
+    }
+
+    if (action === "delete-drive-backup") {
+      const body = await readJsonBody(req);
+      const r = await db.query("SELECT * FROM public.backup_files WHERE id=$1", [body.id]);
+      const row = r.rows[0];
+      if (!row) return json(res, 404, { error: "Backup não encontrado" });
+      try {
+        const cfg = loadDriveConfig();
+        if (cfg?.serviceAccount?.client_email) {
+          const token = await getGoogleAccessToken(cfg.serviceAccount);
+          await deleteDriveFileById(token, row.drive_file_id);
+        }
+      } catch (e) { console.warn("[delete-drive-backup]", e.message); }
+      await db.query("UPDATE public.backup_files SET deleted_at=now() WHERE id=$1", [body.id]);
+      await db.query(
+        `INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target)
+         VALUES ($1,$2,'Backup excluído do Google Drive','backup',$3)`,
+        [claims.sub, userEmail, row.file_name]
+      );
+      return json(res, 200, { success: true });
+    }
+
+    return json(res, 400, { error: "Ação inválida" });
+  });
+}
+
+// Agendador interno: verifica a cada 10 min se deve rodar backup agendado
+async function scheduledBackupTick() {
+  try {
+    await withDb(async (db) => {
+      const r = await db.query("SELECT * FROM public.backup_settings ORDER BY updated_at DESC LIMIT 1");
+      const s = r.rows[0];
+      if (!s || !s.schedule_enabled) return;
+      const nowUtc = new Date();
+      const sp = new Date(nowUtc.getTime() - 3 * 3600000);
+      const today = sp.toISOString().slice(0, 10);
+      const hr = sp.getUTCHours();
+      const schedHr = Number(String(s.schedule_time || "02:00:00").split(":")[0]);
+      if (hr !== schedHr) return;
+      if (s.last_scheduled_run && new Date(s.last_scheduled_run).toISOString().slice(0,10) === today) return;
+      const result = await performDriveBackup(db, "00000000-0000-0000-0000-000000000000");
+      await db.query("UPDATE public.backup_settings SET last_scheduled_run=$1, updated_at=now() WHERE id=$2", [today, s.id]);
+      await db.query(
+        `INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+         VALUES ('00000000-0000-0000-0000-000000000000','system@cron','Backup automático agendado','backup',$1,$2)`,
+        [result.fileName, `Horário ${s.schedule_time}. Retenção: ${result.retentionDays} dias.`]
+      );
+      await runBackupCleanup(db);
+    });
+  } catch (e) { console.warn("[scheduled-backup]", e.message); }
+}
+setInterval(scheduledBackupTick, 10 * 60 * 1000);
+setTimeout(scheduledBackupTick, 30 * 1000);
+
 async function handle(req, res) {
   if (req.method === "OPTIONS") { res.writeHead(204, CORS); return res.end(); }
   const url = new URL(req.url, "http://localhost");
@@ -2049,6 +2311,7 @@ async function handle(req, res) {
     if (fnPath === "system-update" && req.method === "POST") return await systemUpdate(req, res, claims);
     if (fnPath === "upload-certificate" && req.method === "POST") return await uploadCertificate(req, res, claims);
     if (fnPath === "change-certificate-password" && req.method === "POST") return await changeCertificatePassword(req, res, claims);
+    if (fnPath === "backup-restore" && req.method === "POST") return await backupRestore(req, res, claims);
     return json(res, 404, { error: `Função '${fnPath}' não disponível na instalação local` });
   } catch (e) {
     console.error("[FUNCTION ERROR]", fnPath, e);
