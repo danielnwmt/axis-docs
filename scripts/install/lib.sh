@@ -2782,6 +2782,24 @@ else
   rm -rf "$TMP_BACKUP"
 fi
 
+# Auto-substituição: regenera o próprio update.sh a partir do lib.sh mais recente e re-executa
+if [ -z "${AXISDOCS_UPDATE_REENTRY:-}" ] && [ -f "$APP_DIR/scripts/install/lib.sh" ]; then
+  echo "➡️  Regenerando update.sh a partir do lib.sh atualizado..."
+  (
+    set +u
+    APP_DIR="$APP_DIR"
+    # shellcheck disable=SC1090
+    source "$APP_DIR/scripts/install/lib.sh"
+    write_update_script
+  ) || echo "⚠️  Falha ao regenerar update.sh (continuando com versão atual)"
+  if [ -x "$APP_DIR/update.sh" ]; then
+    echo "➡️  Re-executando update.sh atualizado..."
+    AXISDOCS_UPDATE_REENTRY=1 exec bash "$APP_DIR/update.sh"
+  fi
+fi
+
+
+
 # Determina URL da API local
 if [ -n "${APP_DOMAIN:-}" ]; then
   if [ -d /etc/letsencrypt/live/"$APP_DOMAIN" ]; then
