@@ -9,6 +9,7 @@ PG_DB="axisdocs"
 PG_USER="axisdocs"
 PG_PASS=""
 JWT_SECRET=""
+CERT_ENCRYPTION_KEY=""
 ANON_KEY=""
 SERVICE_KEY=""
 ADMIN_EMAIL=""
@@ -673,6 +674,7 @@ generate_jwt_keys() {
   log "Gerando chaves JWT"
 
   JWT_SECRET=$(openssl rand -hex 32)
+  CERT_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
   # Gera anon key (JWT com role=anon)
   ANON_KEY=$(node -e "
@@ -1446,9 +1448,12 @@ install_local_functions() {
 
   mkdir -p /opt/axisdocs-functions
 
-  # Garante dependências do auth-server reaproveitáveis (pg, crypto nativo)
+  # Garante dependências do auth-server reaproveitáveis (pg, node-forge para certificados A1)
   if [ ! -d /opt/axisdocs-auth/node_modules/pg ]; then
     cd /opt/axisdocs-auth && npm install pg --no-fund --no-audit >/dev/null 2>&1 || true
+  fi
+  if [ ! -d /opt/axisdocs-auth/node_modules/node-forge ]; then
+    cd /opt/axisdocs-auth && npm install node-forge@1.3.1 --no-fund --no-audit >/dev/null 2>&1 || true
   fi
   ln -sfn /opt/axisdocs-auth/node_modules /opt/axisdocs-functions/node_modules
 
@@ -1893,6 +1898,136 @@ async function systemUpdate(req, res, claims) {
   }
 }
 
+// ============ Certificados Digitais A1 (ICP-Brasil) ============
+const forge = require("node-forge");
+const CERT_ENC_KEY = (() => {
+  const raw = process.env.CERT_ENCRYPTION_KEY || "";
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, "hex");
+  return Buffer.alloc(32);
+})();
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", (c) => { data += c; if (data.length > 50 * 1024 * 1024) reject(new Error("Payload muito grande")); });
+    req.on("end", () => { try { resolve(JSON.parse(data || "{}")); } catch (e) { reject(e); } });
+    req.on("error", reject);
+  });
+}
+
+function aesGcmEncrypt(plain) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", CERT_ENC_KEY, iv);
+  const ct = Buffer.concat([cipher.update(plain), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return { ct, iv, tag };
+}
+
+function aesGcmDecrypt(ct, iv, tag) {
+  const decipher = crypto.createDecipheriv("aes-256-gcm", CERT_ENC_KEY, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ct), decipher.final()]);
+}
+
+async function uploadCertificate(req, res, claims) {
+  const body = await readJsonBody(req);
+  const { pfxBase64, password } = body;
+  if (!pfxBase64 || !password) return json(res, 400, { error: "Arquivo e senha são obrigatórios" });
+
+  const pfxBytes = Buffer.from(pfxBase64, "base64");
+  let cert;
+  try {
+    const bin = pfxBytes.toString("binary");
+    const p12Asn1 = forge.asn1.fromDer(bin);
+    const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, password);
+    const bags = p12.getBags({ bagType: forge.pki.oids.certBag });
+    cert = bags[forge.pki.oids.certBag] && bags[forge.pki.oids.certBag][0] && bags[forge.pki.oids.certBag][0].cert;
+    if (!cert) throw new Error("Certificado não encontrado no arquivo");
+  } catch (e) {
+    return json(res, 400, { error: "Senha incorreta ou arquivo .pfx inválido" });
+  }
+
+  const subjectCn = (cert.subject.getField("CN") || {}).value || "";
+  const issuerCn = (cert.issuer.getField("CN") || {}).value || "";
+  const validFrom = cert.validity.notBefore.toISOString();
+  const validTo = cert.validity.notAfter.toISOString();
+  const subjectStr = cert.subject.attributes.map((a) => `${a.shortName}=${a.value}`).join(", ");
+  const cpfMatch = subjectStr.match(/\b(\d{11})\b/) || subjectStr.match(/:(\d{11})/);
+  const cpf = cpfMatch ? cpfMatch[1] : "";
+  const certDer = forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes();
+  const fingerprint = crypto.createHash("sha256").update(Buffer.from(certDer, "binary")).digest("hex").match(/.{2}/g).join(":");
+
+  const { ct, iv, tag } = aesGcmEncrypt(pfxBytes);
+
+  return withDb(async (db) => {
+    await db.query(
+      `INSERT INTO public.user_certificates (user_id, pfx_encrypted, pfx_iv, pfx_auth_tag, subject_cn, cpf, issuer, valid_from, valid_to, fingerprint_sha256, uploaded_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now(), now())
+       ON CONFLICT (user_id) DO UPDATE SET
+         pfx_encrypted=EXCLUDED.pfx_encrypted, pfx_iv=EXCLUDED.pfx_iv, pfx_auth_tag=EXCLUDED.pfx_auth_tag,
+         subject_cn=EXCLUDED.subject_cn, cpf=EXCLUDED.cpf, issuer=EXCLUDED.issuer,
+         valid_from=EXCLUDED.valid_from, valid_to=EXCLUDED.valid_to,
+         fingerprint_sha256=EXCLUDED.fingerprint_sha256, uploaded_at=now(), updated_at=now()`,
+      [claims.sub, ct, iv, tag, subjectCn, cpf, issuerCn, validFrom, validTo, fingerprint]
+    );
+    const ue = await db.query("SELECT email FROM auth.users WHERE id=$1", [claims.sub]);
+    await db.query(
+      `INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+       VALUES ($1,$2,'Certificado A1 ICP-Brasil cadastrado','edit',$1,$3)`,
+      [claims.sub, ue.rows[0] && ue.rows[0].email || "", JSON.stringify({ subject_cn: subjectCn, cpf, issuer: issuerCn, valid_to: validTo, fingerprint })]
+    );
+    return json(res, 200, { ok: true, subject_cn: subjectCn, cpf, issuer: issuerCn, valid_from: validFrom, valid_to: validTo, fingerprint_sha256: fingerprint });
+  });
+}
+
+async function changeCertificatePassword(req, res, claims) {
+  const body = await readJsonBody(req);
+  const { currentPassword, newPassword } = body;
+  if (!currentPassword || !newPassword) return json(res, 400, { error: "Senha atual e nova são obrigatórias" });
+  if (newPassword.length < 4) return json(res, 400, { error: "A nova senha deve ter pelo menos 4 caracteres" });
+
+  return withDb(async (db) => {
+    const r = await db.query("SELECT pfx_encrypted, pfx_iv, pfx_auth_tag FROM public.user_certificates WHERE user_id=$1", [claims.sub]);
+    if (!r.rows[0]) return json(res, 404, { error: "Certificado não encontrado" });
+    const pfxBytes = aesGcmDecrypt(r.rows[0].pfx_encrypted, r.rows[0].pfx_iv, r.rows[0].pfx_auth_tag);
+
+    let certObj, keyObj;
+    try {
+      const bin = pfxBytes.toString("binary");
+      const p12Asn1 = forge.asn1.fromDer(bin);
+      const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, currentPassword);
+      const certBags = p12.getBags({ bagType: forge.pki.oids.certBag });
+      certObj = certBags[forge.pki.oids.certBag] && certBags[forge.pki.oids.certBag][0] && certBags[forge.pki.oids.certBag][0].cert;
+      const keyBags = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag });
+      keyObj = (keyBags[forge.pki.oids.pkcs8ShroudedKeyBag] || [])[0] && keyBags[forge.pki.oids.pkcs8ShroudedKeyBag][0].key;
+      if (!keyObj) {
+        const kb2 = p12.getBags({ bagType: forge.pki.oids.keyBag });
+        keyObj = (kb2[forge.pki.oids.keyBag] || [])[0] && kb2[forge.pki.oids.keyBag][0].key;
+      }
+      if (!certObj || !keyObj) throw new Error("Cert ou chave não encontrados");
+    } catch {
+      return json(res, 400, { error: "Senha atual incorreta" });
+    }
+
+    const newAsn1 = forge.pkcs12.toPkcs12Asn1(keyObj, [certObj], newPassword, { algorithm: "3des" });
+    const newBin = forge.asn1.toDer(newAsn1).getBytes();
+    const newBytes = Buffer.from(newBin, "binary");
+    const enc = aesGcmEncrypt(newBytes);
+
+    await db.query(
+      "UPDATE public.user_certificates SET pfx_encrypted=$1, pfx_iv=$2, pfx_auth_tag=$3, updated_at=now() WHERE user_id=$4",
+      [enc.ct, enc.iv, enc.tag, claims.sub]
+    );
+    const ue = await db.query("SELECT email FROM auth.users WHERE id=$1", [claims.sub]);
+    await db.query(
+      `INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+       VALUES ($1,$2,'Senha do certificado A1 alterada','edit',$1,'Re-encriptação do .pfx com nova senha')`,
+      [claims.sub, ue.rows[0] && ue.rows[0].email || ""]
+    );
+    return json(res, 200, { ok: true });
+  });
+}
+
 async function handle(req, res) {
   if (req.method === "OPTIONS") { res.writeHead(204, CORS); return res.end(); }
   const url = new URL(req.url, "http://localhost");
@@ -1912,6 +2047,8 @@ async function handle(req, res) {
     if (fnPath === "validate-license" && req.method === "POST") return await validateLicense(req, res, claims);
     if (fnPath === "license-temp-unlock" && req.method === "POST") return await licenseTempUnlock(req, res, claims);
     if (fnPath === "system-update" && req.method === "POST") return await systemUpdate(req, res, claims);
+    if (fnPath === "upload-certificate" && req.method === "POST") return await uploadCertificate(req, res, claims);
+    if (fnPath === "change-certificate-password" && req.method === "POST") return await changeCertificatePassword(req, res, claims);
     return json(res, 404, { error: `Função '${fnPath}' não disponível na instalação local` });
   } catch (e) {
     console.error("[FUNCTION ERROR]", fnPath, e);
@@ -1936,6 +2073,7 @@ Restart=always
 RestartSec=5
 Environment=JWT_SECRET=$JWT_SECRET
 Environment=DATABASE_URL=postgres://$PG_USER:$PG_PASS@localhost:5432/$PG_DB
+Environment=CERT_ENCRYPTION_KEY=$CERT_ENCRYPTION_KEY
 WorkingDirectory=/opt/axisdocs-functions
 
 [Install]
