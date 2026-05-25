@@ -383,15 +383,27 @@ async function runCleanup(admin: any, userId?: string, userEmail?: string) {
   return json({ success: true, deleted });
 }
 
+async function resolveBackupFolder(admin: any, token: string, settings: any, rootId: string): Promise<string> {
+  let baseId = settings?.drive_folder_id;
+  if (!baseId) {
+    baseId = await ensureFolder(token, "AxisDocs-Backups", rootId);
+    if (settings?.id) {
+      await admin.from("backup_settings").update({ drive_folder_id: baseId, updated_at: new Date().toISOString() }).eq("id", settings.id);
+    }
+  }
+  const sp = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const year = String(sp.getUTCFullYear());
+  const month = String(sp.getUTCMonth() + 1).padStart(2, "0");
+  const yearId = await ensureFolder(token, year, baseId);
+  return await ensureFolder(token, month, yearId);
+}
+
 async function performDriveBackup(admin: any, settings: any, createdBy: string) {
   const retentionDays = Math.max(1, Number(settings?.retention_days || 5));
   const cfg = await loadDriveConfig(admin);
   const token = await getDriveToken(cfg.serviceAccount);
   const rootId = extractFolderId(cfg.rootFolderId);
-  const backupsFolderId = settings?.drive_folder_id || await ensureFolder(token, "Backups", rootId);
-  if (!settings?.drive_folder_id && settings?.id) {
-    await admin.from("backup_settings").update({ drive_folder_id: backupsFolderId, updated_at: new Date().toISOString() }).eq("id", settings.id);
-  }
+  const backupsFolderId = await resolveBackupFolder(admin, token, settings, rootId);
   const backup = await buildBackupJson(admin);
   const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
   const fileName = `axisdocs-backup-${ts}.enc.json`;
