@@ -458,3 +458,47 @@ BEGIN
   INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
   VALUES (_uid, COALESCE(_email,''), 'Titulares notificados sobre incidente LGPD', 'other', _incident_id::text, 'Art. 48 LGPD');
 END; $$;
+
+-- =========================================================================
+-- USER CERTIFICATES (ICP-Brasil A1 .pfx criptografado)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS public.user_certificates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL UNIQUE,
+  pfx_encrypted bytea NOT NULL,
+  pfx_iv bytea NOT NULL,
+  pfx_auth_tag bytea NOT NULL,
+  subject_cn text NOT NULL DEFAULT '',
+  cpf text NOT NULL DEFAULT '',
+  issuer text NOT NULL DEFAULT '',
+  valid_from timestamptz,
+  valid_to timestamptz,
+  fingerprint_sha256 text NOT NULL DEFAULT '',
+  signature_logo text,
+  signature_logo_size_pct integer NOT NULL DEFAULT 22,
+  uploaded_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.user_certificates ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users read own certificate metadata" ON public.user_certificates;
+CREATE POLICY "Users read own certificate metadata" ON public.user_certificates
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id OR has_role(auth.uid(), 'Administrador'));
+
+DROP POLICY IF EXISTS "Users insert own certificate" ON public.user_certificates;
+CREATE POLICY "Users insert own certificate" ON public.user_certificates
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users update own certificate" ON public.user_certificates;
+CREATE POLICY "Users update own certificate" ON public.user_certificates
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users delete own certificate" ON public.user_certificates;
+CREATE POLICY "Users delete own certificate" ON public.user_certificates
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
