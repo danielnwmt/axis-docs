@@ -1448,9 +1448,12 @@ install_local_functions() {
 
   mkdir -p /opt/axisdocs-functions
 
-  # Garante dependências do auth-server reaproveitáveis (pg, crypto nativo)
+  # Garante dependências do auth-server reaproveitáveis (pg, node-forge para certificados A1)
   if [ ! -d /opt/axisdocs-auth/node_modules/pg ]; then
     cd /opt/axisdocs-auth && npm install pg --no-fund --no-audit >/dev/null 2>&1 || true
+  fi
+  if [ ! -d /opt/axisdocs-auth/node_modules/node-forge ]; then
+    cd /opt/axisdocs-auth && npm install node-forge@1.3.1 --no-fund --no-audit >/dev/null 2>&1 || true
   fi
   ln -sfn /opt/axisdocs-auth/node_modules /opt/axisdocs-functions/node_modules
 
