@@ -2899,8 +2899,9 @@ ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS storage_limit_gb nume
 ALTER TABLE public.license_config ADD COLUMN IF NOT EXISTS storage_used_bytes bigint NOT NULL DEFAULT 0;
 ALTER TABLE public.license_config ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins read license config' AND tablename = 'license_config') THEN
-    CREATE POLICY "Admins read license config" ON public.license_config FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Administrador'));
+  DROP POLICY IF EXISTS "Admins read license config" ON public.license_config;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Authenticated read license config' AND tablename = 'license_config') THEN
+    CREATE POLICY "Authenticated read license config" ON public.license_config FOR SELECT TO authenticated USING (true);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins insert license config' AND tablename = 'license_config') THEN
     CREATE POLICY "Admins insert license config" ON public.license_config FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'Administrador'));
