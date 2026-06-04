@@ -22,8 +22,8 @@ Deno.serve(async (req) => {
     let actorEmail = "system@cron";
 
     if (!isCron && !authHeader) {
-      // pg_cron chamando via apikey anon (sem Authorization) — aceita como cron
-      isCron = true;
+      // Reject unauthenticated requests — never treat missing auth as cron
+      return json({ error: "Unauthorized" }, 401);
     } else if (!isCron) {
       const userClient = createClient(
         Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!,
