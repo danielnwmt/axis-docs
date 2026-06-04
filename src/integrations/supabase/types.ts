@@ -593,6 +593,21 @@ export type Database = {
     }
     Functions: {
       anonymize_user: { Args: { _target: string }; Returns: undefined }
+      get_license_status_public: {
+        Args: never
+        Returns: {
+          customer_name: string
+          expires_at: string
+          id: string
+          last_check: string
+          message: string
+          status: string
+          storage_limit_gb: number
+          storage_used_bytes: number
+          temp_unlock_until: string
+          updated_at: string
+        }[]
+      }
       get_my_data_export: { Args: never; Returns: Json }
       get_user_unit: { Args: { _user_id: string }; Returns: string }
       has_role: { Args: { _role: string; _user_id: string }; Returns: boolean }

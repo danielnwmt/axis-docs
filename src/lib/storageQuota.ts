@@ -21,12 +21,8 @@ export function formatBytes(bytes: number): string {
 }
 
 export async function getStorageQuota(): Promise<StorageQuota> {
-  const { data: cfg } = await (supabase as any)
-    .from("license_config")
-    .select("storage_limit_gb, storage_used_bytes")
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: rows } = await (supabase as any).rpc("get_license_status_public");
+  const cfg = Array.isArray(rows) ? rows[0] : rows;
 
   const limitGb = Number(cfg?.storage_limit_gb || 0);
   const limitBytes = limitGb > 0 ? Math.floor(limitGb * GB) : 0;
