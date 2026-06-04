@@ -180,14 +180,8 @@ async function loadSignatureLogo(pdfDoc: any, customLogo?: string | null) {
       const img = await embedLogoFromDataUrl(pdfDoc, customLogo);
       if (img) return img;
     }
-    if (customLogo?.startsWith("http")) {
-      const resp = await fetch(customLogo);
-      if (resp.ok) {
-        const contentType = resp.headers.get("content-type") || customLogo;
-        const bytes = new Uint8Array(await resp.arrayBuffer());
-        return /jpe?g/i.test(contentType) ? await pdfDoc.embedJpg(bytes) : await pdfDoc.embedPng(bytes);
-      }
-    }
+    // HTTP(S) URLs are rejected to prevent SSRF. Only data:image/* URLs are accepted above.
+
   } catch (e) { console.warn("custom logo embed failed:", e); }
   const axisPngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAByklEQVR4Xu2bTU7DMBCFv6ogceAAnIAzUA6Am3ACDsAZOAPBIOwAR+AMnIATcAbOQDnRgEJibAfp2HRqO+mXAif4lvX7bWa8yePVaDabzeYKA+faHhr+8PexFwL4AnAFcAYwBfADF8uvEjYBzuIorhNuAQ4B3gC+AzSMAA4BHsZxvN8BuS+AXhzHcZI9dgmvtOiwC3Be/aNOwC7AVF4kMlre7kmAD1HKJT1Ob0fqg4DgEWiFAfZkqkqD4OwSbRiS9g0sB8xYLahSWJx2pgHEeW2tTr0+K6scLwGKI0lFQtJ7SCPtc1Cgp9OFIAXhSg83VEAQjmlRBbEVAAUglxFQbgPgi3gxxFQbQLgqXgxxFQoQPgofcxiKiQAfAMuiJhqAxgcKKIcSkq5DMBF4FvhNBNCiC+CE6KEn+GNiXSAey6BHKG3cALgIuAS4Dsj0pwi9RrkHLcARwGXAH8M0iO9CqL7HTgXeAN4LmDPmBtBciPwReBN4L+AJ4B5gTse+AP4x8d2nYCJ4J8D+jr2KeA34Ami0v/50Ejh/3rsE2A+8bpwC7A2fZMIlc2wdODf2gjuAJ2+1nkl+vjEUHcm2DqJ2B1Y3+IGojz31A8/zNwQAHaHF7wPjqO48J4rDabzVsN8AMhs4oWFKfLPQAAAABJRU5ErkJggg==";
   try {
