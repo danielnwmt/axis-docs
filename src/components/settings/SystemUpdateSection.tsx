@@ -73,7 +73,15 @@ export function SystemUpdateSection() {
       setStatus(data.status as Status);
       toast({ title: "Solicitação enviada", description: "Aguardando resposta da VPS..." });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Erro desconhecido";
+      console.error("[SystemUpdate] insert error:", e);
+      const err = e as { message?: string; details?: string; hint?: string; code?: string } | null;
+      const msg =
+        (e instanceof Error && e.message) ||
+        err?.message ||
+        err?.details ||
+        err?.hint ||
+        (err?.code ? `Código: ${err.code}` : "") ||
+        (typeof e === "string" ? e : JSON.stringify(e));
       toast({ title: "Erro ao solicitar atualização", description: msg, variant: "destructive" });
     } finally {
       setLoading(false);
