@@ -4,8 +4,9 @@
 set -euo pipefail
 
 # === Configuração ===
-PROJECT_DIR="${PROJECT_DIR:-/var/www/axis-docs}"
+PROJECT_DIR="${PROJECT_DIR:-/opt/axisdocs}"
 BRANCH="${BRANCH:-main}"
+REPO_URL="${REPO_URL:-https://github.com/danielnwmt/axis-docs.git}"
 PKG_MANAGER="${PKG_MANAGER:-npm}"          # npm | bun
 RESTART_POSTGREST="${RESTART_POSTGREST:-false}"  # true para reiniciar PostgREST
 NGINX_RELOAD="${NGINX_RELOAD:-true}"
