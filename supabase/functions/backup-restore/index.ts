@@ -341,7 +341,8 @@ Deno.serve(async (req) => {
 
     return json({ error: "Ação inválida" }, 400);
   } catch (error) {
-    return json({ error: (error as Error).message }, 500);
+    console.error("backup-restore error:", error);
+    return json({ error: "Erro interno. Contate o administrador." }, 500);
   }
 });
 

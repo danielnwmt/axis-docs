@@ -92,6 +92,13 @@ Deno.serve(async (req) => {
     const { data: { user } } = await admin.auth.getUser(auth.replace("Bearer ", ""));
     if (!user) return new Response(JSON.stringify({ error: "Token inválido" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    const { data: profile } = await admin.from("profiles").select("role, active").eq("id", user.id).maybeSingle();
+    if (!profile || profile.role !== "Administrador" || !profile.active) {
+      return new Response(JSON.stringify({ error: "Apenas administradores podem consultar uso de armazenamento" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: cfgFile } = await admin.storage.from("settings").download("google-drive-config.json");
     if (!cfgFile) throw new Error("Google Drive não configurado");
     const cfg: GoogleDriveConfig = JSON.parse(await cfgFile.text());
@@ -120,7 +127,8 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: e?.message || String(e) }), {
+    console.error("get-drive-usage error:", e);
+    return new Response(JSON.stringify({ error: "Erro interno. Contate o administrador." }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

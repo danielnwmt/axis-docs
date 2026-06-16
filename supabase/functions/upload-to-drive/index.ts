@@ -210,7 +210,7 @@ Deno.serve(async (req) => {
     if (!uploadRes.ok) {
       const errText = await uploadRes.text();
       console.error("Google Drive upload error:", errText);
-      throw new Error(`Google Drive upload failed [${uploadRes.status}]: ${errText}`);
+      throw new Error("Falha no upload ao Google Drive");
     }
 
     const driveFile = await uploadRes.json();
@@ -244,8 +244,7 @@ Deno.serve(async (req) => {
     );
   } catch (error: unknown) {
     console.error("Error in upload-to-drive:", error);
-    const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: "Falha no upload. Contate o administrador." }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
