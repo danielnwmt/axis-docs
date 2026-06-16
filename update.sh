@@ -19,9 +19,20 @@ trap 'err "Falha na linha $LINENO. Atualização abortada."; exit 1' ERR
 log "Diretório do projeto: $PROJECT_DIR"
 cd "$PROJECT_DIR"
 
+log "Garantindo remote origin = $REPO_URL"
+if git remote get-url origin >/dev/null 2>&1; then
+  git remote set-url origin "$REPO_URL"
+else
+  git remote add origin "$REPO_URL"
+fi
+
 log "Buscando atualizações do GitHub (branch: $BRANCH)..."
 git fetch --all --prune
 git reset --hard "origin/$BRANCH"
+git clean -fd -e .env -e node_modules -e dist
+
+CURRENT_COMMIT=$(git rev-parse --short HEAD)
+log "Commit atual: $CURRENT_COMMIT"
 
 log "Instalando dependências com $PKG_MANAGER..."
 if [ "$PKG_MANAGER" = "bun" ]; then
