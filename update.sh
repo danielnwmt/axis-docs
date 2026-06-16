@@ -4,8 +4,9 @@
 set -euo pipefail
 
 # === Configuração ===
-PROJECT_DIR="${PROJECT_DIR:-/var/www/axis-docs}"
+PROJECT_DIR="${PROJECT_DIR:-/opt/axisdocs}"
 BRANCH="${BRANCH:-main}"
+REPO_URL="${REPO_URL:-https://github.com/danielnwmt/axis-docs.git}"
 PKG_MANAGER="${PKG_MANAGER:-npm}"          # npm | bun
 RESTART_POSTGREST="${RESTART_POSTGREST:-false}"  # true para reiniciar PostgREST
 NGINX_RELOAD="${NGINX_RELOAD:-true}"
@@ -18,15 +19,26 @@ trap 'err "Falha na linha $LINENO. Atualização abortada."; exit 1' ERR
 log "Diretório do projeto: $PROJECT_DIR"
 cd "$PROJECT_DIR"
 
+log "Garantindo remote origin = $REPO_URL"
+if git remote get-url origin >/dev/null 2>&1; then
+  git remote set-url origin "$REPO_URL"
+else
+  git remote add origin "$REPO_URL"
+fi
+
 log "Buscando atualizações do GitHub (branch: $BRANCH)..."
 git fetch --all --prune
 git reset --hard "origin/$BRANCH"
+git clean -fd -e .env -e node_modules -e dist
+
+CURRENT_COMMIT=$(git rev-parse --short HEAD)
+log "Commit atual: $CURRENT_COMMIT"
 
 log "Instalando dependências com $PKG_MANAGER..."
 if [ "$PKG_MANAGER" = "bun" ]; then
   bun install --frozen-lockfile
 else
-  npm ci
+  npm install --no-fund --no-audit
 fi
 
 log "Gerando build de produção..."
@@ -34,6 +46,11 @@ if [ "$PKG_MANAGER" = "bun" ]; then
   bun run build
 else
   npm run build
+fi
+
+if [ ! -f "$PROJECT_DIR/dist/index.html" ]; then
+  err "Build não gerou dist/index.html"
+  exit 1
 fi
 
 if [ "$NGINX_RELOAD" = "true" ]; then

@@ -3,7 +3,7 @@
 # Faz polling na tabela public.system_updates e executa update.sh quando há solicitação pendente.
 set -uo pipefail
 
-PROJECT_DIR="${PROJECT_DIR:-/var/www/axis-docs}"
+PROJECT_DIR="${PROJECT_DIR:-/opt/axisdocs}"
 PG_DB="${PG_DB:-axisdocs}"
 PG_USER="${PG_USER:-axisdocs}"
 POLL_INTERVAL="${POLL_INTERVAL:-10}"

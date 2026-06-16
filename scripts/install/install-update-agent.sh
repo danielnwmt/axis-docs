@@ -3,7 +3,7 @@
 # Uso: sudo bash scripts/install/install-update-agent.sh
 set -euo pipefail
 
-PROJECT_DIR="${PROJECT_DIR:-/var/www/axis-docs}"
+PROJECT_DIR="${PROJECT_DIR:-/opt/axisdocs}"
 PG_DB="${PG_DB:-axisdocs}"
 PG_USER="${PG_USER:-axisdocs}"
 POLL_INTERVAL="${POLL_INTERVAL:-10}"
