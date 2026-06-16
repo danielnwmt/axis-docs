@@ -2720,12 +2720,20 @@ server {
         if (\$request_method = OPTIONS) { return 204; }
     }
 
+    # MIME para módulos ES (.mjs) — necessário para o worker do pdf.js
+    location ~* \.mjs$ {
+        types { } default_type application/javascript;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        try_files \$uri =404;
+    }
+
     # Frontend SPA
     location / {
         try_files \$uri \$uri/ /index.html;
     }
 
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+    location ~* \.(js|mjs|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 30d;
         add_header Cache-Control "public, immutable";
         try_files \$uri =404;
