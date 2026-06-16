@@ -509,6 +509,36 @@ export type Database = {
         }
         Relationships: []
       }
+      system_updates: {
+        Row: {
+          created_at: string
+          id: string
+          message: string | null
+          requested_by: string | null
+          status: string
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          requested_by?: string | null
+          status?: string
+          updated_at?: string
+          version?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          requested_by?: string | null
+          status?: string
+          updated_at?: string
+          version?: string
+        }
+        Relationships: []
+      }
       units: {
         Row: {
           active: boolean
