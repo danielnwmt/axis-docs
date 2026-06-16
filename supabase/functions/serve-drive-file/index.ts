@@ -224,8 +224,7 @@ Deno.serve(async (req) => {
     });
   } catch (error: unknown) {
     console.error("Error in serve-drive-file:", error);
-    const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: "Falha ao acessar arquivo. Contate o administrador." }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

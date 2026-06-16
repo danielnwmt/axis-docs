@@ -26,7 +26,7 @@ function getEncKey(): Uint8Array {
   } catch {
     bytes = new TextEncoder().encode(raw);
   }
-  if (bytes.length < 32) return new Uint8Array(32);
+  if (bytes.length < 32) throw new Error("CERT_ENCRYPTION_KEY ausente ou inválida (mínimo 32 bytes)");
   return bytes.slice(0, 32);
 }
 
@@ -590,7 +590,16 @@ Deno.serve(async (req) => {
 
   } catch (e: any) {
     console.error("sign-pdf-a1 error:", e);
-    return new Response(JSON.stringify({ error: e?.message || "Erro interno" }), {
+    const safeStarts = [
+      "Certificado expirado",
+      "Senha do certificado incorreta",
+      "Você ainda não cadastrou seu certificado",
+      "Arquivo e senha são obrigatórios",
+      "Falha ao descriptografar certificado",
+    ];
+    const msg = String(e?.message || "");
+    const userMsg = safeStarts.some((s) => msg.startsWith(s)) ? msg : "Erro interno. Contate o administrador.";
+    return new Response(JSON.stringify({ error: userMsg }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

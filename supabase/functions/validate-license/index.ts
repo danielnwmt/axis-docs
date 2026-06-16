@@ -61,6 +61,19 @@ Deno.serve(async (req) => {
 
     const admin = createClient(supabaseUrl, serviceKey);
 
+    // Admin-only: license details and writes are restricted to Administrador role
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("role, active")
+      .eq("id", userData.user.id)
+      .maybeSingle();
+    if (!profile || profile.role !== "Administrador" || !profile.active) {
+      return new Response(JSON.stringify({ error: "Apenas administradores podem validar a licença" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // load config (singleton)
     const { data: config } = await admin
       .from("license_config")
@@ -349,7 +362,8 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message || String(error) }), {
+    console.error("validate-license error:", error);
+    return new Response(JSON.stringify({ error: "Erro interno. Contate o administrador." }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

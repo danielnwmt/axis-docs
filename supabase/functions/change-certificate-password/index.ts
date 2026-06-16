@@ -22,7 +22,7 @@ function getEncKey(): Uint8Array {
   } catch {
     bytes = new TextEncoder().encode(raw);
   }
-  if (bytes.length < 32) return new Uint8Array(32);
+  if (bytes.length < 32) throw new Error("CERT_ENCRYPTION_KEY ausente ou inválida (mínimo 32 bytes)");
   return bytes.slice(0, 32);
 }
 
