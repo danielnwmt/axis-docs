@@ -11,13 +11,14 @@ import { fetchManagedList } from "@/lib/adminLookups";
 import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, unlockTemporary, normalizeLicenseServerUrl, type LicenseInfo } from "@/lib/license";
 import { getStorageQuota, formatBytes, type StorageQuota } from "@/lib/storageQuota";
 import { MyCertificateSection } from "@/components/settings/MyCertificateSection";
+import { SystemUpdateSection } from "@/components/settings/SystemUpdateSection";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | "minhasenha" | "mfa" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | "minhasenha" | "mfa" | "sistema" | null;
 
 // Apenas Administrador
-const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "licenca"];
+const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "licenca", "sistema"];
 // Administrador + Operador (escondidas apenas para Usuário)
 const STAFF_SECTIONS: Section[] = ["backup"];
 
@@ -34,6 +35,7 @@ const sectionCards = [
   { id: "backup" as Section, icon: DatabaseBackup, title: "Backup & Restauração", description: "Exportar e importar usuários, auditoria e referências de documentos" },
   { id: "licenca" as Section, icon: KeyRound, title: "Licença", description: "Ativar e consultar o status da licença do AxisDocs" },
   { id: "mobile" as Section, icon: Smartphone, title: "Acesso Mobile", description: "QR Code para abrir o sistema no aplicativo" },
+  { id: "sistema" as Section, icon: RefreshCw, title: "Gerenciamento do Sistema", description: "Verificar e aplicar atualizações do AxisDocs na VPS" },
 ];
 
 function MyPasswordSection() {
@@ -1308,6 +1310,7 @@ export default function Settings() {
       case "mobile": return <MobileAccessSection />;
       case "minhasenha": return <MyPasswordSection />;
       case "mfa": return <MfaSection />;
+      case "sistema": return <SystemUpdateSection />;
       default: return null;
     }
   };
