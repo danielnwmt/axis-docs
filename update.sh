@@ -38,7 +38,7 @@ log "Instalando dependências com $PKG_MANAGER..."
 if [ "$PKG_MANAGER" = "bun" ]; then
   bun install --frozen-lockfile
 else
-  npm ci
+  npm install --no-fund --no-audit
 fi
 
 log "Gerando build de produção..."
@@ -46,6 +46,11 @@ if [ "$PKG_MANAGER" = "bun" ]; then
   bun run build
 else
   npm run build
+fi
+
+if [ ! -f "$PROJECT_DIR/dist/index.html" ]; then
+  err "Build não gerou dist/index.html"
+  exit 1
 fi
 
 if [ "$NGINX_RELOAD" = "true" ]; then
