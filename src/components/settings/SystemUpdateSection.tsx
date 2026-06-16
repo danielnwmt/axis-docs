@@ -21,19 +21,8 @@ export function SystemUpdateSection() {
   useEffect(() => {
     if (!updateId) return;
 
-    const channel = supabase
-      .channel(`system_updates:${updateId}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "system_updates", filter: `id=eq.${updateId}` },
-        (payload) => {
-          const next = (payload.new as { status: Status }).status;
-          handleStatusChange(next);
-        },
-      )
-      .subscribe();
-
-    // Fallback polling a cada 3s caso o realtime falhe
+    // Polling a cada 3s — RLS em system_updates garante que só admins leem.
+    // Não usamos Realtime para evitar inscrição em canal por usuários autorizados sem necessidade.
     const poll = window.setInterval(async () => {
       const { data } = await supabase
         .from("system_updates")
@@ -44,7 +33,6 @@ export function SystemUpdateSection() {
     }, 3000);
 
     return () => {
-      supabase.removeChannel(channel);
       window.clearInterval(poll);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
