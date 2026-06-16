@@ -422,17 +422,10 @@ function ParametrosSection() {
 
         <Label>Manutenção do sistema</Label>
         <div className="flex flex-col sm:flex-row gap-2">
-          <Button type="button" variant="outline" onClick={handleSystemUpdate} disabled={updating} className="gap-2">
-            <RefreshCw className={`w-4 h-4 ${updating ? "animate-spin" : ""}`} />
-            {updating ? "Atualizando..." : "Atualizar sistema"}
-          </Button>
           <Button type="button" variant="outline" onClick={handleSystemBackup} className="gap-2">
             <DatabaseBackup className="w-4 h-4" /> Fazer backup
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          A atualização busca a última versão oficial do AxisDocs e refaz o build automaticamente.
-        </p>
       </div>
     </div>
   );
