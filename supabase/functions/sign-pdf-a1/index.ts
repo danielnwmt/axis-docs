@@ -393,7 +393,9 @@ Deno.serve(async (req) => {
         .map((b) => b.toString(16).padStart(2, "0")).join("");
 
       const signedName = fileName.replace(/\.pdf$/i, "") + "_assinado.pdf";
-      const { driveFileId, driveLink } = await uploadSignedToDrive(supabase, signedName, signedPdfBuf, unitName, categoryName, true);
+      // Upload pela aba Upload (fluxo normal): cria Unidade/Categoria no Drive.
+      // A pasta centralizada "Assinatura Digital" é exclusiva da aba Signature.tsx (modo JSON legado).
+      const { driveFileId, driveLink } = await uploadSignedToDrive(supabase, signedName, signedPdfBuf, unitName, categoryName, false);
       const signTimestamp = new Date().toISOString();
       const certInfo = {
         provider: "Servidor local (PAdES)", cert_type: "A1", standard: "ICP-Brasil", pades: true,
