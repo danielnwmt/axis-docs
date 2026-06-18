@@ -1893,6 +1893,13 @@ install_local_functions() {
   if [ ! -d /opt/axisdocs-auth/node_modules/node-forge ]; then
     cd /opt/axisdocs-auth && npm install node-forge@1.3.1 --no-fund --no-audit >/dev/null 2>&1 || true
   fi
+  # Dependências para assinatura PAdES ICP-Brasil A1 (sign-pdf-a1)
+  for pkg in "pdf-lib@1.17.1" "@signpdf/signpdf@3.2.4" "@signpdf/signer-p12@3.2.4" "@signpdf/placeholder-pdf-lib@3.2.4"; do
+    dir_name=$(echo "$pkg" | sed 's/@[^@]*$//')
+    if [ ! -d "/opt/axisdocs-auth/node_modules/$dir_name" ]; then
+      cd /opt/axisdocs-auth && npm install "$pkg" --no-fund --no-audit >/dev/null 2>&1 || true
+    fi
+  done
   ln -sfn /opt/axisdocs-auth/node_modules /opt/axisdocs-functions/node_modules
 
   cat > /opt/axisdocs-functions/server.js <<'FUNCSERVER'
