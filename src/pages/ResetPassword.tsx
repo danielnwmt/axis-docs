@@ -1,21 +1,40 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { isLocalInstall } from "@/lib/adminApi";
 
 export default function ResetPassword() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const recoveryToken = searchParams.get("token");
+  const apiBaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
+      if (isLocalInstall() && recoveryToken) {
+        const resp = await fetch(`${apiBaseUrl}/auth/v1/recover/confirm`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: publishableKey },
+          body: JSON.stringify({ token: recoveryToken, password }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || data?.error) throw new Error(data?.error || "Não foi possível redefinir a senha.");
+        toast({ title: "Senha atualizada!", description: "Faça login com a nova senha." });
+        navigate("/login");
+        return;
+      }
+
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
       toast({ title: "Senha atualizada!", description: "Você já pode acessar o sistema." });
