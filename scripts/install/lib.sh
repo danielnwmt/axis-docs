@@ -1884,6 +1884,26 @@ EOF_STOR
 install_local_functions() {
   log "Instalando servidor de funções locais (Drive / assinatura)"
 
+  if [ -z "${CERT_ENCRYPTION_KEY:-}" ] && [ -f /etc/axisdocs/credentials ]; then
+    # shellcheck disable=SC1091
+    source /etc/axisdocs/credentials
+  fi
+  if [ -z "${CERT_ENCRYPTION_KEY:-}" ] && [ -f /etc/systemd/system/axisdocs-functions.service ]; then
+    CERT_ENCRYPTION_KEY=$(sed -n 's/^Environment=CERT_ENCRYPTION_KEY=//p' /etc/systemd/system/axisdocs-functions.service | tail -n 1 | tr -d '"')
+  fi
+  if ! [[ "${CERT_ENCRYPTION_KEY:-}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+    CERT_ENCRYPTION_KEY=$(openssl rand -hex 32)
+    mkdir -p /etc/axisdocs
+    touch /etc/axisdocs/credentials
+    chmod 600 /etc/axisdocs/credentials
+    if grep -q '^CERT_ENCRYPTION_KEY=' /etc/axisdocs/credentials 2>/dev/null; then
+      sed -i "s/^CERT_ENCRYPTION_KEY=.*/CERT_ENCRYPTION_KEY=$CERT_ENCRYPTION_KEY/" /etc/axisdocs/credentials
+    else
+      printf '\nCERT_ENCRYPTION_KEY=%s\n' "$CERT_ENCRYPTION_KEY" >> /etc/axisdocs/credentials
+    fi
+    echo "⚠️  CERT_ENCRYPTION_KEY ausente; nova chave gerada. Certificados .pfx cadastrados antes deverão ser recadastrados."
+  fi
+
   mkdir -p /opt/axisdocs-functions
 
   # Garante dependências do auth-server reaproveitáveis (pg, node-forge para certificados A1)
@@ -2348,7 +2368,7 @@ const forge = require("node-forge");
 const CERT_ENC_KEY = (() => {
   const raw = process.env.CERT_ENCRYPTION_KEY || "";
   if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, "hex");
-  return Buffer.alloc(32);
+  throw new Error("CERT_ENCRYPTION_KEY inválida ou ausente. Reinstale as funções preservando /etc/axisdocs/credentials.");
 })();
 
 function readJsonBody(req) {
@@ -2369,9 +2389,22 @@ function aesGcmEncrypt(plain) {
 }
 
 function aesGcmDecrypt(ct, iv, tag) {
-  const decipher = crypto.createDecipheriv("aes-256-gcm", CERT_ENC_KEY, iv);
+  return aesGcmDecryptWithKey(ct, iv, tag, CERT_ENC_KEY);
+}
+
+function aesGcmDecryptWithKey(ct, iv, tag, key) {
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ct), decipher.final()]);
+}
+
+function aesGcmDecryptCertificate(ct, iv, tag) {
+  try { return { plain: aesGcmDecrypt(ct, iv, tag), legacyZeroKey: false }; }
+  catch (e) {
+    const zeroKey = Buffer.alloc(32);
+    if (CERT_ENC_KEY.equals(zeroKey)) throw e;
+    return { plain: aesGcmDecryptWithKey(ct, iv, tag, zeroKey), legacyZeroKey: true };
+  }
 }
 
 async function uploadCertificate(req, res, claims) {
@@ -2434,7 +2467,9 @@ async function changeCertificatePassword(req, res, claims) {
   return withDb(async (db) => {
     const r = await db.query("SELECT pfx_encrypted, pfx_iv, pfx_auth_tag FROM public.user_certificates WHERE user_id=$1", [claims.sub]);
     if (!r.rows[0]) return json(res, 404, { error: "Certificado não encontrado" });
-    const pfxBytes = aesGcmDecrypt(r.rows[0].pfx_encrypted, r.rows[0].pfx_iv, r.rows[0].pfx_auth_tag);
+    let pfxBytes;
+    try { pfxBytes = aesGcmDecryptCertificate(r.rows[0].pfx_encrypted, r.rows[0].pfx_iv, r.rows[0].pfx_auth_tag).plain; }
+    catch { return json(res, 400, { error: "Não foi possível abrir o certificado salvo. Remova e cadastre o .pfx novamente." }); }
 
     let certObj, keyObj;
     try {
@@ -2605,13 +2640,22 @@ async function loadUserCertificate(db, userId, password) {
   if (!certRow) throw new Error("Você ainda não cadastrou seu certificado A1. Vá em Configurações → Meu Certificado.");
   if (certRow.valid_to && new Date(certRow.valid_to) < new Date()) throw new Error("Certificado expirado. Cadastre um novo .pfx.");
   let pfxBytes;
-  try { pfxBytes = aesGcmDecrypt(certRow.pfx_encrypted, certRow.pfx_iv, certRow.pfx_auth_tag); }
-  catch { throw new Error("Falha ao descriptografar certificado (chave do servidor inválida)"); }
+  let legacyZeroKey = false;
+  try {
+    const dec = aesGcmDecryptCertificate(certRow.pfx_encrypted, certRow.pfx_iv, certRow.pfx_auth_tag);
+    pfxBytes = dec.plain;
+    legacyZeroKey = dec.legacyZeroKey;
+  }
+  catch { throw new Error("Não foi possível abrir o certificado salvo. Remova e cadastre o .pfx novamente."); }
   try {
     const bin = pfxBytes.toString("binary");
     const p12Asn1 = forge.asn1.fromDer(bin);
     forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, password);
   } catch { throw new Error("Senha do certificado incorreta"); }
+  if (legacyZeroKey) {
+    const enc = aesGcmEncrypt(pfxBytes);
+    await db.query("UPDATE public.user_certificates SET pfx_encrypted=$1, pfx_iv=$2, pfx_auth_tag=$3, updated_at=now() WHERE user_id=$4", [enc.ct, enc.iv, enc.tag, userId]);
+  }
   return { certRow, pfxBytes };
 }
 
@@ -3369,6 +3413,7 @@ write_credentials_file() {
   cat > /etc/axisdocs/credentials <<EOF_CRED
 # AxisDocs - Credenciais locais (MANTENHA SEGURO)
 JWT_SECRET=$JWT_SECRET
+CERT_ENCRYPTION_KEY=$CERT_ENCRYPTION_KEY
 ANON_KEY=$ANON_KEY
 SERVICE_KEY=$SERVICE_KEY
 PG_USER=$PG_USER
