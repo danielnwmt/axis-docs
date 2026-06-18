@@ -2467,7 +2467,9 @@ async function changeCertificatePassword(req, res, claims) {
   return withDb(async (db) => {
     const r = await db.query("SELECT pfx_encrypted, pfx_iv, pfx_auth_tag FROM public.user_certificates WHERE user_id=$1", [claims.sub]);
     if (!r.rows[0]) return json(res, 404, { error: "Certificado não encontrado" });
-    const pfxBytes = aesGcmDecrypt(r.rows[0].pfx_encrypted, r.rows[0].pfx_iv, r.rows[0].pfx_auth_tag);
+    let pfxBytes;
+    try { pfxBytes = aesGcmDecryptCertificate(r.rows[0].pfx_encrypted, r.rows[0].pfx_iv, r.rows[0].pfx_auth_tag).plain; }
+    catch { return json(res, 400, { error: "Não foi possível abrir o certificado salvo. Remova e cadastre o .pfx novamente." }); }
 
     let certObj, keyObj;
     try {
@@ -2638,13 +2640,22 @@ async function loadUserCertificate(db, userId, password) {
   if (!certRow) throw new Error("Você ainda não cadastrou seu certificado A1. Vá em Configurações → Meu Certificado.");
   if (certRow.valid_to && new Date(certRow.valid_to) < new Date()) throw new Error("Certificado expirado. Cadastre um novo .pfx.");
   let pfxBytes;
-  try { pfxBytes = aesGcmDecrypt(certRow.pfx_encrypted, certRow.pfx_iv, certRow.pfx_auth_tag); }
-  catch { throw new Error("Falha ao descriptografar certificado (chave do servidor inválida)"); }
+  let legacyZeroKey = false;
+  try {
+    const dec = aesGcmDecryptCertificate(certRow.pfx_encrypted, certRow.pfx_iv, certRow.pfx_auth_tag);
+    pfxBytes = dec.plain;
+    legacyZeroKey = dec.legacyZeroKey;
+  }
+  catch { throw new Error("Não foi possível abrir o certificado salvo. Remova e cadastre o .pfx novamente."); }
   try {
     const bin = pfxBytes.toString("binary");
     const p12Asn1 = forge.asn1.fromDer(bin);
     forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, password);
   } catch { throw new Error("Senha do certificado incorreta"); }
+  if (legacyZeroKey) {
+    const enc = aesGcmEncrypt(pfxBytes);
+    await db.query("UPDATE public.user_certificates SET pfx_encrypted=$1, pfx_iv=$2, pfx_auth_tag=$3, updated_at=now() WHERE user_id=$4", [enc.ct, enc.iv, enc.tag, userId]);
+  }
   return { certRow, pfxBytes };
 }
 
