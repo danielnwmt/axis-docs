@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff } from "lucide-react";
+import { isLocalInstall } from "@/lib/adminApi";
 import axisLogo from "@/assets/axis-logo.png";
 
 export default function Login() {
