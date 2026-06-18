@@ -71,9 +71,10 @@ function extractFolderId(input: string): string {
 }
 
 async function findFolder(accessToken: string, folderName: string, parentId: string): Promise<string | null> {
-  const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const safeName = folderName.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const query = `name='${safeName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&pageSize=10`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   if (!res.ok) throw new Error(`Erro ao buscar pasta: ${await res.text()}`);
