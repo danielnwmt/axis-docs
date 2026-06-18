@@ -49,11 +49,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 5000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
         clearTimeout(timeout);
+        if (event === "SIGNED_OUT" || (event === "TOKEN_REFRESHED" && !session)) {
+          clearClientStorage();
+        }
         if (session?.user?.id) {
           setTimeout(() => loadUserLanguage(session.user.id), 0);
         }
@@ -80,7 +83,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // segue para limpeza mesmo se a chamada falhar (offline / token inválido)
+    } finally {
+      setUser(null);
+      setSession(null);
+      clearClientStorage();
+      // Hard reload garante que nenhum estado em memória, cache do React Query
+      // ou módulo persista após o logout/bloqueio.
+      window.location.replace("/login");
+    }
   };
 
   return (
