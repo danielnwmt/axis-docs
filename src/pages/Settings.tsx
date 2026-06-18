@@ -1287,7 +1287,7 @@ export default function Settings() {
     if (STAFF_SECTIONS.includes(id)) return isAdmin || isOperator;
     return true;
   };
-  const visibleCards = sectionCards.filter((s) => canSee(s.id));
+  const visibleCards = sectionCards.filter((s) => canSee(s.id)).filter((s) => !(isLocalInstall() && s.id === "mfa"));
 
   const renderContent = () => {
     if (activeSection && !canSee(activeSection)) return null;
