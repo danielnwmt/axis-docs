@@ -21,9 +21,13 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       return data;
     },
     enabled: !!user,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
-  // Checa nível de garantia de autenticação (MFA)
+  // Checa nível de garantia de autenticação (MFA) em tempo real
   const { data: aal, isLoading: aalLoading } = useQuery({
     queryKey: ["mfa-aal", user?.id],
     queryFn: async () => {
@@ -32,6 +36,9 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     },
     enabled: !!user,
     staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const isInactive = !!profile && profile.active === false;
