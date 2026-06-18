@@ -653,6 +653,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      is_active_user: { Args: { _user_id: string }; Returns: boolean }
       log_pii_access: {
         Args: {
           _reason?: string
