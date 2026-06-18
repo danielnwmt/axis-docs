@@ -2471,7 +2471,293 @@ async function changeCertificatePassword(req, res, claims) {
     );
     return json(res, 200, { ok: true });
   });
+
+// ============ Assinatura PAdES ICP-Brasil A1 (sign-pdf-a1) ============
+// Carrega libs ESM/CJS via dynamic import (compatível com Node CJS).
+let _signpdfLibs = null;
+async function loadSignPdfLibs() {
+  if (_signpdfLibs) return _signpdfLibs;
+  const pdfLib = require("pdf-lib");
+  const sp = await import("@signpdf/signpdf");
+  const p12 = await import("@signpdf/signer-p12");
+  const ph = await import("@signpdf/placeholder-pdf-lib");
+  _signpdfLibs = {
+    PDFDocument: pdfLib.PDFDocument,
+    StandardFonts: pdfLib.StandardFonts,
+    rgb: pdfLib.rgb,
+    SignPdf: sp.SignPdf || sp.default,
+    P12Signer: p12.P12Signer || p12.default,
+    pdflibAddPlaceholder: ph.pdflibAddPlaceholder || ph.default,
+  };
+  return _signpdfLibs;
 }
+
+async function drawSignatureStampLocal(pdfDoc, position, certRow, userEmail) {
+  const { StandardFonts, rgb } = await loadSignPdfLibs();
+  const pages = pdfDoc.getPages();
+  const idx = Math.max(0, Math.min(pages.length - 1, (position.page | 0) - 1));
+  const page = pages[idx];
+  const { width: pw, height: ph } = page.getSize();
+  const crop = typeof page.getCropBox === "function" ? page.getCropBox() : { x: 0, y: 0, width: pw, height: ph };
+  const clamp = (v, mn, mx) => Math.max(mn, Math.min(mx, v));
+  const xr = clamp(Number(position.xRatio ?? 0), 0, 1);
+  const yr = clamp(Number(position.yRatio ?? 0), 0, 1);
+  const wr = clamp(Number(position.wRatio ?? 0.28), 0.03, 1);
+  const hr = clamp(Number(position.hRatio ?? 0.08), 0.02, 1);
+  const OFFSET_PT = 56.7;
+  const wBox = clamp(wr * crop.width, 12, crop.width);
+  const hBox = clamp(hr * crop.height, 8, crop.height);
+  const x = clamp(crop.x + xr * crop.width, crop.x, crop.x + crop.width - wBox);
+  const y = clamp(crop.y + crop.height - (yr * crop.height) - hBox + OFFSET_PT, crop.y, crop.y + crop.height - hBox);
+
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const navy = rgb(0.12, 0.23, 0.37);
+  const navyDark = rgb(0.06, 0.11, 0.24);
+  const slate = rgb(0.28, 0.33, 0.41);
+  const white = rgb(1, 1, 1);
+
+  page.drawRectangle({ x, y, width: wBox, height: hBox, color: white, borderColor: navy, borderWidth: 0.6 });
+  const barW = Math.max(2.5, wBox * 0.022);
+  page.drawRectangle({ x, y, width: barW, height: hBox, color: navy });
+
+  const cn = certRow.subject_cn || userEmail || "Assinante";
+  const dt = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).format(new Date());
+
+  const padL = barW + wBox * 0.05;
+  const padR = wBox * 0.035;
+  const textX = x + padL;
+  const contentW = wBox - padL - padR;
+
+  const formatCPF = (raw) => {
+    const d = String(raw || "").replace(/\D/g, "");
+    if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+    return raw;
+  };
+  const colonIdx = cn.lastIndexOf(":");
+  let nameOnly = cn, cpfOnly = "";
+  if (colonIdx > 0) { nameOnly = cn.slice(0, colonIdx).trim(); cpfOnly = cn.slice(colonIdx + 1).trim(); }
+
+  const labelText = "ASSINADO DIGITALMENTE POR";
+  const cpfText = cpfOnly ? `CPF: ${formatCPF(cpfOnly)}` : "";
+  const fitSize = (text, initial, min, f) => {
+    let s = initial;
+    while (s > min && f.widthOfTextAtSize(text, s) > contentW) s -= 0.25;
+    return Math.max(min, s);
+  };
+  let labelSize = fitSize(labelText, Math.max(7, hBox * 0.15), 4.5, fontBold);
+  let nameSize = fitSize(nameOnly, Math.max(9, hBox * 0.24), 5.5, fontBold);
+  let cpfSize = cpfText ? fitSize(cpfText, Math.max(10, hBox * 0.22), 5.5, fontBold) : 0;
+  let metaSize = fitSize(dt, Math.max(7, hBox * 0.15), 4.5, font);
+  let gap = Math.max(1.2, hBox * 0.035);
+  let totalH = labelSize + nameSize + (cpfText ? cpfSize : 0) + metaSize + gap * (cpfText ? 3 : 2);
+  if (totalH > hBox * 0.84) {
+    const sc = (hBox * 0.84) / totalH;
+    labelSize *= sc; nameSize *= sc; cpfSize *= sc; metaSize *= sc; gap *= sc;
+    totalH = labelSize + nameSize + (cpfText ? cpfSize : 0) + metaSize + gap * (cpfText ? 3 : 2);
+  }
+  let cy = y + (hBox + totalH) / 2 - labelSize;
+  page.drawText(labelText, { x: textX, y: cy, size: labelSize, font: fontBold, color: navy });
+  cy -= nameSize + gap;
+  page.drawText(nameOnly, { x: textX, y: cy, size: nameSize, font: fontBold, color: navyDark });
+  if (cpfText) {
+    cy -= cpfSize + gap;
+    page.drawText(cpfText, { x: textX, y: cy, size: cpfSize, font: fontBold, color: navyDark });
+  }
+  cy -= metaSize + gap;
+  page.drawText(dt, { x: textX, y: cy, size: metaSize, font, color: slate });
+}
+
+async function uploadSignedPdfToDrive(signedName, signedBuf) {
+  const cfg = loadDriveConfig();
+  if (!cfg?.serviceAccount?.client_email) throw new Error("Google Drive não configurado.");
+  const rootId = extractFolderId(cfg.rootFolderId);
+  if (!rootId) throw new Error("ID da pasta raiz do Google Drive não configurado.");
+  const token = await getGoogleAccessToken(cfg.serviceAccount);
+  const targetFolderId = await findOrCreateFolder(token, "Assinatura Digital", rootId);
+  const boundary = `b${Date.now()}`;
+  const metadata = JSON.stringify({ name: signedName, parents: [targetFolderId] });
+  const meta = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`);
+  const med = Buffer.from(`--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`);
+  const end = Buffer.from(`\r\n--${boundary}--`);
+  const body = Buffer.concat([meta, med, Buffer.from(signedBuf), end]);
+  const up = await httpRequest("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink&supportsAllDrives=true&enforceSingleParent=true", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}`, "Content-Length": body.length },
+    body,
+  });
+  if (up.status >= 300) throw new Error(`Drive upload falhou: ${up.body.toString()}`);
+  const j = JSON.parse(up.body.toString());
+  return { driveFileId: j.id, driveLink: j.webViewLink || `https://drive.google.com/file/d/${j.id}/view` };
+}
+
+async function loadUserCertificate(db, userId, password) {
+  const r = await db.query(
+    "SELECT pfx_encrypted, pfx_iv, pfx_auth_tag, subject_cn, cpf, issuer, valid_to, fingerprint_sha256 FROM public.user_certificates WHERE user_id=$1",
+    [userId]
+  );
+  const certRow = r.rows[0];
+  if (!certRow) throw new Error("Você ainda não cadastrou seu certificado A1. Vá em Configurações → Meu Certificado.");
+  if (certRow.valid_to && new Date(certRow.valid_to) < new Date()) throw new Error("Certificado expirado. Cadastre um novo .pfx.");
+  let pfxBytes;
+  try { pfxBytes = aesGcmDecrypt(certRow.pfx_encrypted, certRow.pfx_iv, certRow.pfx_auth_tag); }
+  catch { throw new Error("Falha ao descriptografar certificado (chave do servidor inválida)"); }
+  try {
+    const bin = pfxBytes.toString("binary");
+    const p12Asn1 = forge.asn1.fromDer(bin);
+    forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, password);
+  } catch { throw new Error("Senha do certificado incorreta"); }
+  return { certRow, pfxBytes };
+}
+
+async function signPdfA1(req, res, claims) {
+  try {
+    const { PDFDocument, SignPdf, P12Signer, pdflibAddPlaceholder } = await loadSignPdfLibs();
+    const ct = req.headers["content-type"] || "";
+
+    return await withDb(async (db) => {
+      const ue = await db.query("SELECT email FROM auth.users WHERE id=$1", [claims.sub]);
+      const userEmail = (ue.rows[0] && ue.rows[0].email) || "";
+
+      if (ct.includes("multipart/form-data")) {
+        const boundaryMatch = ct.match(/boundary=([^;]+)/);
+        if (!boundaryMatch) return json(res, 400, { error: "boundary ausente" });
+        const buf = await readBuffer(req);
+        const parsed = parseMultipart(buf, boundaryMatch[1].trim());
+        if (!parsed.file) return json(res, 400, { error: "Arquivo e senha são obrigatórios" });
+        const password = parsed.fields.password || "";
+        const fileName = parsed.fields.fileName || parsed.file.filename || "documento.pdf";
+        const position = parsed.fields.position ? JSON.parse(parsed.fields.position) : null;
+        if (!password) return json(res, 400, { error: "Arquivo e senha são obrigatórios" });
+
+        const { certRow, pfxBytes } = await loadUserCertificate(db, claims.sub, password);
+        const pdfBytes = parsed.file.data;
+        const hashOriginal = crypto.createHash("sha256").update(pdfBytes).digest("hex");
+        const pdfDoc = await PDFDocument.load(pdfBytes);
+        if (position && typeof position.page === "number") {
+          try { await drawSignatureStampLocal(pdfDoc, position, certRow, userEmail); }
+          catch (e) { console.error("draw stamp:", e.message); }
+        }
+        pdflibAddPlaceholder({
+          pdfDoc, reason: "Assinatura digital ICP-Brasil",
+          name: certRow.subject_cn || userEmail || "Assinante",
+          location: "Brasil", contactInfo: userEmail || "", signatureLength: 8192,
+        });
+        const withPh = await pdfDoc.save();
+        const signer = new P12Signer(pfxBytes, { passphrase: password });
+        const signedBuf = await new SignPdf().sign(Buffer.from(withPh), signer);
+        const hashSigned = crypto.createHash("sha256").update(signedBuf).digest("hex");
+        const signedName = fileName.replace(/\.pdf$/i, "") + "_assinado.pdf";
+        const { driveFileId, driveLink } = await uploadSignedPdfToDrive(signedName, signedBuf);
+        const signTimestamp = new Date().toISOString();
+        const certInfo = {
+          provider: "Servidor local (PAdES)", cert_type: "A1", standard: "ICP-Brasil", pades: true,
+          subject_cn: certRow.subject_cn, cpf: certRow.cpf, issuer: certRow.issuer,
+          fingerprint_sha256: certRow.fingerprint_sha256, signer_email: userEmail,
+        };
+        return json(res, 200, {
+          signed: true, signedName, driveFileId, driveLink,
+          filePath: `drive://${driveFileId}`, fileSize: signedBuf.length,
+          fileHashOriginal: hashOriginal, fileHashSigned: hashSigned,
+          signTimestamp, certInfo, subjectCn: certRow.subject_cn,
+        });
+      }
+
+      // JSON mode — assina documento existente
+      const body = await readJsonBody(req);
+      const { documentId, filePath, fileName, password, reason, position } = body;
+      if (!documentId || !filePath || !fileName || !password) {
+        return json(res, 400, { error: "Dados incompletos (informe senha do certificado)" });
+      }
+      const docRes = await db.query("SELECT id, user_id, file_path, drive_file_id FROM public.documents WHERE id=$1 AND file_path=$2", [documentId, filePath]);
+      const doc = docRes.rows[0];
+      const pRes = await db.query("SELECT role, active FROM public.profiles WHERE id=$1", [claims.sub]);
+      const isAdmin = pRes.rows[0]?.role === "Administrador" && pRes.rows[0]?.active === true;
+      if (!doc || (doc.user_id !== claims.sub && !isAdmin)) return json(res, 403, { error: "Não autorizado" });
+
+      const { certRow, pfxBytes } = await loadUserCertificate(db, claims.sub, password);
+
+      // Baixa PDF original (apenas Drive na instalação local)
+      if (!filePath.startsWith("drive://")) return json(res, 400, { error: "Arquivo não está no Drive" });
+      const driveId = doc.drive_file_id || filePath.replace("drive://", "");
+      const cfg = loadDriveConfig();
+      const token = await getGoogleAccessToken(cfg.serviceAccount);
+      const dlRes = await httpRequest(`https://www.googleapis.com/drive/v3/files/${driveId}?alt=media&supportsAllDrives=true`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (dlRes.status >= 300) throw new Error(`Erro ao baixar do Drive: ${dlRes.status}`);
+      const pdfBytes = dlRes.body;
+      const hashOriginal = crypto.createHash("sha256").update(pdfBytes).digest("hex");
+
+      const pdfDoc = await PDFDocument.load(pdfBytes);
+      if (position && typeof position.page === "number") {
+        try { await drawSignatureStampLocal(pdfDoc, position, certRow, userEmail); }
+        catch (e) { console.error("draw stamp:", e.message); }
+      }
+      pdflibAddPlaceholder({
+        pdfDoc, reason: reason || "Assinatura digital ICP-Brasil",
+        name: certRow.subject_cn || userEmail || "Assinante",
+        location: "Brasil", contactInfo: userEmail || "", signatureLength: 8192,
+      });
+      const withPh = await pdfDoc.save();
+      const signer = new P12Signer(pfxBytes, { passphrase: password });
+      const signedBuf = await new SignPdf().sign(Buffer.from(withPh), signer);
+      const hashSigned = crypto.createHash("sha256").update(signedBuf).digest("hex");
+      const signedName = fileName.replace(/\.pdf$/i, "") + "_assinado.pdf";
+      const up = await uploadSignedPdfToDrive(signedName, signedBuf);
+
+      // Remove original do Drive
+      try {
+        await httpRequest(`https://www.googleapis.com/drive/v3/files/${driveId}?supportsAllDrives=true`, {
+          method: "DELETE", headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch (e) { console.warn("falha remover original:", e.message); }
+
+      const signTimestamp = new Date().toISOString();
+      const certInfo = {
+        provider: "Servidor local (PAdES)", cert_type: "A1", standard: "ICP-Brasil", pades: true,
+        subject_cn: certRow.subject_cn, cpf: certRow.cpf, issuer: certRow.issuer,
+        fingerprint_sha256: certRow.fingerprint_sha256, signer_email: userEmail,
+      };
+      const newFilePath = `drive://${up.driveFileId}`;
+      await db.query(
+        `UPDATE public.documents SET sign_status='assinado', sign_timestamp=$1, sign_certificate_info=$2,
+         file_hash_original=$3, file_hash_signed=$4, file_path=$5, file_name=$6, drive_file_id=$7, drive_link=$8,
+         notes=$9 WHERE id=$10`,
+        [signTimestamp, certInfo, hashOriginal, hashSigned, newFilePath, signedName, up.driveFileId, up.driveLink,
+         `PAdES ICP-Brasil A1 | CN: ${certRow.subject_cn} | SHA-256 assinado: ${hashSigned.substring(0,16)}...`,
+         documentId]
+      );
+      await db.query(
+        `INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
+         VALUES ($1,$2,'Assinatura digital PAdES ICP-Brasil A1 aplicada','sign',$3,$4)`,
+        [claims.sub, userEmail, documentId, JSON.stringify({
+          file_name: signedName, standard: "ICP-Brasil", pades: true,
+          cert_subject_cn: certRow.subject_cn, cert_cpf: certRow.cpf,
+          cert_fingerprint: certRow.fingerprint_sha256,
+          sha256_original: hashOriginal, sha256_signed: hashSigned,
+          timestamp: signTimestamp, legal_basis: "Lei 14.063/2020, MP 2.200-2/2001, Decreto 10.278/2020",
+        })]
+      );
+      return json(res, 200, {
+        signed: true, documentId, signTimestamp,
+        fileHashOriginal: hashOriginal, fileHashSigned: hashSigned, newFilePath,
+      });
+    });
+  } catch (e) {
+    console.error("sign-pdf-a1 error:", e);
+    const safe = ["Certificado expirado","Senha do certificado incorreta","Você ainda não cadastrou seu certificado","Arquivo e senha são obrigatórios","Falha ao descriptografar certificado","Google Drive não configurado","ID da pasta raiz","Não autorizado","Arquivo não está no Drive"];
+    const msg = String(e?.message || "");
+    const userMsg = safe.some((s) => msg.startsWith(s)) ? msg : "Erro interno. Contate o administrador.";
+    return json(res, 500, { error: userMsg });
+  }
+}
+
+
 
 // ============ Backup / Restore (local) ============
 const SETTINGS_DIR = path.join(STORAGE_DIR, "settings");
