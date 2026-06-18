@@ -973,12 +973,14 @@ function getToken(req) {
   return null;
 }
 
-async function createSession(user) {
+async function createSession(user, opts = {}) {
   const now = Math.floor(Date.now() / 1000);
+  const aal = opts.aal || "aal1";
+  const amr = opts.amr || [{ method: "password", timestamp: now }];
   const accessToken = signJwt({
     sub: user.id, email: user.email, role: "authenticated",
     iss: "axisdocs", iat: now, exp: now + 3600,
-    aud: "authenticated"
+    aud: "authenticated", aal, amr
   });
   const refreshToken = crypto.randomBytes(40).toString("hex");
   await pool.query(
@@ -995,6 +997,65 @@ async function createSession(user) {
       user_metadata: user.raw_user_meta_data || {} }
   };
 }
+
+// ============= TOTP (RFC 6238) =============
+const B32_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function base32Encode(buf) {
+  let bits = 0, value = 0, out = "";
+  for (const b of buf) {
+    value = (value << 8) | b; bits += 8;
+    while (bits >= 5) { out += B32_ALPHA[(value >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits > 0) out += B32_ALPHA[(value << (5 - bits)) & 31];
+  return out;
+}
+function base32Decode(str) {
+  const clean = str.toUpperCase().replace(/=+$/,"").replace(/\s+/g,"");
+  let bits = 0, value = 0; const out = [];
+  for (const c of clean) {
+    const i = B32_ALPHA.indexOf(c); if (i < 0) continue;
+    value = (value << 5) | i; bits += 5;
+    if (bits >= 8) { out.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
+  }
+  return Buffer.from(out);
+}
+function hotp(secretBuf, counter) {
+  const buf = Buffer.alloc(8);
+  for (let i = 7; i >= 0; i--) { buf[i] = counter & 0xff; counter = Math.floor(counter / 256); }
+  const mac = crypto.createHmac("sha1", secretBuf).update(buf).digest();
+  const off = mac[mac.length - 1] & 0xf;
+  const bin = ((mac[off] & 0x7f) << 24) | ((mac[off+1] & 0xff) << 16) | ((mac[off+2] & 0xff) << 8) | (mac[off+3] & 0xff);
+  return (bin % 1000000).toString().padStart(6, "0");
+}
+function verifyTotp(secretB32, code) {
+  const secret = base32Decode(secretB32);
+  const step = Math.floor(Date.now() / 1000 / 30);
+  for (const d of [-1, 0, 1]) {
+    if (hotp(secret, step + d) === code) return true;
+  }
+  return false;
+}
+async function ensureMfaSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS auth.mfa_factors (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+      friendly_name text,
+      factor_type text NOT NULL DEFAULT 'totp',
+      status text NOT NULL DEFAULT 'unverified',
+      secret text NOT NULL,
+      created_at timestamptz DEFAULT now(),
+      updated_at timestamptz DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS auth.mfa_challenges (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      factor_id uuid NOT NULL REFERENCES auth.mfa_factors(id) ON DELETE CASCADE,
+      created_at timestamptz DEFAULT now(),
+      verified_at timestamptz
+    );
+  `);
+}
+
 
 async function handleRequest(req, res) {
   const parsed = url.parse(req.url, true);
@@ -1328,6 +1389,109 @@ async function handleRequest(req, res) {
     return json(res, 200, { users: result.rows });
   }
 
+  // ============= MFA / TOTP =============
+  // GET /auth/v1/factors  → lista fatores do usuário autenticado
+  if (req.method === "GET" && path === "/auth/v1/factors") {
+    const token = getToken(req);
+    if (!token) return json(res, 401, { error: "No token" });
+    const claims = verifyJwt(token);
+    if (!claims) return json(res, 401, { error: "Invalid token" });
+    const r = await pool.query(
+      "SELECT id, friendly_name, factor_type, status, created_at, updated_at FROM auth.mfa_factors WHERE user_id = $1 ORDER BY created_at",
+      [claims.sub]
+    );
+    const all = r.rows;
+    return json(res, 200, {
+      all, totp: all.filter(f => f.factor_type === "totp"), phone: []
+    });
+  }
+
+  // POST /auth/v1/factors → enroll TOTP
+  if (req.method === "POST" && path === "/auth/v1/factors") {
+    const token = getToken(req);
+    if (!token) return json(res, 401, { error: "No token" });
+    const claims = verifyJwt(token);
+    if (!claims) return json(res, 401, { error: "Invalid token" });
+    const body = await readBody(req);
+    if (body.factorType && body.factorType !== "totp")
+      return json(res, 400, { error: "Only TOTP supported" });
+    const secret = base32Encode(crypto.randomBytes(20));
+    const issuer = "AxisDocs";
+    const label = encodeURIComponent(`${issuer}:${claims.email || claims.sub}`);
+    const uri = `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
+    const ins = await pool.query(
+      "INSERT INTO auth.mfa_factors (user_id, friendly_name, factor_type, status, secret) VALUES ($1, $2, 'totp', 'unverified', $3) RETURNING id",
+      [claims.sub, body.friendlyName || "TOTP", secret]
+    );
+    return json(res, 200, {
+      id: ins.rows[0].id, type: "totp", friendly_name: body.friendlyName || "TOTP",
+      totp: { qr_code: uri, secret, uri }
+    });
+  }
+
+  // DELETE /auth/v1/factors/{id} → unenroll
+  const unenrollMatch = path.match(/^\/auth\/v1\/factors\/([0-9a-f-]{36})$/i);
+  if (req.method === "DELETE" && unenrollMatch) {
+    const token = getToken(req);
+    if (!token) return json(res, 401, { error: "No token" });
+    const claims = verifyJwt(token);
+    if (!claims) return json(res, 401, { error: "Invalid token" });
+    await pool.query("DELETE FROM auth.mfa_factors WHERE id = $1 AND user_id = $2", [unenrollMatch[1], claims.sub]);
+    return json(res, 200, { id: unenrollMatch[1] });
+  }
+
+  // POST /auth/v1/factors/{id}/challenge
+  const challengeMatch = path.match(/^\/auth\/v1\/factors\/([0-9a-f-]{36})\/challenge$/i);
+  if (req.method === "POST" && challengeMatch) {
+    const token = getToken(req);
+    if (!token) return json(res, 401, { error: "No token" });
+    const claims = verifyJwt(token);
+    if (!claims) return json(res, 401, { error: "Invalid token" });
+    const fid = challengeMatch[1];
+    const f = await pool.query("SELECT id FROM auth.mfa_factors WHERE id = $1 AND user_id = $2", [fid, claims.sub]);
+    if (f.rows.length === 0) return json(res, 404, { error: "Factor not found" });
+    const c = await pool.query("INSERT INTO auth.mfa_challenges (factor_id) VALUES ($1) RETURNING id, factor_id, created_at", [fid]);
+    const row = c.rows[0];
+    return json(res, 200, { id: row.id, type: "totp", expires_at: Math.floor(Date.now()/1000) + 300 });
+  }
+
+  // POST /auth/v1/factors/{id}/verify
+  const verifyMatch = path.match(/^\/auth\/v1\/factors\/([0-9a-f-]{36})\/verify$/i);
+  if (req.method === "POST" && verifyMatch) {
+    const token = getToken(req);
+    if (!token) return json(res, 401, { error: "No token" });
+    const claims = verifyJwt(token);
+    if (!claims) return json(res, 401, { error: "Invalid token" });
+    const fid = verifyMatch[1];
+    const body = await readBody(req);
+    const { challenge_id, code } = body;
+    if (!code) return json(res, 400, { error: "code required" });
+    const f = await pool.query(
+      "SELECT id, user_id, secret, status FROM auth.mfa_factors WHERE id = $1 AND user_id = $2",
+      [fid, claims.sub]
+    );
+    if (f.rows.length === 0) return json(res, 404, { error: "Factor not found" });
+    if (challenge_id) {
+      const ch = await pool.query("SELECT id FROM auth.mfa_challenges WHERE id = $1 AND factor_id = $2", [challenge_id, fid]);
+      if (ch.rows.length === 0) return json(res, 400, { error: "Invalid challenge" });
+    }
+    if (!verifyTotp(f.rows[0].secret, String(code).trim())) {
+      return json(res, 400, { error: "Invalid TOTP code" });
+    }
+    await pool.query("UPDATE auth.mfa_factors SET status = 'verified', updated_at = now() WHERE id = $1", [fid]);
+    if (challenge_id) {
+      await pool.query("UPDATE auth.mfa_challenges SET verified_at = now() WHERE id = $1", [challenge_id]);
+    }
+    // Emite nova sessão com AAL2
+    const u = await pool.query("SELECT * FROM auth.users WHERE id = $1", [claims.sub]);
+    const now = Math.floor(Date.now()/1000);
+    const session = await createSession(u.rows[0], {
+      aal: "aal2",
+      amr: [{ method: "password", timestamp: now }, { method: "totp", timestamp: now }]
+    });
+    return json(res, 200, session);
+  }
+
   json(res, 404, { error: "Not found" });
 }
 
@@ -1344,7 +1508,9 @@ const server = http.createServer(async (req, res) => {
   catch (e) { console.error("[AUTH ERROR]", e); json(res, 500, { error: "Internal server error" }); }
 });
 
+ensureMfaSchema().catch(e => console.error("[MFA SCHEMA]", e));
 server.listen(PORT, "127.0.0.1", () => console.log(`Auth server running on port ${PORT}`));
+
 AUTHSERVER
 
   # Instalar pg driver para o auth server

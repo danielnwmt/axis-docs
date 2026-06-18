@@ -14,7 +14,7 @@ import { MyCertificateSection } from "@/components/settings/MyCertificateSection
 import { SystemUpdateSection } from "@/components/settings/SystemUpdateSection";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
-import { isLocalInstall } from "@/lib/adminApi";
+
 
 type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | "minhasenha" | "mfa" | "sistema" | null;
 
@@ -1287,7 +1287,7 @@ export default function Settings() {
     if (STAFF_SECTIONS.includes(id)) return isAdmin || isOperator;
     return true;
   };
-  const visibleCards = sectionCards.filter((s) => canSee(s.id)).filter((s) => !(isLocalInstall() && s.id === "mfa"));
+  const visibleCards = sectionCards.filter((s) => canSee(s.id));
 
   const renderContent = () => {
     if (activeSection && !canSee(activeSection)) return null;
