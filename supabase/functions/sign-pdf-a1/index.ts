@@ -139,12 +139,32 @@ async function findOrCreateFolder(token: string, name: string, parentId: string)
   return (await c.json()).id;
 }
 
-async function uploadSignedToDrive(supabase: any, signedName: string, signedPdfBuf: Uint8Array, _unitName?: string, _categoryName?: string) {
+async function uploadSignedToDrive(
+  supabase: any,
+  signedName: string,
+  signedPdfBuf: Uint8Array,
+  unitName?: string,
+  categoryName?: string,
+  useSignatureFolder: boolean = false,
+) {
   const cfg = await loadDriveConfig(supabase);
   if (!cfg.folderId) throw new Error("ID da pasta raiz do Google Drive não configurado. Configure em Configurações.");
   const token = await getDriveAccessToken(cfg.serviceAccount);
-  // Todos os PDFs assinados ficam centralizados na pasta "Assinatura Digital"
-  const targetFolderId = await findOrCreateFolder(token, "Assinatura Digital", cfg.folderId);
+
+  // Aba "Assinatura Digital" → tudo centralizado na pasta dedicada.
+  // Fluxo normal (assinatura de documento já no acervo) → respeita Unidade/Categoria.
+  let targetFolderId: string;
+  if (useSignatureFolder) {
+    targetFolderId = await findOrCreateFolder(token, "Assinatura Digital", cfg.folderId);
+  } else {
+    targetFolderId = cfg.folderId;
+    if (unitName && unitName.trim()) {
+      targetFolderId = await findOrCreateFolder(token, unitName.trim(), targetFolderId);
+    }
+    if (categoryName && categoryName.trim()) {
+      targetFolderId = await findOrCreateFolder(token, categoryName.trim(), targetFolderId);
+    }
+  }
   const metadata: any = { name: signedName, parents: [targetFolderId] };
   const boundary = "----axisdocs" + Math.random().toString(36).slice(2);
   const body = new Blob([
@@ -373,7 +393,7 @@ Deno.serve(async (req) => {
         .map((b) => b.toString(16).padStart(2, "0")).join("");
 
       const signedName = fileName.replace(/\.pdf$/i, "") + "_assinado.pdf";
-      const { driveFileId, driveLink } = await uploadSignedToDrive(supabase, signedName, signedPdfBuf, unitName, categoryName);
+      const { driveFileId, driveLink } = await uploadSignedToDrive(supabase, signedName, signedPdfBuf, unitName, categoryName, true);
       const signTimestamp = new Date().toISOString();
       const certInfo = {
         provider: "Servidor local (PAdES)", cert_type: "A1", standard: "ICP-Brasil", pades: true,
@@ -399,7 +419,7 @@ Deno.serve(async (req) => {
 
     // Authorization on document
     const { data: doc } = await supabase
-      .from("documents").select("id, user_id, file_path, drive_file_id")
+      .from("documents").select("id, user_id, file_path, drive_file_id, unit, category")
       .eq("id", documentId).eq("file_path", filePath).maybeSingle();
     const { data: profile } = await supabase.from("profiles").select("role, active").eq("id", user.id).maybeSingle();
     const isAdmin = profile?.role === "Administrador" && profile?.active === true;
@@ -503,7 +523,15 @@ Deno.serve(async (req) => {
     let newDriveLink: string | null = null;
 
     if (filePath.startsWith("drive://")) {
-      const up = await uploadSignedToDrive(supabase, signedName, signedPdfBuf);
+      const isSignatureTabDoc = (doc as any).category === "Assinatura Digital" && (doc as any).unit === "Assinatura Digital";
+      const up = await uploadSignedToDrive(
+        supabase,
+        signedName,
+        signedPdfBuf,
+        (doc as any).unit || "",
+        (doc as any).category || "",
+        isSignatureTabDoc,
+      );
       newDriveFileId = up.driveFileId;
       newDriveLink = up.driveLink;
       newFilePath = `drive://${up.driveFileId}`;
