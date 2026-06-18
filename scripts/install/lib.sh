@@ -3389,6 +3389,7 @@ write_credentials_file() {
   cat > /etc/axisdocs/credentials <<EOF_CRED
 # AxisDocs - Credenciais locais (MANTENHA SEGURO)
 JWT_SECRET=$JWT_SECRET
+CERT_ENCRYPTION_KEY=$CERT_ENCRYPTION_KEY
 ANON_KEY=$ANON_KEY
 SERVICE_KEY=$SERVICE_KEY
 PG_USER=$PG_USER
