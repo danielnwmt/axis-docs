@@ -973,12 +973,14 @@ function getToken(req) {
   return null;
 }
 
-async function createSession(user) {
+async function createSession(user, opts = {}) {
   const now = Math.floor(Date.now() / 1000);
+  const aal = opts.aal || "aal1";
+  const amr = opts.amr || [{ method: "password", timestamp: now }];
   const accessToken = signJwt({
     sub: user.id, email: user.email, role: "authenticated",
     iss: "axisdocs", iat: now, exp: now + 3600,
-    aud: "authenticated"
+    aud: "authenticated", aal, amr
   });
   const refreshToken = crypto.randomBytes(40).toString("hex");
   await pool.query(
@@ -995,6 +997,65 @@ async function createSession(user) {
       user_metadata: user.raw_user_meta_data || {} }
   };
 }
+
+// ============= TOTP (RFC 6238) =============
+const B32_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function base32Encode(buf) {
+  let bits = 0, value = 0, out = "";
+  for (const b of buf) {
+    value = (value << 8) | b; bits += 8;
+    while (bits >= 5) { out += B32_ALPHA[(value >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits > 0) out += B32_ALPHA[(value << (5 - bits)) & 31];
+  return out;
+}
+function base32Decode(str) {
+  const clean = str.toUpperCase().replace(/=+$/,"").replace(/\s+/g,"");
+  let bits = 0, value = 0; const out = [];
+  for (const c of clean) {
+    const i = B32_ALPHA.indexOf(c); if (i < 0) continue;
+    value = (value << 5) | i; bits += 5;
+    if (bits >= 8) { out.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
+  }
+  return Buffer.from(out);
+}
+function hotp(secretBuf, counter) {
+  const buf = Buffer.alloc(8);
+  for (let i = 7; i >= 0; i--) { buf[i] = counter & 0xff; counter = Math.floor(counter / 256); }
+  const mac = crypto.createHmac("sha1", secretBuf).update(buf).digest();
+  const off = mac[mac.length - 1] & 0xf;
+  const bin = ((mac[off] & 0x7f) << 24) | ((mac[off+1] & 0xff) << 16) | ((mac[off+2] & 0xff) << 8) | (mac[off+3] & 0xff);
+  return (bin % 1000000).toString().padStart(6, "0");
+}
+function verifyTotp(secretB32, code) {
+  const secret = base32Decode(secretB32);
+  const step = Math.floor(Date.now() / 1000 / 30);
+  for (const d of [-1, 0, 1]) {
+    if (hotp(secret, step + d) === code) return true;
+  }
+  return false;
+}
+async function ensureMfaSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS auth.mfa_factors (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+      friendly_name text,
+      factor_type text NOT NULL DEFAULT 'totp',
+      status text NOT NULL DEFAULT 'unverified',
+      secret text NOT NULL,
+      created_at timestamptz DEFAULT now(),
+      updated_at timestamptz DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS auth.mfa_challenges (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      factor_id uuid NOT NULL REFERENCES auth.mfa_factors(id) ON DELETE CASCADE,
+      created_at timestamptz DEFAULT now(),
+      verified_at timestamptz
+    );
+  `);
+}
+
 
 async function handleRequest(req, res) {
   const parsed = url.parse(req.url, true);
