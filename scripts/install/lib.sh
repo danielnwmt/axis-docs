@@ -3051,6 +3051,7 @@ async function handle(req, res) {
     if (fnPath === "upload-certificate" && req.method === "POST") return await uploadCertificate(req, res, claims);
     if (fnPath === "change-certificate-password" && req.method === "POST") return await changeCertificatePassword(req, res, claims);
     if (fnPath === "backup-restore" && req.method === "POST") return await backupRestore(req, res, claims);
+    if (fnPath === "sign-pdf-a1" && req.method === "POST") return await signPdfA1(req, res, claims);
     return json(res, 404, { error: `Função '${fnPath}' não disponível na instalação local` });
   } catch (e) {
     console.error("[FUNCTION ERROR]", fnPath, e);
