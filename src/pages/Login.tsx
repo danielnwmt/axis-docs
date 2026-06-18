@@ -24,6 +24,16 @@ export default function Login() {
 
     try {
       if (isResetting) {
+        if (isLocalInstall()) {
+          toast({
+            title: "Recuperação indisponível localmente",
+            description:
+              "Esta instalação local não envia e-mails. Peça ao Administrador para redefinir sua senha em Configurações → Usuários.",
+            variant: "destructive",
+          });
+          setIsResetting(false);
+          return;
+        }
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/reset-password`,
         });
