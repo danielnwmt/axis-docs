@@ -419,7 +419,7 @@ Deno.serve(async (req) => {
 
     // Authorization on document
     const { data: doc } = await supabase
-      .from("documents").select("id, user_id, file_path, drive_file_id")
+      .from("documents").select("id, user_id, file_path, drive_file_id, unit, category")
       .eq("id", documentId).eq("file_path", filePath).maybeSingle();
     const { data: profile } = await supabase.from("profiles").select("role, active").eq("id", user.id).maybeSingle();
     const isAdmin = profile?.role === "Administrador" && profile?.active === true;
