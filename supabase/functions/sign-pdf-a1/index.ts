@@ -121,14 +121,18 @@ async function loadCertForUser(supabase: any, userId: string, password: string) 
 }
 
 async function findOrCreateFolder(token: string, name: string, parentId: string): Promise<string> {
-  const q = `name='${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-  const r = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  const safeName = name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const q = `name='${safeName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&pageSize=10`;
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (r.ok) {
     const j = await r.json();
-    if (j.files?.[0]?.id) return j.files[0].id;
+    if (j.files?.[0]?.id) {
+      console.log(`[findOrCreateFolder] reusing '${name}' -> ${j.files[0].id}`);
+      return j.files[0].id;
+    }
+  } else {
+    console.warn(`[findOrCreateFolder] search failed for '${name}': ${await r.text()}`);
   }
   const c = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true", {
     method: "POST",
@@ -136,7 +140,9 @@ async function findOrCreateFolder(token: string, name: string, parentId: string)
     body: JSON.stringify({ name, mimeType: "application/vnd.google-apps.folder", parents: [parentId] }),
   });
   if (!c.ok) throw new Error(`Falha ao criar pasta '${name}': ${await c.text()}`);
-  return (await c.json()).id;
+  const created = (await c.json()).id;
+  console.log(`[findOrCreateFolder] created '${name}' -> ${created}`);
+  return created;
 }
 
 async function uploadSignedToDrive(
