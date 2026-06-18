@@ -75,7 +75,7 @@ export default function Privacy() {
             <li>Solicitar anonimização ou eliminação;</li>
             <li>Revogar o consentimento.</li>
           </ul>
-          <p className="text-sm text-foreground/80">Para exercer esses direitos, entre em contato com o DPO da organização.</p>
+          <p className="text-sm text-foreground/80">Acesse <Link to="/meus-dados" className="text-info underline">Meus Dados</Link> dentro do sistema ou entre em contato com o DPO.</p>
         </section>
 
         <section className="space-y-2">

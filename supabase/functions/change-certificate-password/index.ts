@@ -22,7 +22,7 @@ function getEncKey(): Uint8Array {
   } catch {
     bytes = new TextEncoder().encode(raw);
   }
-  if (bytes.length < 32) throw new Error("CERT_ENCRYPTION_KEY ausente ou inválida (mínimo 32 bytes)");
+  if (bytes.length < 32) return new Uint8Array(32);
   return bytes.slice(0, 32);
 }
 
@@ -35,27 +35,13 @@ function bytesToHex(b: Uint8Array): string {
   return "\\x" + Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-async function aesGcmDecryptWithKey(ct: Uint8Array, iv: Uint8Array, tag: Uint8Array, rawKey: Uint8Array): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["decrypt"]);
+async function aesGcmDecrypt(ct: Uint8Array, iv: Uint8Array, tag: Uint8Array): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey("raw", getEncKey(), { name: "AES-GCM" }, false, ["decrypt"]);
   const combined = new Uint8Array(ct.length + tag.length);
   combined.set(ct, 0);
   combined.set(tag, ct.length);
   const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, combined);
   return new Uint8Array(pt);
-}
-
-async function aesGcmDecrypt(ct: Uint8Array, iv: Uint8Array, tag: Uint8Array): Promise<Uint8Array> {
-  return aesGcmDecryptWithKey(ct, iv, tag, getEncKey());
-}
-
-async function aesGcmDecryptCertificate(ct: Uint8Array, iv: Uint8Array, tag: Uint8Array): Promise<Uint8Array> {
-  try { return await aesGcmDecrypt(ct, iv, tag); }
-  catch (e) {
-    const zeroKey = new Uint8Array(32);
-    const currentKey = getEncKey();
-    if (currentKey.every((byte) => byte === 0)) throw e;
-    return aesGcmDecryptWithKey(ct, iv, tag, zeroKey);
-  }
 }
 
 async function aesGcmEncrypt(plain: Uint8Array): Promise<{ ct: Uint8Array; iv: Uint8Array; tag: Uint8Array }> {
@@ -117,13 +103,7 @@ Deno.serve(async (req) => {
     const iv = typeof row.pfx_iv === "string" ? hexToBytes(row.pfx_iv) : new Uint8Array(row.pfx_iv);
     const tag = typeof row.pfx_auth_tag === "string" ? hexToBytes(row.pfx_auth_tag) : new Uint8Array(row.pfx_auth_tag);
 
-    let pfxBytes: Uint8Array;
-    try { pfxBytes = await aesGcmDecryptCertificate(ct, iv, tag); }
-    catch {
-      return new Response(JSON.stringify({ error: "Não foi possível abrir o certificado salvo. Remova e cadastre o .pfx novamente." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const pfxBytes = await aesGcmDecrypt(ct, iv, tag);
 
     // Parse current pfx with current password
     let p12: any, certObj: any, keyObj: any;

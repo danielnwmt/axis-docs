@@ -98,17 +98,6 @@ collect_install_options() {
     fail "A senha do administrador deve ter no mínimo 6 caracteres"
   fi
 
-  # SMTP (Gmail) — usado pelo fluxo "Esqueci minha senha"
-  SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}"
-  SMTP_PORT="${SMTP_PORT:-465}"
-  SMTP_USER="${SMTP_USER:-contato@axisdocs.xyz}"
-  SMTP_FROM="${SMTP_FROM:-AxisDocs <contato@axisdocs.xyz>}"
-  if [ -z "${SMTP_PASS:-}" ] && [ -t 0 ]; then
-    printf "Senha de app do Gmail para %s (Enter para pular envio de e-mails): " "$SMTP_USER"
-    read -r SMTP_PASS
-  fi
-  SMTP_PASS="${SMTP_PASS:-}"
-
   success "Opções coletadas (admin: $ADMIN_EMAIL)"
 }
 
@@ -938,58 +927,12 @@ const http = require("http");
 const crypto = require("crypto");
 const { Pool } = require("pg");
 const url = require("url");
-let nodemailer = null;
-try { nodemailer = require("nodemailer"); } catch (e) { console.warn("[AUTH] nodemailer não instalado, e-mails desativados"); }
 
 const PORT = 9999;
 const JWT_SECRET = process.env.JWT_SECRET;
 const DB_URL = process.env.DATABASE_URL;
-const SMTP_HOST = process.env.SMTP_HOST || "";
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || "465", 10);
-const SMTP_USER = process.env.SMTP_USER || "";
-const SMTP_PASS = process.env.SMTP_PASS || "";
-const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
-const APP_PUBLIC_URL = (process.env.APP_PUBLIC_URL || "").replace(/\/+$/, "");
-
-let mailer = null;
-if (nodemailer && SMTP_HOST && SMTP_USER && SMTP_PASS) {
-  mailer = nodemailer.createTransport({
-    host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_PORT === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-  });
-  console.log("[AUTH] SMTP configurado:", SMTP_HOST + ":" + SMTP_PORT, "como", SMTP_USER);
-} else {
-  console.warn("[AUTH] SMTP não configurado — recuperação de senha não enviará e-mails");
-}
 
 const pool = new Pool({ connectionString: DB_URL });
-
-async function ensureRecoverySchema() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS auth.recovery_tokens (
-      token text PRIMARY KEY,
-      user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-      expires_at timestamptz NOT NULL,
-      used_at timestamptz
-    );
-    CREATE INDEX IF NOT EXISTS recovery_tokens_user_idx ON auth.recovery_tokens(user_id);
-  `);
-}
-
-async function sendRecoveryEmail(to, link) {
-  if (!mailer) { console.log("[AUTH] (sem SMTP) Link de recuperação:", link); return false; }
-  const html = `
-    <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px;color:#0f172a">
-      <h2 style="color:#1e3a8a">AxisDocs — Redefinição de senha</h2>
-      <p>Recebemos um pedido para redefinir sua senha. Clique no botão abaixo para criar uma nova senha. O link expira em 1 hora.</p>
-      <p style="margin:24px 0"><a href="${link}" style="background:#1e3a8a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Redefinir minha senha</a></p>
-      <p style="font-size:12px;color:#475569">Se você não solicitou, ignore este e-mail.</p>
-      <p style="font-size:12px;color:#475569">Ou copie e cole no navegador:<br>${link}</p>
-    </div>`;
-  await mailer.sendMail({ from: SMTP_FROM, to, subject: "AxisDocs — Redefinição de senha", html });
-  return true;
-}
-
 
 function signJwt(payload) {
   const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
@@ -1030,14 +973,12 @@ function getToken(req) {
   return null;
 }
 
-async function createSession(user, opts = {}) {
+async function createSession(user) {
   const now = Math.floor(Date.now() / 1000);
-  const aal = opts.aal || "aal1";
-  const amr = opts.amr || [{ method: "password", timestamp: now }];
   const accessToken = signJwt({
     sub: user.id, email: user.email, role: "authenticated",
     iss: "axisdocs", iat: now, exp: now + 3600,
-    aud: "authenticated", aal, amr
+    aud: "authenticated"
   });
   const refreshToken = crypto.randomBytes(40).toString("hex");
   await pool.query(
@@ -1054,65 +995,6 @@ async function createSession(user, opts = {}) {
       user_metadata: user.raw_user_meta_data || {} }
   };
 }
-
-// ============= TOTP (RFC 6238) =============
-const B32_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-function base32Encode(buf) {
-  let bits = 0, value = 0, out = "";
-  for (const b of buf) {
-    value = (value << 8) | b; bits += 8;
-    while (bits >= 5) { out += B32_ALPHA[(value >>> (bits - 5)) & 31]; bits -= 5; }
-  }
-  if (bits > 0) out += B32_ALPHA[(value << (5 - bits)) & 31];
-  return out;
-}
-function base32Decode(str) {
-  const clean = str.toUpperCase().replace(/=+$/,"").replace(/\s+/g,"");
-  let bits = 0, value = 0; const out = [];
-  for (const c of clean) {
-    const i = B32_ALPHA.indexOf(c); if (i < 0) continue;
-    value = (value << 5) | i; bits += 5;
-    if (bits >= 8) { out.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
-  }
-  return Buffer.from(out);
-}
-function hotp(secretBuf, counter) {
-  const buf = Buffer.alloc(8);
-  for (let i = 7; i >= 0; i--) { buf[i] = counter & 0xff; counter = Math.floor(counter / 256); }
-  const mac = crypto.createHmac("sha1", secretBuf).update(buf).digest();
-  const off = mac[mac.length - 1] & 0xf;
-  const bin = ((mac[off] & 0x7f) << 24) | ((mac[off+1] & 0xff) << 16) | ((mac[off+2] & 0xff) << 8) | (mac[off+3] & 0xff);
-  return (bin % 1000000).toString().padStart(6, "0");
-}
-function verifyTotp(secretB32, code) {
-  const secret = base32Decode(secretB32);
-  const step = Math.floor(Date.now() / 1000 / 30);
-  for (const d of [-1, 0, 1]) {
-    if (hotp(secret, step + d) === code) return true;
-  }
-  return false;
-}
-async function ensureMfaSchema() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS auth.mfa_factors (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-      friendly_name text,
-      factor_type text NOT NULL DEFAULT 'totp',
-      status text NOT NULL DEFAULT 'unverified',
-      secret text NOT NULL,
-      created_at timestamptz DEFAULT now(),
-      updated_at timestamptz DEFAULT now()
-    );
-    CREATE TABLE IF NOT EXISTS auth.mfa_challenges (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      factor_id uuid NOT NULL REFERENCES auth.mfa_factors(id) ON DELETE CASCADE,
-      created_at timestamptz DEFAULT now(),
-      verified_at timestamptz
-    );
-  `);
-}
-
 
 async function handleRequest(req, res) {
   const parsed = url.parse(req.url, true);
@@ -1217,60 +1099,12 @@ async function handleRequest(req, res) {
     return json(res, 200, {});
   }
 
-  // POST /auth/v1/recover (envia e-mail com link de redefinição)
+  // POST /auth/v1/recover (password reset - envia log, sem email real)
   if (req.method === "POST" && path === "/auth/v1/recover") {
     const body = await readBody(req);
-    const email = String(body.email || "").trim().toLowerCase();
-    if (!email) return json(res, 400, { error: "E-mail é obrigatório" });
-    try {
-      const u = await pool.query("SELECT id, email FROM auth.users WHERE lower(email) = $1", [email]);
-      if (u.rows.length > 0) {
-        const user = u.rows[0];
-        const token = crypto.randomBytes(32).toString("hex");
-        const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-        await pool.query(
-          "INSERT INTO auth.recovery_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)",
-          [token, user.id, expires]
-        );
-        const base = (body.redirect_to || `${APP_PUBLIC_URL}/reset-password`).replace(/\/+$/, "");
-        const link = `${base}?token=${token}&type=recovery`;
-        try {
-          await sendRecoveryEmail(user.email, link);
-          console.log("[AUTH] Recovery email enviado para:", user.email);
-        } catch (mailErr) {
-          console.error("[AUTH] Falha ao enviar e-mail de recuperação:", mailErr.message);
-        }
-      } else {
-        console.log("[AUTH] Recover solicitado p/ e-mail inexistente:", email);
-      }
-    } catch (e) {
-      console.error("[AUTH] Recover error:", e.message);
-    }
-    // Sempre 200 para não vazar existência de e-mail
+    console.log("[AUTH] Password reset requested for:", body.email);
     return json(res, 200, {});
   }
-
-  // POST /auth/v1/recover/confirm  {token, password}
-  if (req.method === "POST" && path === "/auth/v1/recover/confirm") {
-    const body = await readBody(req);
-    const token = String(body.token || "");
-    const password = String(body.password || "");
-    if (!token || password.length < 6) return json(res, 400, { error: "Token e nova senha (mín. 6 caracteres) são obrigatórios" });
-    const r = await pool.query(
-      "SELECT user_id, expires_at, used_at FROM auth.recovery_tokens WHERE token = $1",
-      [token]
-    );
-    if (r.rows.length === 0) return json(res, 400, { error: "Token inválido" });
-    const row = r.rows[0];
-    if (row.used_at) return json(res, 400, { error: "Token já utilizado" });
-    if (new Date(row.expires_at).getTime() < Date.now()) return json(res, 400, { error: "Token expirado" });
-    const encrypted = hashPassword(password);
-    await pool.query("UPDATE auth.users SET encrypted_password = $1, updated_at = now() WHERE id = $2", [encrypted, row.user_id]);
-    await pool.query("UPDATE auth.recovery_tokens SET used_at = now() WHERE token = $1", [token]);
-    await pool.query("UPDATE public.profiles SET must_change_password = false WHERE id = $1", [row.user_id]);
-    return json(res, 200, { success: true });
-  }
-
 
   // PUT /auth/v1/user (update user)
   if (req.method === "PUT" && path === "/auth/v1/user") {
@@ -1494,109 +1328,6 @@ async function handleRequest(req, res) {
     return json(res, 200, { users: result.rows });
   }
 
-  // ============= MFA / TOTP =============
-  // GET /auth/v1/factors  → lista fatores do usuário autenticado
-  if (req.method === "GET" && path === "/auth/v1/factors") {
-    const token = getToken(req);
-    if (!token) return json(res, 401, { error: "No token" });
-    const claims = verifyJwt(token);
-    if (!claims) return json(res, 401, { error: "Invalid token" });
-    const r = await pool.query(
-      "SELECT id, friendly_name, factor_type, status, created_at, updated_at FROM auth.mfa_factors WHERE user_id = $1 ORDER BY created_at",
-      [claims.sub]
-    );
-    const all = r.rows;
-    return json(res, 200, {
-      all, totp: all.filter(f => f.factor_type === "totp"), phone: []
-    });
-  }
-
-  // POST /auth/v1/factors → enroll TOTP
-  if (req.method === "POST" && path === "/auth/v1/factors") {
-    const token = getToken(req);
-    if (!token) return json(res, 401, { error: "No token" });
-    const claims = verifyJwt(token);
-    if (!claims) return json(res, 401, { error: "Invalid token" });
-    const body = await readBody(req);
-    if (body.factorType && body.factorType !== "totp")
-      return json(res, 400, { error: "Only TOTP supported" });
-    const secret = base32Encode(crypto.randomBytes(20));
-    const issuer = "AxisDocs";
-    const label = encodeURIComponent(`${issuer}:${claims.email || claims.sub}`);
-    const uri = `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
-    const ins = await pool.query(
-      "INSERT INTO auth.mfa_factors (user_id, friendly_name, factor_type, status, secret) VALUES ($1, $2, 'totp', 'unverified', $3) RETURNING id",
-      [claims.sub, body.friendlyName || "TOTP", secret]
-    );
-    return json(res, 200, {
-      id: ins.rows[0].id, type: "totp", friendly_name: body.friendlyName || "TOTP",
-      totp: { qr_code: uri, secret, uri }
-    });
-  }
-
-  // DELETE /auth/v1/factors/{id} → unenroll
-  const unenrollMatch = path.match(/^\/auth\/v1\/factors\/([0-9a-f-]{36})$/i);
-  if (req.method === "DELETE" && unenrollMatch) {
-    const token = getToken(req);
-    if (!token) return json(res, 401, { error: "No token" });
-    const claims = verifyJwt(token);
-    if (!claims) return json(res, 401, { error: "Invalid token" });
-    await pool.query("DELETE FROM auth.mfa_factors WHERE id = $1 AND user_id = $2", [unenrollMatch[1], claims.sub]);
-    return json(res, 200, { id: unenrollMatch[1] });
-  }
-
-  // POST /auth/v1/factors/{id}/challenge
-  const challengeMatch = path.match(/^\/auth\/v1\/factors\/([0-9a-f-]{36})\/challenge$/i);
-  if (req.method === "POST" && challengeMatch) {
-    const token = getToken(req);
-    if (!token) return json(res, 401, { error: "No token" });
-    const claims = verifyJwt(token);
-    if (!claims) return json(res, 401, { error: "Invalid token" });
-    const fid = challengeMatch[1];
-    const f = await pool.query("SELECT id FROM auth.mfa_factors WHERE id = $1 AND user_id = $2", [fid, claims.sub]);
-    if (f.rows.length === 0) return json(res, 404, { error: "Factor not found" });
-    const c = await pool.query("INSERT INTO auth.mfa_challenges (factor_id) VALUES ($1) RETURNING id, factor_id, created_at", [fid]);
-    const row = c.rows[0];
-    return json(res, 200, { id: row.id, type: "totp", expires_at: Math.floor(Date.now()/1000) + 300 });
-  }
-
-  // POST /auth/v1/factors/{id}/verify
-  const verifyMatch = path.match(/^\/auth\/v1\/factors\/([0-9a-f-]{36})\/verify$/i);
-  if (req.method === "POST" && verifyMatch) {
-    const token = getToken(req);
-    if (!token) return json(res, 401, { error: "No token" });
-    const claims = verifyJwt(token);
-    if (!claims) return json(res, 401, { error: "Invalid token" });
-    const fid = verifyMatch[1];
-    const body = await readBody(req);
-    const { challenge_id, code } = body;
-    if (!code) return json(res, 400, { error: "code required" });
-    const f = await pool.query(
-      "SELECT id, user_id, secret, status FROM auth.mfa_factors WHERE id = $1 AND user_id = $2",
-      [fid, claims.sub]
-    );
-    if (f.rows.length === 0) return json(res, 404, { error: "Factor not found" });
-    if (challenge_id) {
-      const ch = await pool.query("SELECT id FROM auth.mfa_challenges WHERE id = $1 AND factor_id = $2", [challenge_id, fid]);
-      if (ch.rows.length === 0) return json(res, 400, { error: "Invalid challenge" });
-    }
-    if (!verifyTotp(f.rows[0].secret, String(code).trim())) {
-      return json(res, 400, { error: "Invalid TOTP code" });
-    }
-    await pool.query("UPDATE auth.mfa_factors SET status = 'verified', updated_at = now() WHERE id = $1", [fid]);
-    if (challenge_id) {
-      await pool.query("UPDATE auth.mfa_challenges SET verified_at = now() WHERE id = $1", [challenge_id]);
-    }
-    // Emite nova sessão com AAL2
-    const u = await pool.query("SELECT * FROM auth.users WHERE id = $1", [claims.sub]);
-    const now = Math.floor(Date.now()/1000);
-    const session = await createSession(u.rows[0], {
-      aal: "aal2",
-      amr: [{ method: "password", timestamp: now }, { method: "totp", timestamp: now }]
-    });
-    return json(res, 200, session);
-  }
-
   json(res, 404, { error: "Not found" });
 }
 
@@ -1613,28 +1344,13 @@ const server = http.createServer(async (req, res) => {
   catch (e) { console.error("[AUTH ERROR]", e); json(res, 500, { error: "Internal server error" }); }
 });
 
-ensureMfaSchema().catch(e => console.error("[MFA SCHEMA]", e));
-ensureRecoverySchema().catch(e => console.error("[RECOVERY SCHEMA]", e));
 server.listen(PORT, "127.0.0.1", () => console.log(`Auth server running on port ${PORT}`));
-
 AUTHSERVER
 
-  # Instalar dependências do auth server
+  # Instalar pg driver para o auth server
   cd /opt/axisdocs-auth
   npm init -y >/dev/null 2>&1
-  npm install --no-fund --no-audit pg nodemailer >/dev/null 2>&1
-
-  # Define URL pública usada nos links de e-mail
-  local app_public_url
-  if [ -n "$APP_DOMAIN" ]; then
-    if [ "${SSL_CONFIGURED:-false}" = "true" ] || [ -d "/etc/letsencrypt/live/$APP_DOMAIN" ]; then
-      app_public_url="https://$APP_DOMAIN"
-    else
-      app_public_url="http://$APP_DOMAIN"
-    fi
-  else
-    app_public_url="http://localhost"
-  fi
+  npm install --no-fund --no-audit pg >/dev/null 2>&1
 
   # Serviço systemd
   cat > /etc/systemd/system/axisdocs-auth.service <<EOF_AUTH
@@ -1649,12 +1365,6 @@ Restart=always
 RestartSec=5
 Environment=JWT_SECRET=$JWT_SECRET
 Environment=DATABASE_URL=postgres://$PG_USER:$PG_PASS@localhost:5432/$PG_DB
-Environment=SMTP_HOST=$SMTP_HOST
-Environment=SMTP_PORT=$SMTP_PORT
-Environment=SMTP_USER=$SMTP_USER
-Environment=SMTP_PASS=$SMTP_PASS
-Environment="SMTP_FROM=$SMTP_FROM"
-Environment=APP_PUBLIC_URL=$app_public_url
 WorkingDirectory=/opt/axisdocs-auth
 
 [Install]
@@ -1663,7 +1373,7 @@ EOF_AUTH
 
   systemctl daemon-reload
   systemctl enable axisdocs-auth
-  systemctl restart axisdocs-auth
+  systemctl start axisdocs-auth
 
   success "Servidor de autenticação rodando na porta 9999"
 }
@@ -1884,26 +1594,6 @@ EOF_STOR
 install_local_functions() {
   log "Instalando servidor de funções locais (Drive / assinatura)"
 
-  if [ -z "${CERT_ENCRYPTION_KEY:-}" ] && [ -f /etc/axisdocs/credentials ]; then
-    # shellcheck disable=SC1091
-    source /etc/axisdocs/credentials
-  fi
-  if [ -z "${CERT_ENCRYPTION_KEY:-}" ] && [ -f /etc/systemd/system/axisdocs-functions.service ]; then
-    CERT_ENCRYPTION_KEY=$(sed -n 's/^Environment=CERT_ENCRYPTION_KEY=//p' /etc/systemd/system/axisdocs-functions.service | tail -n 1 | tr -d '"')
-  fi
-  if ! [[ "${CERT_ENCRYPTION_KEY:-}" =~ ^[0-9a-fA-F]{64}$ ]]; then
-    CERT_ENCRYPTION_KEY=$(openssl rand -hex 32)
-    mkdir -p /etc/axisdocs
-    touch /etc/axisdocs/credentials
-    chmod 600 /etc/axisdocs/credentials
-    if grep -q '^CERT_ENCRYPTION_KEY=' /etc/axisdocs/credentials 2>/dev/null; then
-      sed -i "s/^CERT_ENCRYPTION_KEY=.*/CERT_ENCRYPTION_KEY=$CERT_ENCRYPTION_KEY/" /etc/axisdocs/credentials
-    else
-      printf '\nCERT_ENCRYPTION_KEY=%s\n' "$CERT_ENCRYPTION_KEY" >> /etc/axisdocs/credentials
-    fi
-    echo "⚠️  CERT_ENCRYPTION_KEY ausente; nova chave gerada. Certificados .pfx cadastrados antes deverão ser recadastrados."
-  fi
-
   mkdir -p /opt/axisdocs-functions
 
   # Garante dependências do auth-server reaproveitáveis (pg, node-forge para certificados A1)
@@ -1913,13 +1603,6 @@ install_local_functions() {
   if [ ! -d /opt/axisdocs-auth/node_modules/node-forge ]; then
     cd /opt/axisdocs-auth && npm install node-forge@1.3.1 --no-fund --no-audit >/dev/null 2>&1 || true
   fi
-  # Dependências para assinatura PAdES ICP-Brasil A1 (sign-pdf-a1)
-  for pkg in "pdf-lib@1.17.1" "@signpdf/signpdf@3.2.4" "@signpdf/signer-p12@3.2.4" "@signpdf/placeholder-pdf-lib@3.2.4"; do
-    dir_name=$(echo "$pkg" | sed 's/@[^@]*$//')
-    if [ ! -d "/opt/axisdocs-auth/node_modules/$dir_name" ]; then
-      cd /opt/axisdocs-auth && npm install "$pkg" --no-fund --no-audit >/dev/null 2>&1 || true
-    fi
-  done
   ln -sfn /opt/axisdocs-auth/node_modules /opt/axisdocs-functions/node_modules
 
   cat > /opt/axisdocs-functions/server.js <<'FUNCSERVER'
@@ -2368,7 +2051,7 @@ const forge = require("node-forge");
 const CERT_ENC_KEY = (() => {
   const raw = process.env.CERT_ENCRYPTION_KEY || "";
   if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, "hex");
-  throw new Error("CERT_ENCRYPTION_KEY inválida ou ausente. Reinstale as funções preservando /etc/axisdocs/credentials.");
+  return Buffer.alloc(32);
 })();
 
 function readJsonBody(req) {
@@ -2389,22 +2072,9 @@ function aesGcmEncrypt(plain) {
 }
 
 function aesGcmDecrypt(ct, iv, tag) {
-  return aesGcmDecryptWithKey(ct, iv, tag, CERT_ENC_KEY);
-}
-
-function aesGcmDecryptWithKey(ct, iv, tag, key) {
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", CERT_ENC_KEY, iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ct), decipher.final()]);
-}
-
-function aesGcmDecryptCertificate(ct, iv, tag) {
-  try { return { plain: aesGcmDecrypt(ct, iv, tag), legacyZeroKey: false }; }
-  catch (e) {
-    const zeroKey = Buffer.alloc(32);
-    if (CERT_ENC_KEY.equals(zeroKey)) throw e;
-    return { plain: aesGcmDecryptWithKey(ct, iv, tag, zeroKey), legacyZeroKey: true };
-  }
 }
 
 async function uploadCertificate(req, res, claims) {
@@ -2467,9 +2137,7 @@ async function changeCertificatePassword(req, res, claims) {
   return withDb(async (db) => {
     const r = await db.query("SELECT pfx_encrypted, pfx_iv, pfx_auth_tag FROM public.user_certificates WHERE user_id=$1", [claims.sub]);
     if (!r.rows[0]) return json(res, 404, { error: "Certificado não encontrado" });
-    let pfxBytes;
-    try { pfxBytes = aesGcmDecryptCertificate(r.rows[0].pfx_encrypted, r.rows[0].pfx_iv, r.rows[0].pfx_auth_tag).plain; }
-    catch { return json(res, 400, { error: "Não foi possível abrir o certificado salvo. Remova e cadastre o .pfx novamente." }); }
+    const pfxBytes = aesGcmDecrypt(r.rows[0].pfx_encrypted, r.rows[0].pfx_iv, r.rows[0].pfx_auth_tag);
 
     let certObj, keyObj;
     try {
@@ -2507,302 +2175,6 @@ async function changeCertificatePassword(req, res, claims) {
     return json(res, 200, { ok: true });
   });
 }
-
-// ============ Assinatura PAdES ICP-Brasil A1 (sign-pdf-a1) ============
-// Carrega libs ESM/CJS via dynamic import (compatível com Node CJS).
-let _signpdfLibs = null;
-async function loadSignPdfLibs() {
-  if (_signpdfLibs) return _signpdfLibs;
-  const pdfLib = require("pdf-lib");
-  const sp = await import("@signpdf/signpdf");
-  const p12 = await import("@signpdf/signer-p12");
-  const ph = await import("@signpdf/placeholder-pdf-lib");
-  _signpdfLibs = {
-    PDFDocument: pdfLib.PDFDocument,
-    StandardFonts: pdfLib.StandardFonts,
-    rgb: pdfLib.rgb,
-    SignPdf: sp.SignPdf || sp.default,
-    P12Signer: p12.P12Signer || p12.default,
-    pdflibAddPlaceholder: ph.pdflibAddPlaceholder || ph.default,
-  };
-  return _signpdfLibs;
-}
-
-async function drawSignatureStampLocal(pdfDoc, position, certRow, userEmail) {
-  const { StandardFonts, rgb } = await loadSignPdfLibs();
-  const pages = pdfDoc.getPages();
-  const idx = Math.max(0, Math.min(pages.length - 1, (position.page | 0) - 1));
-  const page = pages[idx];
-  const { width: pw, height: ph } = page.getSize();
-  const crop = typeof page.getCropBox === "function" ? page.getCropBox() : { x: 0, y: 0, width: pw, height: ph };
-  const clamp = (v, mn, mx) => Math.max(mn, Math.min(mx, v));
-  const xr = clamp(Number(position.xRatio ?? 0), 0, 1);
-  const yr = clamp(Number(position.yRatio ?? 0), 0, 1);
-  const wr = clamp(Number(position.wRatio ?? 0.28), 0.03, 1);
-  const hr = clamp(Number(position.hRatio ?? 0.08), 0.02, 1);
-  const OFFSET_PT = 56.7;
-  const wBox = clamp(wr * crop.width, 12, crop.width);
-  const hBox = clamp(hr * crop.height, 8, crop.height);
-  const x = clamp(crop.x + xr * crop.width, crop.x, crop.x + crop.width - wBox);
-  const y = clamp(crop.y + crop.height - (yr * crop.height) - hBox + OFFSET_PT, crop.y, crop.y + crop.height - hBox);
-
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const navy = rgb(0.12, 0.23, 0.37);
-  const navyDark = rgb(0.06, 0.11, 0.24);
-  const slate = rgb(0.28, 0.33, 0.41);
-  const white = rgb(1, 1, 1);
-
-  page.drawRectangle({ x, y, width: wBox, height: hBox, color: white, borderColor: navy, borderWidth: 0.6 });
-  const barW = Math.max(2.5, wBox * 0.022);
-  page.drawRectangle({ x, y, width: barW, height: hBox, color: navy });
-
-  const cn = certRow.subject_cn || userEmail || "Assinante";
-  const dt = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
-  }).format(new Date());
-
-  const padL = barW + wBox * 0.05;
-  const padR = wBox * 0.035;
-  const textX = x + padL;
-  const contentW = wBox - padL - padR;
-
-  const formatCPF = (raw) => {
-    const d = String(raw || "").replace(/\D/g, "");
-    if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-    return raw;
-  };
-  const colonIdx = cn.lastIndexOf(":");
-  let nameOnly = cn, cpfOnly = "";
-  if (colonIdx > 0) { nameOnly = cn.slice(0, colonIdx).trim(); cpfOnly = cn.slice(colonIdx + 1).trim(); }
-
-  const labelText = "ASSINADO DIGITALMENTE POR";
-  const cpfText = cpfOnly ? `CPF: ${formatCPF(cpfOnly)}` : "";
-  const fitSize = (text, initial, min, f) => {
-    let s = initial;
-    while (s > min && f.widthOfTextAtSize(text, s) > contentW) s -= 0.25;
-    return Math.max(min, s);
-  };
-  let labelSize = fitSize(labelText, Math.max(7, hBox * 0.15), 4.5, fontBold);
-  let nameSize = fitSize(nameOnly, Math.max(9, hBox * 0.24), 5.5, fontBold);
-  let cpfSize = cpfText ? fitSize(cpfText, Math.max(10, hBox * 0.22), 5.5, fontBold) : 0;
-  let metaSize = fitSize(dt, Math.max(7, hBox * 0.15), 4.5, font);
-  let gap = Math.max(1.2, hBox * 0.035);
-  let totalH = labelSize + nameSize + (cpfText ? cpfSize : 0) + metaSize + gap * (cpfText ? 3 : 2);
-  if (totalH > hBox * 0.84) {
-    const sc = (hBox * 0.84) / totalH;
-    labelSize *= sc; nameSize *= sc; cpfSize *= sc; metaSize *= sc; gap *= sc;
-    totalH = labelSize + nameSize + (cpfText ? cpfSize : 0) + metaSize + gap * (cpfText ? 3 : 2);
-  }
-  let cy = y + (hBox + totalH) / 2 - labelSize;
-  page.drawText(labelText, { x: textX, y: cy, size: labelSize, font: fontBold, color: navy });
-  cy -= nameSize + gap;
-  page.drawText(nameOnly, { x: textX, y: cy, size: nameSize, font: fontBold, color: navyDark });
-  if (cpfText) {
-    cy -= cpfSize + gap;
-    page.drawText(cpfText, { x: textX, y: cy, size: cpfSize, font: fontBold, color: navyDark });
-  }
-  cy -= metaSize + gap;
-  page.drawText(dt, { x: textX, y: cy, size: metaSize, font, color: slate });
-}
-
-async function uploadSignedPdfToDrive(signedName, signedBuf) {
-  const cfg = loadDriveConfig();
-  if (!cfg?.serviceAccount?.client_email) throw new Error("Google Drive não configurado.");
-  const rootId = extractFolderId(cfg.rootFolderId);
-  if (!rootId) throw new Error("ID da pasta raiz do Google Drive não configurado.");
-  const token = await getGoogleAccessToken(cfg.serviceAccount);
-  const targetFolderId = await findOrCreateFolder(token, "Assinatura Digital", rootId);
-  const boundary = `b${Date.now()}`;
-  const metadata = JSON.stringify({ name: signedName, parents: [targetFolderId] });
-  const meta = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`);
-  const med = Buffer.from(`--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`);
-  const end = Buffer.from(`\r\n--${boundary}--`);
-  const body = Buffer.concat([meta, med, Buffer.from(signedBuf), end]);
-  const up = await httpRequest("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink&supportsAllDrives=true&enforceSingleParent=true", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}`, "Content-Length": body.length },
-    body,
-  });
-  if (up.status >= 300) throw new Error(`Drive upload falhou: ${up.body.toString()}`);
-  const j = JSON.parse(up.body.toString());
-  return { driveFileId: j.id, driveLink: j.webViewLink || `https://drive.google.com/file/d/${j.id}/view` };
-}
-
-async function loadUserCertificate(db, userId, password) {
-  const r = await db.query(
-    "SELECT pfx_encrypted, pfx_iv, pfx_auth_tag, subject_cn, cpf, issuer, valid_to, fingerprint_sha256 FROM public.user_certificates WHERE user_id=$1",
-    [userId]
-  );
-  const certRow = r.rows[0];
-  if (!certRow) throw new Error("Você ainda não cadastrou seu certificado A1. Vá em Configurações → Meu Certificado.");
-  if (certRow.valid_to && new Date(certRow.valid_to) < new Date()) throw new Error("Certificado expirado. Cadastre um novo .pfx.");
-  let pfxBytes;
-  let legacyZeroKey = false;
-  try {
-    const dec = aesGcmDecryptCertificate(certRow.pfx_encrypted, certRow.pfx_iv, certRow.pfx_auth_tag);
-    pfxBytes = dec.plain;
-    legacyZeroKey = dec.legacyZeroKey;
-  }
-  catch { throw new Error("Não foi possível abrir o certificado salvo. Remova e cadastre o .pfx novamente."); }
-  try {
-    const bin = pfxBytes.toString("binary");
-    const p12Asn1 = forge.asn1.fromDer(bin);
-    forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, password);
-  } catch { throw new Error("Senha do certificado incorreta"); }
-  if (legacyZeroKey) {
-    const enc = aesGcmEncrypt(pfxBytes);
-    await db.query("UPDATE public.user_certificates SET pfx_encrypted=$1, pfx_iv=$2, pfx_auth_tag=$3, updated_at=now() WHERE user_id=$4", [enc.ct, enc.iv, enc.tag, userId]);
-  }
-  return { certRow, pfxBytes };
-}
-
-async function signPdfA1(req, res, claims) {
-  try {
-    const { PDFDocument, SignPdf, P12Signer, pdflibAddPlaceholder } = await loadSignPdfLibs();
-    const ct = req.headers["content-type"] || "";
-
-    return await withDb(async (db) => {
-      const ue = await db.query("SELECT email FROM auth.users WHERE id=$1", [claims.sub]);
-      const userEmail = (ue.rows[0] && ue.rows[0].email) || "";
-
-      if (ct.includes("multipart/form-data")) {
-        const boundaryMatch = ct.match(/boundary=([^;]+)/);
-        if (!boundaryMatch) return json(res, 400, { error: "boundary ausente" });
-        const buf = await readBuffer(req);
-        const parsed = parseMultipart(buf, boundaryMatch[1].trim());
-        if (!parsed.file) return json(res, 400, { error: "Arquivo e senha são obrigatórios" });
-        const password = parsed.fields.password || "";
-        const fileName = parsed.fields.fileName || parsed.file.filename || "documento.pdf";
-        const position = parsed.fields.position ? JSON.parse(parsed.fields.position) : null;
-        if (!password) return json(res, 400, { error: "Arquivo e senha são obrigatórios" });
-
-        const { certRow, pfxBytes } = await loadUserCertificate(db, claims.sub, password);
-        const pdfBytes = parsed.file.data;
-        const hashOriginal = crypto.createHash("sha256").update(pdfBytes).digest("hex");
-        const pdfDoc = await PDFDocument.load(pdfBytes);
-        if (position && typeof position.page === "number") {
-          try { await drawSignatureStampLocal(pdfDoc, position, certRow, userEmail); }
-          catch (e) { console.error("draw stamp:", e.message); }
-        }
-        pdflibAddPlaceholder({
-          pdfDoc, reason: "Assinatura digital ICP-Brasil",
-          name: certRow.subject_cn || userEmail || "Assinante",
-          location: "Brasil", contactInfo: userEmail || "", signatureLength: 8192,
-        });
-        const withPh = await pdfDoc.save();
-        const signer = new P12Signer(pfxBytes, { passphrase: password });
-        const signedBuf = await new SignPdf().sign(Buffer.from(withPh), signer);
-        const hashSigned = crypto.createHash("sha256").update(signedBuf).digest("hex");
-        const signedName = fileName.replace(/\.pdf$/i, "") + "_assinado.pdf";
-        const { driveFileId, driveLink } = await uploadSignedPdfToDrive(signedName, signedBuf);
-        const signTimestamp = new Date().toISOString();
-        const certInfo = {
-          provider: "Servidor local (PAdES)", cert_type: "A1", standard: "ICP-Brasil", pades: true,
-          subject_cn: certRow.subject_cn, cpf: certRow.cpf, issuer: certRow.issuer,
-          fingerprint_sha256: certRow.fingerprint_sha256, signer_email: userEmail,
-        };
-        return json(res, 200, {
-          signed: true, signedName, driveFileId, driveLink,
-          filePath: `drive://${driveFileId}`, fileSize: signedBuf.length,
-          fileHashOriginal: hashOriginal, fileHashSigned: hashSigned,
-          signTimestamp, certInfo, subjectCn: certRow.subject_cn,
-        });
-      }
-
-      // JSON mode — assina documento existente
-      const body = await readJsonBody(req);
-      const { documentId, filePath, fileName, password, reason, position } = body;
-      if (!documentId || !filePath || !fileName || !password) {
-        return json(res, 400, { error: "Dados incompletos (informe senha do certificado)" });
-      }
-      const docRes = await db.query("SELECT id, user_id, file_path, drive_file_id FROM public.documents WHERE id=$1 AND file_path=$2", [documentId, filePath]);
-      const doc = docRes.rows[0];
-      const pRes = await db.query("SELECT role, active FROM public.profiles WHERE id=$1", [claims.sub]);
-      const isAdmin = pRes.rows[0]?.role === "Administrador" && pRes.rows[0]?.active === true;
-      if (!doc || (doc.user_id !== claims.sub && !isAdmin)) return json(res, 403, { error: "Não autorizado" });
-
-      const { certRow, pfxBytes } = await loadUserCertificate(db, claims.sub, password);
-
-      // Baixa PDF original (apenas Drive na instalação local)
-      if (!filePath.startsWith("drive://")) return json(res, 400, { error: "Arquivo não está no Drive" });
-      const driveId = doc.drive_file_id || filePath.replace("drive://", "");
-      const cfg = loadDriveConfig();
-      const token = await getGoogleAccessToken(cfg.serviceAccount);
-      const dlRes = await httpRequest(`https://www.googleapis.com/drive/v3/files/${driveId}?alt=media&supportsAllDrives=true`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (dlRes.status >= 300) throw new Error(`Erro ao baixar do Drive: ${dlRes.status}`);
-      const pdfBytes = dlRes.body;
-      const hashOriginal = crypto.createHash("sha256").update(pdfBytes).digest("hex");
-
-      const pdfDoc = await PDFDocument.load(pdfBytes);
-      if (position && typeof position.page === "number") {
-        try { await drawSignatureStampLocal(pdfDoc, position, certRow, userEmail); }
-        catch (e) { console.error("draw stamp:", e.message); }
-      }
-      pdflibAddPlaceholder({
-        pdfDoc, reason: reason || "Assinatura digital ICP-Brasil",
-        name: certRow.subject_cn || userEmail || "Assinante",
-        location: "Brasil", contactInfo: userEmail || "", signatureLength: 8192,
-      });
-      const withPh = await pdfDoc.save();
-      const signer = new P12Signer(pfxBytes, { passphrase: password });
-      const signedBuf = await new SignPdf().sign(Buffer.from(withPh), signer);
-      const hashSigned = crypto.createHash("sha256").update(signedBuf).digest("hex");
-      const signedName = fileName.replace(/\.pdf$/i, "") + "_assinado.pdf";
-      const up = await uploadSignedPdfToDrive(signedName, signedBuf);
-
-      // Remove original do Drive
-      try {
-        await httpRequest(`https://www.googleapis.com/drive/v3/files/${driveId}?supportsAllDrives=true`, {
-          method: "DELETE", headers: { Authorization: `Bearer ${token}` },
-        });
-      } catch (e) { console.warn("falha remover original:", e.message); }
-
-      const signTimestamp = new Date().toISOString();
-      const certInfo = {
-        provider: "Servidor local (PAdES)", cert_type: "A1", standard: "ICP-Brasil", pades: true,
-        subject_cn: certRow.subject_cn, cpf: certRow.cpf, issuer: certRow.issuer,
-        fingerprint_sha256: certRow.fingerprint_sha256, signer_email: userEmail,
-      };
-      const newFilePath = `drive://${up.driveFileId}`;
-      await db.query(
-        `UPDATE public.documents SET sign_status='assinado', sign_timestamp=$1, sign_certificate_info=$2,
-         file_hash_original=$3, file_hash_signed=$4, file_path=$5, file_name=$6, drive_file_id=$7, drive_link=$8,
-         notes=$9 WHERE id=$10`,
-        [signTimestamp, certInfo, hashOriginal, hashSigned, newFilePath, signedName, up.driveFileId, up.driveLink,
-         `PAdES ICP-Brasil A1 | CN: ${certRow.subject_cn} | SHA-256 assinado: ${hashSigned.substring(0,16)}...`,
-         documentId]
-      );
-      await db.query(
-        `INSERT INTO public.audit_logs (user_id, user_email, action, action_type, target, details)
-         VALUES ($1,$2,'Assinatura digital PAdES ICP-Brasil A1 aplicada','sign',$3,$4)`,
-        [claims.sub, userEmail, documentId, JSON.stringify({
-          file_name: signedName, standard: "ICP-Brasil", pades: true,
-          cert_subject_cn: certRow.subject_cn, cert_cpf: certRow.cpf,
-          cert_fingerprint: certRow.fingerprint_sha256,
-          sha256_original: hashOriginal, sha256_signed: hashSigned,
-          timestamp: signTimestamp, legal_basis: "Lei 14.063/2020, MP 2.200-2/2001, Decreto 10.278/2020",
-        })]
-      );
-      return json(res, 200, {
-        signed: true, documentId, signTimestamp,
-        fileHashOriginal: hashOriginal, fileHashSigned: hashSigned, newFilePath,
-      });
-    });
-  } catch (e) {
-    console.error("sign-pdf-a1 error:", e);
-    const safe = ["Certificado expirado","Senha do certificado incorreta","Você ainda não cadastrou seu certificado","Arquivo e senha são obrigatórios","Falha ao descriptografar certificado","Google Drive não configurado","ID da pasta raiz","Não autorizado","Arquivo não está no Drive"];
-    const msg = String(e?.message || "");
-    const userMsg = safe.some((s) => msg.startsWith(s)) ? msg : "Erro interno. Contate o administrador.";
-    return json(res, 500, { error: userMsg });
-  }
-}
-
-
 
 // ============ Backup / Restore (local) ============
 const SETTINGS_DIR = path.join(STORAGE_DIR, "settings");
@@ -3096,7 +2468,6 @@ async function handle(req, res) {
     if (fnPath === "upload-certificate" && req.method === "POST") return await uploadCertificate(req, res, claims);
     if (fnPath === "change-certificate-password" && req.method === "POST") return await changeCertificatePassword(req, res, claims);
     if (fnPath === "backup-restore" && req.method === "POST") return await backupRestore(req, res, claims);
-    if (fnPath === "sign-pdf-a1" && req.method === "POST") return await signPdfA1(req, res, claims);
     return json(res, 404, { error: `Função '${fnPath}' não disponível na instalação local` });
   } catch (e) {
     console.error("[FUNCTION ERROR]", fnPath, e);
@@ -3349,20 +2720,12 @@ server {
         if (\$request_method = OPTIONS) { return 204; }
     }
 
-    # MIME para módulos ES (.mjs) — necessário para o worker do pdf.js
-    location ~* \.mjs$ {
-        types { } default_type application/javascript;
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-        try_files \$uri =404;
-    }
-
     # Frontend SPA
     location / {
         try_files \$uri \$uri/ /index.html;
     }
 
-    location ~* \.(js|mjs|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 30d;
         add_header Cache-Control "public, immutable";
         try_files \$uri =404;
@@ -3413,18 +2776,12 @@ write_credentials_file() {
   cat > /etc/axisdocs/credentials <<EOF_CRED
 # AxisDocs - Credenciais locais (MANTENHA SEGURO)
 JWT_SECRET=$JWT_SECRET
-CERT_ENCRYPTION_KEY=$CERT_ENCRYPTION_KEY
 ANON_KEY=$ANON_KEY
 SERVICE_KEY=$SERVICE_KEY
 PG_USER=$PG_USER
 PG_PASS=$PG_PASS
 PG_DB=$PG_DB
 APP_DOMAIN=$APP_DOMAIN
-SMTP_HOST=$SMTP_HOST
-SMTP_PORT=$SMTP_PORT
-SMTP_USER=$SMTP_USER
-SMTP_PASS=$SMTP_PASS
-SMTP_FROM=$SMTP_FROM
 EOF_CRED
   chmod 600 /etc/axisdocs/credentials
   success "Credenciais salvas em /etc/axisdocs/credentials"

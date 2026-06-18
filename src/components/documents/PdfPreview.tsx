@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
-import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-GlobalWorkerOptions.workerPort = new PdfWorker();
+GlobalWorkerOptions.workerSrc = pdfWorker;
 
 interface PdfPreviewProps {
   fileUrl: string;

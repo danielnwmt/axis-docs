@@ -18,21 +18,6 @@ const loadUserLanguage = async (userId: string) => {
   } catch {}
 };
 
-/**
- * Limpa todo o estado client-side de autenticação/sessão.
- * Preserva apenas o hardware_id da licença (necessário para revalidação).
- */
-const clearClientStorage = () => {
-  try {
-    const hwId = localStorage.getItem("axis_hw_id");
-    localStorage.clear();
-    sessionStorage.clear();
-    if (hwId) localStorage.setItem("axis_hw_id", hwId);
-  } catch {
-    // storage indisponível (modo privado etc.) — ignora
-  }
-};
-
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -64,14 +49,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 5000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
         clearTimeout(timeout);
-        if (event === "SIGNED_OUT" || (event === "TOKEN_REFRESHED" && !session)) {
-          clearClientStorage();
-        }
         if (session?.user?.id) {
           setTimeout(() => loadUserLanguage(session.user.id), 0);
         }
@@ -98,18 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // segue para limpeza mesmo se a chamada falhar (offline / token inválido)
-    } finally {
-      setUser(null);
-      setSession(null);
-      clearClientStorage();
-      // Hard reload garante que nenhum estado em memória, cache do React Query
-      // ou módulo persista após o logout/bloqueio.
-      window.location.replace("/login");
-    }
+    await supabase.auth.signOut();
   };
 
   return (

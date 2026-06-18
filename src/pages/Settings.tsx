@@ -11,15 +11,13 @@ import { fetchManagedList } from "@/lib/adminLookups";
 import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, unlockTemporary, normalizeLicenseServerUrl, type LicenseInfo } from "@/lib/license";
 import { getStorageQuota, formatBytes, type StorageQuota } from "@/lib/storageQuota";
 import { MyCertificateSection } from "@/components/settings/MyCertificateSection";
-import { SystemUpdateSection } from "@/components/settings/SystemUpdateSection";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 
-
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | "minhasenha" | "mfa" | "sistema" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | "minhasenha" | "mfa" | null;
 
 // Apenas Administrador
-const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "licenca", "sistema"];
+const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "licenca"];
 // Administrador + Operador (escondidas apenas para Usuário)
 const STAFF_SECTIONS: Section[] = ["backup"];
 
@@ -36,7 +34,6 @@ const sectionCards = [
   { id: "backup" as Section, icon: DatabaseBackup, title: "Backup & Restauração", description: "Exportar e importar usuários, auditoria e referências de documentos" },
   { id: "licenca" as Section, icon: KeyRound, title: "Licença", description: "Ativar e consultar o status da licença do AxisDocs" },
   { id: "mobile" as Section, icon: Smartphone, title: "Acesso Mobile", description: "QR Code para abrir o sistema no aplicativo" },
-  { id: "sistema" as Section, icon: RefreshCw, title: "Gerenciamento do Sistema", description: "Verificar e aplicar atualizações do AxisDocs na VPS" },
 ];
 
 function MyPasswordSection() {
@@ -423,10 +420,17 @@ function ParametrosSection() {
 
         <Label>Manutenção do sistema</Label>
         <div className="flex flex-col sm:flex-row gap-2">
+          <Button type="button" variant="outline" onClick={handleSystemUpdate} disabled={updating} className="gap-2">
+            <RefreshCw className={`w-4 h-4 ${updating ? "animate-spin" : ""}`} />
+            {updating ? "Atualizando..." : "Atualizar sistema"}
+          </Button>
           <Button type="button" variant="outline" onClick={handleSystemBackup} className="gap-2">
             <DatabaseBackup className="w-4 h-4" /> Fazer backup
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          A atualização busca a última versão oficial do AxisDocs e refaz o build automaticamente.
+        </p>
       </div>
     </div>
   );
@@ -1304,7 +1308,6 @@ export default function Settings() {
       case "mobile": return <MobileAccessSection />;
       case "minhasenha": return <MyPasswordSection />;
       case "mfa": return <MfaSection />;
-      case "sistema": return <SystemUpdateSection />;
       default: return null;
     }
   };

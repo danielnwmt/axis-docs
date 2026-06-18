@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff } from "lucide-react";
-import { isLocalInstall } from "@/lib/adminApi";
 import axisLogo from "@/assets/axis-logo.png";
 
 export default function Login() {
@@ -28,12 +27,7 @@ export default function Login() {
           redirectTo: `${window.location.origin}/reset-password`,
         });
         if (error) throw error;
-        toast({
-          title: "E-mail enviado",
-          description: isLocalInstall()
-            ? "Se o e-mail estiver cadastrado, um link de redefinição foi enviado. Verifique sua caixa de entrada e o spam."
-            : "Verifique sua caixa de entrada para redefinir a senha.",
-        });
+        toast({ title: "E-mail enviado", description: "Verifique sua caixa de entrada para redefinir a senha." });
         setIsResetting(false);
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
