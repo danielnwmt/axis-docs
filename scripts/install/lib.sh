@@ -98,6 +98,17 @@ collect_install_options() {
     fail "A senha do administrador deve ter no mínimo 6 caracteres"
   fi
 
+  # SMTP (Gmail) — usado pelo fluxo "Esqueci minha senha"
+  SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}"
+  SMTP_PORT="${SMTP_PORT:-465}"
+  SMTP_USER="${SMTP_USER:-contato@axisdocs.xyz}"
+  SMTP_FROM="${SMTP_FROM:-AxisDocs <contato@axisdocs.xyz>}"
+  if [ -z "${SMTP_PASS:-}" ] && [ -t 0 ]; then
+    printf "Senha de app do Gmail para %s (Enter para pular envio de e-mails): " "$SMTP_USER"
+    read -r SMTP_PASS
+  fi
+  SMTP_PASS="${SMTP_PASS:-}"
+
   success "Opções coletadas (admin: $ADMIN_EMAIL)"
 }
 
