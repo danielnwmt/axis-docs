@@ -648,6 +648,7 @@ Deno.serve(async (req) => {
       "Você ainda não cadastrou seu certificado",
       "Arquivo e senha são obrigatórios",
       "Falha ao descriptografar certificado",
+      "Não foi possível abrir o certificado salvo",
     ];
     const msg = String(e?.message || "");
     const userMsg = safeStarts.some((s) => msg.startsWith(s)) ? msg : "Erro interno. Contate o administrador.";
