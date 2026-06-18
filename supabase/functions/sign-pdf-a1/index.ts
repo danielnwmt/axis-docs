@@ -139,12 +139,32 @@ async function findOrCreateFolder(token: string, name: string, parentId: string)
   return (await c.json()).id;
 }
 
-async function uploadSignedToDrive(supabase: any, signedName: string, signedPdfBuf: Uint8Array, _unitName?: string, _categoryName?: string) {
+async function uploadSignedToDrive(
+  supabase: any,
+  signedName: string,
+  signedPdfBuf: Uint8Array,
+  unitName?: string,
+  categoryName?: string,
+  useSignatureFolder: boolean = false,
+) {
   const cfg = await loadDriveConfig(supabase);
   if (!cfg.folderId) throw new Error("ID da pasta raiz do Google Drive não configurado. Configure em Configurações.");
   const token = await getDriveAccessToken(cfg.serviceAccount);
-  // Todos os PDFs assinados ficam centralizados na pasta "Assinatura Digital"
-  const targetFolderId = await findOrCreateFolder(token, "Assinatura Digital", cfg.folderId);
+
+  // Aba "Assinatura Digital" → tudo centralizado na pasta dedicada.
+  // Fluxo normal (assinatura de documento já no acervo) → respeita Unidade/Categoria.
+  let targetFolderId: string;
+  if (useSignatureFolder) {
+    targetFolderId = await findOrCreateFolder(token, "Assinatura Digital", cfg.folderId);
+  } else {
+    targetFolderId = cfg.folderId;
+    if (unitName && unitName.trim()) {
+      targetFolderId = await findOrCreateFolder(token, unitName.trim(), targetFolderId);
+    }
+    if (categoryName && categoryName.trim()) {
+      targetFolderId = await findOrCreateFolder(token, categoryName.trim(), targetFolderId);
+    }
+  }
   const metadata: any = { name: signedName, parents: [targetFolderId] };
   const boundary = "----axisdocs" + Math.random().toString(36).slice(2);
   const body = new Blob([
