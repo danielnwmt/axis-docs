@@ -938,12 +938,29 @@ const http = require("http");
 const crypto = require("crypto");
 const { Pool } = require("pg");
 const url = require("url");
+let nodemailer = null;
+try { nodemailer = require("nodemailer"); } catch (e) { console.warn("[AUTH] nodemailer não instalado, e-mails desativados"); }
 
 const PORT = 9999;
 const JWT_SECRET = process.env.JWT_SECRET;
 const DB_URL = process.env.DATABASE_URL;
+const SMTP_HOST = process.env.SMTP_HOST || "";
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || "465", 10);
+const SMTP_USER = process.env.SMTP_USER || "";
+const SMTP_PASS = process.env.SMTP_PASS || "";
+const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
+const APP_PUBLIC_URL = (process.env.APP_PUBLIC_URL || "").replace(/\/+$/, "");
 
-const pool = new Pool({ connectionString: DB_URL });
+let mailer = null;
+if (nodemailer && SMTP_HOST && SMTP_USER && SMTP_PASS) {
+  mailer = nodemailer.createTransport({
+    host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_PORT === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  });
+  console.log("[AUTH] SMTP configurado:", SMTP_HOST + ":" + SMTP_PORT, "como", SMTP_USER);
+} else {
+  console.warn("[AUTH] SMTP não configurado — recuperação de senha não enviará e-mails");
+}
 
 function signJwt(payload) {
   const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
