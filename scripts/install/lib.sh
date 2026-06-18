@@ -962,6 +962,35 @@ if (nodemailer && SMTP_HOST && SMTP_USER && SMTP_PASS) {
   console.warn("[AUTH] SMTP não configurado — recuperação de senha não enviará e-mails");
 }
 
+const pool = new Pool({ connectionString: DB_URL });
+
+async function ensureRecoverySchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS auth.recovery_tokens (
+      token text PRIMARY KEY,
+      user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+      expires_at timestamptz NOT NULL,
+      used_at timestamptz
+    );
+    CREATE INDEX IF NOT EXISTS recovery_tokens_user_idx ON auth.recovery_tokens(user_id);
+  `);
+}
+
+async function sendRecoveryEmail(to, link) {
+  if (!mailer) { console.log("[AUTH] (sem SMTP) Link de recuperação:", link); return false; }
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px;color:#0f172a">
+      <h2 style="color:#1e3a8a">AxisDocs — Redefinição de senha</h2>
+      <p>Recebemos um pedido para redefinir sua senha. Clique no botão abaixo para criar uma nova senha. O link expira em 1 hora.</p>
+      <p style="margin:24px 0"><a href="${link}" style="background:#1e3a8a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Redefinir minha senha</a></p>
+      <p style="font-size:12px;color:#475569">Se você não solicitou, ignore este e-mail.</p>
+      <p style="font-size:12px;color:#475569">Ou copie e cole no navegador:<br>${link}</p>
+    </div>`;
+  await mailer.sendMail({ from: SMTP_FROM, to, subject: "AxisDocs — Redefinição de senha", html });
+  return true;
+}
+
+
 function signJwt(payload) {
   const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
