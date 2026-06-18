@@ -468,11 +468,14 @@ Deno.serve(async (req) => {
     const iv = fromPgHex(certRow.pfx_iv);
     const tag = fromPgHex(certRow.pfx_auth_tag);
     let pfxBytes: Uint8Array;
+    let legacyZeroKey = false;
     try {
-      pfxBytes = await aesGcmDecrypt(ct, iv, tag);
+      const dec = await aesGcmDecryptCertificate(ct, iv, tag);
+      pfxBytes = dec.plain;
+      legacyZeroKey = dec.legacyZeroKey;
     } catch {
-      return new Response(JSON.stringify({ error: "Falha ao descriptografar certificado (chave do servidor inválida)" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return new Response(JSON.stringify({ error: "Não foi possível abrir o certificado salvo. Remova e cadastre o .pfx novamente." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -485,6 +488,15 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Senha do certificado incorreta" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+    if (legacyZeroKey) {
+      const enc = await aesGcmEncrypt(pfxBytes);
+      await supabase.from("user_certificates").update({
+        pfx_encrypted: bytesToPgHex(enc.ct),
+        pfx_iv: bytesToPgHex(enc.iv),
+        pfx_auth_tag: bytesToPgHex(enc.tag),
+        updated_at: new Date().toISOString(),
+      }).eq("user_id", user.id);
     }
 
     // Download PDF
