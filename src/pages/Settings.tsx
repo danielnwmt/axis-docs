@@ -14,6 +14,7 @@ import { MyCertificateSection } from "@/components/settings/MyCertificateSection
 import { SystemUpdateSection } from "@/components/settings/SystemUpdateSection";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
+import { isLocalInstall } from "@/lib/adminApi";
 
 type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | "minhasenha" | "mfa" | "sistema" | null;
 
