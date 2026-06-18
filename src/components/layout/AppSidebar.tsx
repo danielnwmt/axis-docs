@@ -1,6 +1,7 @@
 import { 
   LayoutDashboard, FileText, Upload, ScanText, Search, PenTool, Shield, Users, Settings, HelpCircle, LogOut
 } from "lucide-react";
+import { UserProfileMenu } from "./UserProfileMenu";
 import { cn } from "@/lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -109,14 +110,7 @@ export function AppSidebar() {
           <LogOut className="w-[18px] h-[18px]" />
           <span>{t("nav.logout")}</span>
         </button>
-        <div className="flex items-center gap-3 mx-3 px-3 py-2.5 rounded-lg bg-sidebar-accent">
-          <div className="w-8 h-8 rounded-full bg-info flex items-center justify-center text-info-foreground text-xs font-bold">
-            {user?.email?.[0]?.toUpperCase() || "U"}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-sidebar-primary truncate">{user?.email || "Usuário"}</p>
-          </div>
-        </div>
+        <UserProfileMenu />
       </div>
     </aside>
   );
