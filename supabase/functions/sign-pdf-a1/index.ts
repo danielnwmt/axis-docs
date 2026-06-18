@@ -523,7 +523,15 @@ Deno.serve(async (req) => {
     let newDriveLink: string | null = null;
 
     if (filePath.startsWith("drive://")) {
-      const up = await uploadSignedToDrive(supabase, signedName, signedPdfBuf);
+      const isSignatureTabDoc = (doc as any).category === "Assinatura Digital" && (doc as any).unit === "Assinatura Digital";
+      const up = await uploadSignedToDrive(
+        supabase,
+        signedName,
+        signedPdfBuf,
+        (doc as any).unit || "",
+        (doc as any).category || "",
+        isSignatureTabDoc,
+      );
       newDriveFileId = up.driveFileId;
       newDriveLink = up.driveLink;
       newFilePath = `drive://${up.driveFileId}`;
