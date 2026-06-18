@@ -2393,7 +2393,7 @@ function aesGcmDecrypt(ct, iv, tag) {
 }
 
 function aesGcmDecryptWithKey(ct, iv, tag, key) {
-  const decipher = crypto.createDecipheriv("aes-256-gcm", CERT_ENC_KEY, iv);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ct), decipher.final()]);
 }
