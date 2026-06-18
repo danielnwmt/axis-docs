@@ -18,6 +18,21 @@ const loadUserLanguage = async (userId: string) => {
   } catch {}
 };
 
+/**
+ * Limpa todo o estado client-side de autenticação/sessão.
+ * Preserva apenas o hardware_id da licença (necessário para revalidação).
+ */
+const clearClientStorage = () => {
+  try {
+    const hwId = localStorage.getItem("axis_hw_id");
+    localStorage.clear();
+    sessionStorage.clear();
+    if (hwId) localStorage.setItem("axis_hw_id", hwId);
+  } catch {
+    // storage indisponível (modo privado etc.) — ignora
+  }
+};
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
