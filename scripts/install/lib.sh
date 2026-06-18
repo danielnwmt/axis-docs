@@ -1614,14 +1614,27 @@ const server = http.createServer(async (req, res) => {
 });
 
 ensureMfaSchema().catch(e => console.error("[MFA SCHEMA]", e));
+ensureRecoverySchema().catch(e => console.error("[RECOVERY SCHEMA]", e));
 server.listen(PORT, "127.0.0.1", () => console.log(`Auth server running on port ${PORT}`));
 
 AUTHSERVER
 
-  # Instalar pg driver para o auth server
+  # Instalar dependências do auth server
   cd /opt/axisdocs-auth
   npm init -y >/dev/null 2>&1
-  npm install --no-fund --no-audit pg >/dev/null 2>&1
+  npm install --no-fund --no-audit pg nodemailer >/dev/null 2>&1
+
+  # Define URL pública usada nos links de e-mail
+  local app_public_url
+  if [ -n "$APP_DOMAIN" ]; then
+    if [ "${SSL_CONFIGURED:-false}" = "true" ] || [ -d "/etc/letsencrypt/live/$APP_DOMAIN" ]; then
+      app_public_url="https://$APP_DOMAIN"
+    else
+      app_public_url="http://$APP_DOMAIN"
+    fi
+  else
+    app_public_url="http://localhost"
+  fi
 
   # Serviço systemd
   cat > /etc/systemd/system/axisdocs-auth.service <<EOF_AUTH
@@ -1636,6 +1649,12 @@ Restart=always
 RestartSec=5
 Environment=JWT_SECRET=$JWT_SECRET
 Environment=DATABASE_URL=postgres://$PG_USER:$PG_PASS@localhost:5432/$PG_DB
+Environment=SMTP_HOST=$SMTP_HOST
+Environment=SMTP_PORT=$SMTP_PORT
+Environment=SMTP_USER=$SMTP_USER
+Environment=SMTP_PASS=$SMTP_PASS
+Environment="SMTP_FROM=$SMTP_FROM"
+Environment=APP_PUBLIC_URL=$app_public_url
 WorkingDirectory=/opt/axisdocs-auth
 
 [Install]
@@ -1644,7 +1663,7 @@ EOF_AUTH
 
   systemctl daemon-reload
   systemctl enable axisdocs-auth
-  systemctl start axisdocs-auth
+  systemctl restart axisdocs-auth
 
   success "Servidor de autenticação rodando na porta 9999"
 }
