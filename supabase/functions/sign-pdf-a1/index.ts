@@ -30,13 +30,39 @@ function getEncKey(): Uint8Array {
   return bytes.slice(0, 32);
 }
 
-async function aesGcmDecrypt(ct: Uint8Array, iv: Uint8Array, tag: Uint8Array): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey("raw", getEncKey(), { name: "AES-GCM" }, false, ["decrypt"]);
+async function aesGcmDecryptWithKey(ct: Uint8Array, iv: Uint8Array, tag: Uint8Array, rawKey: Uint8Array): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["decrypt"]);
   const combined = new Uint8Array(ct.length + tag.length);
   combined.set(ct);
   combined.set(tag, ct.length);
   const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, combined);
   return new Uint8Array(pt);
+}
+
+async function aesGcmDecrypt(ct: Uint8Array, iv: Uint8Array, tag: Uint8Array): Promise<Uint8Array> {
+  return aesGcmDecryptWithKey(ct, iv, tag, getEncKey());
+}
+
+async function aesGcmDecryptCertificate(ct: Uint8Array, iv: Uint8Array, tag: Uint8Array): Promise<{ plain: Uint8Array; legacyZeroKey: boolean }> {
+  try {
+    return { plain: await aesGcmDecrypt(ct, iv, tag), legacyZeroKey: false };
+  } catch (e) {
+    const zeroKey = new Uint8Array(32);
+    const currentKey = getEncKey();
+    if (currentKey.every((byte) => byte === 0)) throw e;
+    return { plain: await aesGcmDecryptWithKey(ct, iv, tag, zeroKey), legacyZeroKey: true };
+  }
+}
+
+async function aesGcmEncrypt(plain: Uint8Array): Promise<{ ct: Uint8Array; iv: Uint8Array; tag: Uint8Array }> {
+  const key = await crypto.subtle.importKey("raw", getEncKey(), { name: "AES-GCM" }, false, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ctWithTag = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plain));
+  return { ct: ctWithTag.slice(0, -16), iv, tag: ctWithTag.slice(-16) };
+}
+
+function bytesToPgHex(b: Uint8Array): string {
+  return `\\x${Array.from(b).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
 function fromPgHex(val: any): Uint8Array {
@@ -110,13 +136,27 @@ async function loadCertForUser(supabase: any, userId: string, password: string) 
   const iv = fromPgHex(certRow.pfx_iv);
   const tag = fromPgHex(certRow.pfx_auth_tag);
   let pfxBytes: Uint8Array;
-  try { pfxBytes = await aesGcmDecrypt(ct, iv, tag); }
-  catch { throw new Error("Falha ao descriptografar certificado (chave do servidor inválida)"); }
+  let legacyZeroKey = false;
+  try {
+    const dec = await aesGcmDecryptCertificate(ct, iv, tag);
+    pfxBytes = dec.plain;
+    legacyZeroKey = dec.legacyZeroKey;
+  }
+  catch { throw new Error("Não foi possível abrir o certificado salvo. Remova e cadastre o .pfx novamente."); }
   try {
     const binStr = String.fromCharCode(...pfxBytes);
     const p12Asn1 = forge.asn1.fromDer(binStr);
     forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, password);
   } catch { throw new Error("Senha do certificado incorreta"); }
+  if (legacyZeroKey) {
+    const enc = await aesGcmEncrypt(pfxBytes);
+    await supabase.from("user_certificates").update({
+      pfx_encrypted: bytesToPgHex(enc.ct),
+      pfx_iv: bytesToPgHex(enc.iv),
+      pfx_auth_tag: bytesToPgHex(enc.tag),
+      updated_at: new Date().toISOString(),
+    }).eq("user_id", userId);
+  }
   return { certRow, pfxBytes };
 }
 
@@ -428,11 +468,14 @@ Deno.serve(async (req) => {
     const iv = fromPgHex(certRow.pfx_iv);
     const tag = fromPgHex(certRow.pfx_auth_tag);
     let pfxBytes: Uint8Array;
+    let legacyZeroKey = false;
     try {
-      pfxBytes = await aesGcmDecrypt(ct, iv, tag);
+      const dec = await aesGcmDecryptCertificate(ct, iv, tag);
+      pfxBytes = dec.plain;
+      legacyZeroKey = dec.legacyZeroKey;
     } catch {
-      return new Response(JSON.stringify({ error: "Falha ao descriptografar certificado (chave do servidor inválida)" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return new Response(JSON.stringify({ error: "Não foi possível abrir o certificado salvo. Remova e cadastre o .pfx novamente." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -445,6 +488,15 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Senha do certificado incorreta" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+    if (legacyZeroKey) {
+      const enc = await aesGcmEncrypt(pfxBytes);
+      await supabase.from("user_certificates").update({
+        pfx_encrypted: bytesToPgHex(enc.ct),
+        pfx_iv: bytesToPgHex(enc.iv),
+        pfx_auth_tag: bytesToPgHex(enc.tag),
+        updated_at: new Date().toISOString(),
+      }).eq("user_id", user.id);
     }
 
     // Download PDF
@@ -596,6 +648,7 @@ Deno.serve(async (req) => {
       "Você ainda não cadastrou seu certificado",
       "Arquivo e senha são obrigatórios",
       "Falha ao descriptografar certificado",
+      "Não foi possível abrir o certificado salvo",
     ];
     const msg = String(e?.message || "");
     const userMsg = safeStarts.some((s) => msg.startsWith(s)) ? msg : "Erro interno. Contate o administrador.";
