@@ -1217,12 +1217,60 @@ async function handleRequest(req, res) {
     return json(res, 200, {});
   }
 
-  // POST /auth/v1/recover (password reset - envia log, sem email real)
+  // POST /auth/v1/recover (envia e-mail com link de redefinição)
   if (req.method === "POST" && path === "/auth/v1/recover") {
     const body = await readBody(req);
-    console.log("[AUTH] Password reset requested for:", body.email);
+    const email = String(body.email || "").trim().toLowerCase();
+    if (!email) return json(res, 400, { error: "E-mail é obrigatório" });
+    try {
+      const u = await pool.query("SELECT id, email FROM auth.users WHERE lower(email) = $1", [email]);
+      if (u.rows.length > 0) {
+        const user = u.rows[0];
+        const token = crypto.randomBytes(32).toString("hex");
+        const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        await pool.query(
+          "INSERT INTO auth.recovery_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)",
+          [token, user.id, expires]
+        );
+        const base = (body.redirect_to || `${APP_PUBLIC_URL}/reset-password`).replace(/\/+$/, "");
+        const link = `${base}?token=${token}&type=recovery`;
+        try {
+          await sendRecoveryEmail(user.email, link);
+          console.log("[AUTH] Recovery email enviado para:", user.email);
+        } catch (mailErr) {
+          console.error("[AUTH] Falha ao enviar e-mail de recuperação:", mailErr.message);
+        }
+      } else {
+        console.log("[AUTH] Recover solicitado p/ e-mail inexistente:", email);
+      }
+    } catch (e) {
+      console.error("[AUTH] Recover error:", e.message);
+    }
+    // Sempre 200 para não vazar existência de e-mail
     return json(res, 200, {});
   }
+
+  // POST /auth/v1/recover/confirm  {token, password}
+  if (req.method === "POST" && path === "/auth/v1/recover/confirm") {
+    const body = await readBody(req);
+    const token = String(body.token || "");
+    const password = String(body.password || "");
+    if (!token || password.length < 6) return json(res, 400, { error: "Token e nova senha (mín. 6 caracteres) são obrigatórios" });
+    const r = await pool.query(
+      "SELECT user_id, expires_at, used_at FROM auth.recovery_tokens WHERE token = $1",
+      [token]
+    );
+    if (r.rows.length === 0) return json(res, 400, { error: "Token inválido" });
+    const row = r.rows[0];
+    if (row.used_at) return json(res, 400, { error: "Token já utilizado" });
+    if (new Date(row.expires_at).getTime() < Date.now()) return json(res, 400, { error: "Token expirado" });
+    const encrypted = hashPassword(password);
+    await pool.query("UPDATE auth.users SET encrypted_password = $1, updated_at = now() WHERE id = $2", [encrypted, row.user_id]);
+    await pool.query("UPDATE auth.recovery_tokens SET used_at = now() WHERE token = $1", [token]);
+    await pool.query("UPDATE public.profiles SET must_change_password = false WHERE id = $1", [row.user_id]);
+    return json(res, 200, { success: true });
+  }
+
 
   // PUT /auth/v1/user (update user)
   if (req.method === "PUT" && path === "/auth/v1/user") {
