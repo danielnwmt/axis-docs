@@ -2471,6 +2471,7 @@ async function changeCertificatePassword(req, res, claims) {
     );
     return json(res, 200, { ok: true });
   });
+}
 
 // ============ Assinatura PAdES ICP-Brasil A1 (sign-pdf-a1) ============
 // Carrega libs ESM/CJS via dynamic import (compatível com Node CJS).
