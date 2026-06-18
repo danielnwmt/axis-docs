@@ -443,6 +443,7 @@ export type Database = {
       profiles: {
         Row: {
           active: boolean
+          avatar_url: string
           cpf: string
           created_at: string
           email: string
@@ -455,6 +456,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          avatar_url?: string
           cpf?: string
           created_at?: string
           email?: string
@@ -467,6 +469,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          avatar_url?: string
           cpf?: string
           created_at?: string
           email?: string
@@ -506,6 +509,36 @@ export type Database = {
           retention_days?: number
           updated_at?: string
           updated_by?: string | null
+        }
+        Relationships: []
+      }
+      system_updates: {
+        Row: {
+          created_at: string
+          id: string
+          message: string | null
+          requested_by: string | null
+          status: string
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          requested_by?: string | null
+          status?: string
+          updated_at?: string
+          version?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          requested_by?: string | null
+          status?: string
+          updated_at?: string
+          version?: string
         }
         Relationships: []
       }
@@ -620,6 +653,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      is_active_user: { Args: { _user_id: string }; Returns: boolean }
       log_pii_access: {
         Args: {
           _reason?: string
