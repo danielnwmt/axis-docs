@@ -98,6 +98,17 @@ collect_install_options() {
     fail "A senha do administrador deve ter no mínimo 6 caracteres"
   fi
 
+  # SMTP (Gmail) — usado pelo fluxo "Esqueci minha senha"
+  SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}"
+  SMTP_PORT="${SMTP_PORT:-465}"
+  SMTP_USER="${SMTP_USER:-contato@axisdocs.xyz}"
+  SMTP_FROM="${SMTP_FROM:-AxisDocs <contato@axisdocs.xyz>}"
+  if [ -z "${SMTP_PASS:-}" ] && [ -t 0 ]; then
+    printf "Senha de app do Gmail para %s (Enter para pular envio de e-mails): " "$SMTP_USER"
+    read -r SMTP_PASS
+  fi
+  SMTP_PASS="${SMTP_PASS:-}"
+
   success "Opções coletadas (admin: $ADMIN_EMAIL)"
 }
 
@@ -927,12 +938,58 @@ const http = require("http");
 const crypto = require("crypto");
 const { Pool } = require("pg");
 const url = require("url");
+let nodemailer = null;
+try { nodemailer = require("nodemailer"); } catch (e) { console.warn("[AUTH] nodemailer não instalado, e-mails desativados"); }
 
 const PORT = 9999;
 const JWT_SECRET = process.env.JWT_SECRET;
 const DB_URL = process.env.DATABASE_URL;
+const SMTP_HOST = process.env.SMTP_HOST || "";
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || "465", 10);
+const SMTP_USER = process.env.SMTP_USER || "";
+const SMTP_PASS = process.env.SMTP_PASS || "";
+const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
+const APP_PUBLIC_URL = (process.env.APP_PUBLIC_URL || "").replace(/\/+$/, "");
+
+let mailer = null;
+if (nodemailer && SMTP_HOST && SMTP_USER && SMTP_PASS) {
+  mailer = nodemailer.createTransport({
+    host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_PORT === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  });
+  console.log("[AUTH] SMTP configurado:", SMTP_HOST + ":" + SMTP_PORT, "como", SMTP_USER);
+} else {
+  console.warn("[AUTH] SMTP não configurado — recuperação de senha não enviará e-mails");
+}
 
 const pool = new Pool({ connectionString: DB_URL });
+
+async function ensureRecoverySchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS auth.recovery_tokens (
+      token text PRIMARY KEY,
+      user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+      expires_at timestamptz NOT NULL,
+      used_at timestamptz
+    );
+    CREATE INDEX IF NOT EXISTS recovery_tokens_user_idx ON auth.recovery_tokens(user_id);
+  `);
+}
+
+async function sendRecoveryEmail(to, link) {
+  if (!mailer) { console.log("[AUTH] (sem SMTP) Link de recuperação:", link); return false; }
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px;color:#0f172a">
+      <h2 style="color:#1e3a8a">AxisDocs — Redefinição de senha</h2>
+      <p>Recebemos um pedido para redefinir sua senha. Clique no botão abaixo para criar uma nova senha. O link expira em 1 hora.</p>
+      <p style="margin:24px 0"><a href="${link}" style="background:#1e3a8a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Redefinir minha senha</a></p>
+      <p style="font-size:12px;color:#475569">Se você não solicitou, ignore este e-mail.</p>
+      <p style="font-size:12px;color:#475569">Ou copie e cole no navegador:<br>${link}</p>
+    </div>`;
+  await mailer.sendMail({ from: SMTP_FROM, to, subject: "AxisDocs — Redefinição de senha", html });
+  return true;
+}
+
 
 function signJwt(payload) {
   const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
@@ -1160,12 +1217,60 @@ async function handleRequest(req, res) {
     return json(res, 200, {});
   }
 
-  // POST /auth/v1/recover (password reset - envia log, sem email real)
+  // POST /auth/v1/recover (envia e-mail com link de redefinição)
   if (req.method === "POST" && path === "/auth/v1/recover") {
     const body = await readBody(req);
-    console.log("[AUTH] Password reset requested for:", body.email);
+    const email = String(body.email || "").trim().toLowerCase();
+    if (!email) return json(res, 400, { error: "E-mail é obrigatório" });
+    try {
+      const u = await pool.query("SELECT id, email FROM auth.users WHERE lower(email) = $1", [email]);
+      if (u.rows.length > 0) {
+        const user = u.rows[0];
+        const token = crypto.randomBytes(32).toString("hex");
+        const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        await pool.query(
+          "INSERT INTO auth.recovery_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)",
+          [token, user.id, expires]
+        );
+        const base = (body.redirect_to || `${APP_PUBLIC_URL}/reset-password`).replace(/\/+$/, "");
+        const link = `${base}?token=${token}&type=recovery`;
+        try {
+          await sendRecoveryEmail(user.email, link);
+          console.log("[AUTH] Recovery email enviado para:", user.email);
+        } catch (mailErr) {
+          console.error("[AUTH] Falha ao enviar e-mail de recuperação:", mailErr.message);
+        }
+      } else {
+        console.log("[AUTH] Recover solicitado p/ e-mail inexistente:", email);
+      }
+    } catch (e) {
+      console.error("[AUTH] Recover error:", e.message);
+    }
+    // Sempre 200 para não vazar existência de e-mail
     return json(res, 200, {});
   }
+
+  // POST /auth/v1/recover/confirm  {token, password}
+  if (req.method === "POST" && path === "/auth/v1/recover/confirm") {
+    const body = await readBody(req);
+    const token = String(body.token || "");
+    const password = String(body.password || "");
+    if (!token || password.length < 6) return json(res, 400, { error: "Token e nova senha (mín. 6 caracteres) são obrigatórios" });
+    const r = await pool.query(
+      "SELECT user_id, expires_at, used_at FROM auth.recovery_tokens WHERE token = $1",
+      [token]
+    );
+    if (r.rows.length === 0) return json(res, 400, { error: "Token inválido" });
+    const row = r.rows[0];
+    if (row.used_at) return json(res, 400, { error: "Token já utilizado" });
+    if (new Date(row.expires_at).getTime() < Date.now()) return json(res, 400, { error: "Token expirado" });
+    const encrypted = hashPassword(password);
+    await pool.query("UPDATE auth.users SET encrypted_password = $1, updated_at = now() WHERE id = $2", [encrypted, row.user_id]);
+    await pool.query("UPDATE auth.recovery_tokens SET used_at = now() WHERE token = $1", [token]);
+    await pool.query("UPDATE public.profiles SET must_change_password = false WHERE id = $1", [row.user_id]);
+    return json(res, 200, { success: true });
+  }
+
 
   // PUT /auth/v1/user (update user)
   if (req.method === "PUT" && path === "/auth/v1/user") {
@@ -1509,14 +1614,27 @@ const server = http.createServer(async (req, res) => {
 });
 
 ensureMfaSchema().catch(e => console.error("[MFA SCHEMA]", e));
+ensureRecoverySchema().catch(e => console.error("[RECOVERY SCHEMA]", e));
 server.listen(PORT, "127.0.0.1", () => console.log(`Auth server running on port ${PORT}`));
 
 AUTHSERVER
 
-  # Instalar pg driver para o auth server
+  # Instalar dependências do auth server
   cd /opt/axisdocs-auth
   npm init -y >/dev/null 2>&1
-  npm install --no-fund --no-audit pg >/dev/null 2>&1
+  npm install --no-fund --no-audit pg nodemailer >/dev/null 2>&1
+
+  # Define URL pública usada nos links de e-mail
+  local app_public_url
+  if [ -n "$APP_DOMAIN" ]; then
+    if [ "${SSL_CONFIGURED:-false}" = "true" ] || [ -d "/etc/letsencrypt/live/$APP_DOMAIN" ]; then
+      app_public_url="https://$APP_DOMAIN"
+    else
+      app_public_url="http://$APP_DOMAIN"
+    fi
+  else
+    app_public_url="http://localhost"
+  fi
 
   # Serviço systemd
   cat > /etc/systemd/system/axisdocs-auth.service <<EOF_AUTH
@@ -1531,6 +1649,12 @@ Restart=always
 RestartSec=5
 Environment=JWT_SECRET=$JWT_SECRET
 Environment=DATABASE_URL=postgres://$PG_USER:$PG_PASS@localhost:5432/$PG_DB
+Environment=SMTP_HOST=$SMTP_HOST
+Environment=SMTP_PORT=$SMTP_PORT
+Environment=SMTP_USER=$SMTP_USER
+Environment=SMTP_PASS=$SMTP_PASS
+Environment="SMTP_FROM=$SMTP_FROM"
+Environment=APP_PUBLIC_URL=$app_public_url
 WorkingDirectory=/opt/axisdocs-auth
 
 [Install]
@@ -1539,7 +1663,7 @@ EOF_AUTH
 
   systemctl daemon-reload
   systemctl enable axisdocs-auth
-  systemctl start axisdocs-auth
+  systemctl restart axisdocs-auth
 
   success "Servidor de autenticação rodando na porta 9999"
 }
@@ -2956,6 +3080,11 @@ PG_USER=$PG_USER
 PG_PASS=$PG_PASS
 PG_DB=$PG_DB
 APP_DOMAIN=$APP_DOMAIN
+SMTP_HOST=$SMTP_HOST
+SMTP_PORT=$SMTP_PORT
+SMTP_USER=$SMTP_USER
+SMTP_PASS=$SMTP_PASS
+SMTP_FROM=$SMTP_FROM
 EOF_CRED
   chmod 600 /etc/axisdocs/credentials
   success "Credenciais salvas em /etc/axisdocs/credentials"
