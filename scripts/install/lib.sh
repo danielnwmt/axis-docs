@@ -1884,6 +1884,26 @@ EOF_STOR
 install_local_functions() {
   log "Instalando servidor de funções locais (Drive / assinatura)"
 
+  if [ -z "${CERT_ENCRYPTION_KEY:-}" ] && [ -f /etc/axisdocs/credentials ]; then
+    # shellcheck disable=SC1091
+    source /etc/axisdocs/credentials
+  fi
+  if [ -z "${CERT_ENCRYPTION_KEY:-}" ] && [ -f /etc/systemd/system/axisdocs-functions.service ]; then
+    CERT_ENCRYPTION_KEY=$(sed -n 's/^Environment=CERT_ENCRYPTION_KEY=//p' /etc/systemd/system/axisdocs-functions.service | tail -n 1 | tr -d '"')
+  fi
+  if ! [[ "${CERT_ENCRYPTION_KEY:-}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+    CERT_ENCRYPTION_KEY=$(openssl rand -hex 32)
+    mkdir -p /etc/axisdocs
+    touch /etc/axisdocs/credentials
+    chmod 600 /etc/axisdocs/credentials
+    if grep -q '^CERT_ENCRYPTION_KEY=' /etc/axisdocs/credentials 2>/dev/null; then
+      sed -i "s/^CERT_ENCRYPTION_KEY=.*/CERT_ENCRYPTION_KEY=$CERT_ENCRYPTION_KEY/" /etc/axisdocs/credentials
+    else
+      printf '\nCERT_ENCRYPTION_KEY=%s\n' "$CERT_ENCRYPTION_KEY" >> /etc/axisdocs/credentials
+    fi
+    echo "⚠️  CERT_ENCRYPTION_KEY ausente; nova chave gerada. Certificados .pfx cadastrados antes deverão ser recadastrados."
+  fi
+
   mkdir -p /opt/axisdocs-functions
 
   # Garante dependências do auth-server reaproveitáveis (pg, node-forge para certificados A1)
@@ -2348,7 +2368,7 @@ const forge = require("node-forge");
 const CERT_ENC_KEY = (() => {
   const raw = process.env.CERT_ENCRYPTION_KEY || "";
   if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, "hex");
-  return Buffer.alloc(32);
+  throw new Error("CERT_ENCRYPTION_KEY inválida ou ausente. Reinstale as funções preservando /etc/axisdocs/credentials.");
 })();
 
 function readJsonBody(req) {
