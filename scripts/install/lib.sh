@@ -2389,9 +2389,22 @@ function aesGcmEncrypt(plain) {
 }
 
 function aesGcmDecrypt(ct, iv, tag) {
+  return aesGcmDecryptWithKey(ct, iv, tag, CERT_ENC_KEY);
+}
+
+function aesGcmDecryptWithKey(ct, iv, tag, key) {
   const decipher = crypto.createDecipheriv("aes-256-gcm", CERT_ENC_KEY, iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ct), decipher.final()]);
+}
+
+function aesGcmDecryptCertificate(ct, iv, tag) {
+  try { return { plain: aesGcmDecrypt(ct, iv, tag), legacyZeroKey: false }; }
+  catch (e) {
+    const zeroKey = Buffer.alloc(32);
+    if (CERT_ENC_KEY.equals(zeroKey)) throw e;
+    return { plain: aesGcmDecryptWithKey(ct, iv, tag, zeroKey), legacyZeroKey: true };
+  }
 }
 
 async function uploadCertificate(req, res, claims) {
