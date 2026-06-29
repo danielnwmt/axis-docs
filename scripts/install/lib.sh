@@ -2638,21 +2638,6 @@ server {
     index index.html;
     client_max_body_size 100M;
 
-    # MIME types padrão do Nginx + override para .mjs (pdf.worker)
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    location ~* \.mjs$ {
-        default_type application/javascript;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        try_files $uri =404;
-    }
-
-    location ~* \.wasm$ {
-        default_type application/wasm;
-        try_files $uri =404;
-    }
-
     gzip on;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
     gzip_min_length 256;
@@ -2740,7 +2725,7 @@ server {
         try_files \$uri \$uri/ /index.html;
     }
 
-    location ~* \.(js|mjs|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|wasm)$ {
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 30d;
         add_header Cache-Control "public, immutable";
         try_files \$uri =404;
