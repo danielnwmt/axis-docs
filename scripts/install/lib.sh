@@ -2638,6 +2638,14 @@ server {
     index index.html;
     client_max_body_size 100M;
 
+    # MIME types extras (necessário p/ ES modules .mjs como pdf.worker)
+    types {
+        application/javascript js mjs;
+        text/css css;
+        application/wasm wasm;
+    }
+    default_type application/octet-stream;
+
     gzip on;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
     gzip_min_length 256;
@@ -2725,7 +2733,7 @@ server {
         try_files \$uri \$uri/ /index.html;
     }
 
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+    location ~* \.(js|mjs|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|wasm)$ {
         expires 30d;
         add_header Cache-Control "public, immutable";
         try_files \$uri =404;
