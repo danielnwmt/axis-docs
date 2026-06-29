@@ -2545,6 +2545,95 @@ EOF_FUNC
   success "Servidor de funções locais rodando na porta 5556"
 }
 
+install_updater_watcher() {
+  log "Configurando watcher de atualização do sistema"
+
+  mkdir -p /var/lib/axisdocs/update-trigger
+  chmod 755 /var/lib/axisdocs /var/lib/axisdocs/update-trigger
+  touch /var/log/axisdocs-update.log
+  chmod 644 /var/log/axisdocs-update.log
+
+  cat > /opt/axisdocs/update-watcher.sh <<'EOF_WATCHER'
+#!/usr/bin/env bash
+# AxisDocs — Watcher de atualização (roda como serviço systemd independente).
+# Detecta o arquivo-gatilho gravado pelo botão "Atualizar sistema" no painel
+# e executa /opt/axisdocs/update.sh em um processo fora do cgroup do servidor
+# de funções, para que o restart dos serviços não derrube o update.
+set -u
+
+APP_DIR="${APP_DIR:-/opt/axisdocs}"
+TRIGGER_DIR="/var/lib/axisdocs/update-trigger"
+TRIGGER_FILE="$TRIGGER_DIR/request"
+HEARTBEAT_FILE="$TRIGGER_DIR/watcher-alive"
+STATUS_FILE="$TRIGGER_DIR/status"
+LOG_FILE="/var/log/axisdocs-update.log"
+
+mkdir -p "$TRIGGER_DIR"
+chmod 755 "$TRIGGER_DIR"
+date +%s > "$HEARTBEAT_FILE" 2>/dev/null || true
+
+LAST=""
+[ -f "$TRIGGER_FILE" ] && LAST="$(cat "$TRIGGER_FILE" 2>/dev/null || true)"
+
+heartbeat_loop() {
+  while true; do
+    date +%s > "$HEARTBEAT_FILE" 2>/dev/null || true
+    sleep 10
+  done
+}
+heartbeat_loop &
+HB_PID=$!
+trap 'kill "$HB_PID" 2>/dev/null || true' EXIT
+
+echo ">> [$(date)] Watcher de atualização ativo. Monitorando $TRIGGER_FILE" >> "$LOG_FILE"
+
+while true; do
+  date +%s > "$HEARTBEAT_FILE" 2>/dev/null || true
+  if [ -f "$TRIGGER_FILE" ]; then
+    CUR="$(cat "$TRIGGER_FILE" 2>/dev/null || true)"
+    if [ -n "$CUR" ] && [ "$CUR" != "$LAST" ]; then
+      LAST="$CUR"
+      echo "iniciada $(date)" > "$STATUS_FILE" 2>/dev/null || true
+      echo ">> [$(date)] Atualização solicitada pelo painel. Rodando update.sh..." >> "$LOG_FILE"
+      if (cd "$APP_DIR" && bash "$APP_DIR/update.sh") >> "$LOG_FILE" 2>&1; then
+        echo "ok $(date)" > "$STATUS_FILE" 2>/dev/null || true
+        echo ">> [$(date)] Atualização concluída com sucesso." >> "$LOG_FILE"
+      else
+        echo "falha $(date)" > "$STATUS_FILE" 2>/dev/null || true
+        echo ">> [$(date)] FALHA na atualização. Veja $LOG_FILE" >> "$LOG_FILE"
+      fi
+    fi
+  fi
+  sleep 3
+done
+EOF_WATCHER
+  chmod +x /opt/axisdocs/update-watcher.sh
+
+  cat > /etc/systemd/system/axisdocs-updater.service <<EOF_UPD
+[Unit]
+Description=AxisDocs Update Watcher
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env bash /opt/axisdocs/update-watcher.sh
+Restart=always
+RestartSec=5
+KillMode=process
+WorkingDirectory=/opt/axisdocs
+
+[Install]
+WantedBy=multi-user.target
+EOF_UPD
+
+  systemctl daemon-reload
+  systemctl enable axisdocs-updater >/dev/null 2>&1 || true
+  systemctl restart axisdocs-updater
+
+  success "Watcher de atualização ativo (axisdocs-updater.service)"
+}
+
+
 install_ssl_packages() {
   if [ -z "$APP_DOMAIN" ]; then
     return
