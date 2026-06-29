@@ -3229,17 +3229,22 @@ echo "➡️  Removendo AxisDocs..."
 systemctl stop axisdocs-auth 2>/dev/null || true
 systemctl stop axisdocs-storage 2>/dev/null || true
 systemctl stop axisdocs-functions 2>/dev/null || true
+systemctl stop axisdocs-updater 2>/dev/null || true
 systemctl stop postgrest 2>/dev/null || true
 systemctl disable axisdocs-auth 2>/dev/null || true
 systemctl disable axisdocs-storage 2>/dev/null || true
 systemctl disable axisdocs-functions 2>/dev/null || true
+systemctl disable axisdocs-updater 2>/dev/null || true
 systemctl disable postgrest 2>/dev/null || true
 
 rm -f /etc/systemd/system/axisdocs-auth.service
 rm -f /etc/systemd/system/axisdocs-storage.service
 rm -f /etc/systemd/system/axisdocs-functions.service
+rm -f /etc/systemd/system/axisdocs-updater.service
 rm -f /etc/systemd/system/postgrest.service
 systemctl daemon-reload
+
+rm -rf /var/lib/axisdocs
 
 rm -f /etc/nginx/sites-enabled/axisdocs
 rm -f /etc/nginx/sites-available/axisdocs
