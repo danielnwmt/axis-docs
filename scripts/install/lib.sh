@@ -2638,6 +2638,14 @@ server {
     index index.html;
     client_max_body_size 100M;
 
+    # MIME types extras (necessário p/ ES modules .mjs como pdf.worker)
+    types {
+        application/javascript js mjs;
+        text/css css;
+        application/wasm wasm;
+    }
+    default_type application/octet-stream;
+
     gzip on;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
     gzip_min_length 256;
