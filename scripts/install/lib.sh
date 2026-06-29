@@ -2638,13 +2638,20 @@ server {
     index index.html;
     client_max_body_size 100M;
 
-    # MIME types extras (necessário p/ ES modules .mjs como pdf.worker)
-    types {
-        application/javascript js mjs;
-        text/css css;
-        application/wasm wasm;
-    }
+    # MIME types padrão do Nginx + override para .mjs (pdf.worker)
+    include /etc/nginx/mime.types;
     default_type application/octet-stream;
+
+    location ~* \.mjs$ {
+        default_type application/javascript;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location ~* \.wasm$ {
+        default_type application/wasm;
+        try_files $uri =404;
+    }
 
     gzip on;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
