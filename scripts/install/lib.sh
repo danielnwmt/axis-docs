@@ -2733,7 +2733,7 @@ server {
         try_files \$uri \$uri/ /index.html;
     }
 
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+    location ~* \.(js|mjs|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|wasm)$ {
         expires 30d;
         add_header Cache-Control "public, immutable";
         try_files \$uri =404;
