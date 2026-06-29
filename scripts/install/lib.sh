@@ -3489,6 +3489,7 @@ main_install() {
   install_auth_server
   install_storage_server
   install_local_functions
+  install_updater_watcher
   install_ssl_packages
   prepare_app_files
   write_env_file
