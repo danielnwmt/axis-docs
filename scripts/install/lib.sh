@@ -2503,6 +2503,7 @@ async function handle(req, res) {
     if (fnPath === "validate-license" && req.method === "POST") return await validateLicense(req, res, claims);
     if (fnPath === "license-temp-unlock" && req.method === "POST") return await licenseTempUnlock(req, res, claims);
     if (fnPath === "system-update" && req.method === "POST") return await systemUpdate(req, res, claims);
+    if (fnPath === "system-update-status" && req.method === "GET") return await systemUpdateStatus(req, res, claims);
     if (fnPath === "upload-certificate" && req.method === "POST") return await uploadCertificate(req, res, claims);
     if (fnPath === "change-certificate-password" && req.method === "POST") return await changeCertificatePassword(req, res, claims);
     if (fnPath === "backup-restore" && req.method === "POST") return await backupRestore(req, res, claims);
