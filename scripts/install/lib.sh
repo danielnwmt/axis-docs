@@ -2030,6 +2030,26 @@ async function systemVersion(req, res) {
   return json(res, 200, { commit, built_at, branch });
 }
 
+// ============ Sistema de atualização via watcher (padrão BilheteiaPro) ============
+// O botão grava um arquivo-gatilho. Um serviço systemd separado (axisdocs-updater)
+// monitora esse arquivo e roda update.sh fora do cgroup do servidor de funções,
+// para que o restart dos serviços durante a atualização não mate o processo.
+const UPDATE_TRIGGER_DIR = "/var/lib/axisdocs/update-trigger";
+const UPDATE_TRIGGER_FILE = path.join(UPDATE_TRIGGER_DIR, "request");
+const UPDATE_HEARTBEAT_FILE = path.join(UPDATE_TRIGGER_DIR, "watcher-alive");
+const UPDATE_STATUS_FILE = path.join(UPDATE_TRIGGER_DIR, "status");
+const UPDATE_LOG_FILE = "/var/log/axisdocs-update.log";
+
+function watcherIsAlive() {
+  try {
+    const raw = fs.readFileSync(UPDATE_HEARTBEAT_FILE, "utf8");
+    const last = Number(String(raw).trim());
+    if (!Number.isFinite(last)) return false;
+    const age = Math.floor(Date.now() / 1000) - last;
+    return age >= 0 && age < 60;
+  } catch { return false; }
+}
+
 async function systemUpdate(req, res, claims) {
   if (!(await requireAdmin(claims))) return json(res, 403, { ok: false, message: "Apenas administradores" });
   const updateScript = path.join(APP_DIR, "update.sh");
@@ -2037,13 +2057,31 @@ async function systemUpdate(req, res, claims) {
     return json(res, 400, { ok: false, message: "Script update.sh não encontrado. Use a instalação local." });
   }
   try {
-    const out = fs.openSync("/var/log/axisdocs-update.log", "a");
-    const child = spawn("bash", [updateScript], { detached: true, stdio: ["ignore", out, out] });
+    try { fs.mkdirSync(UPDATE_TRIGGER_DIR, { recursive: true }); } catch {}
+    fs.writeFileSync(UPDATE_TRIGGER_FILE, `${Date.now()}\n`, "utf8");
+    if (watcherIsAlive()) {
+      return json(res, 200, { ok: true, mode: "trigger", watcher: true, message: "Atualização solicitada. O watcher irá processar." });
+    }
+    // Fallback: watcher fora do ar — tenta rodar update.sh diretamente em background.
+    const out = fs.openSync(UPDATE_LOG_FILE, "a");
+    const child = spawn("setsid", ["bash", updateScript], { detached: true, stdio: ["ignore", out, out] });
     child.unref();
-    return json(res, 200, { ok: true, pid: child.pid, message: "Atualização iniciada em background" });
+    return json(res, 200, { ok: true, mode: "spawn", watcher: false, pid: child.pid, message: "Watcher offline. Atualização iniciada em background." });
   } catch (e) {
     return json(res, 500, { ok: false, message: e.message });
   }
+}
+
+async function systemUpdateStatus(req, res, claims) {
+  if (!(await requireAdmin(claims))) return json(res, 403, { ok: false, message: "Apenas administradores" });
+  let status = null, log_tail = null, last_request = null;
+  try { status = fs.readFileSync(UPDATE_STATUS_FILE, "utf8").trim(); } catch {}
+  try { last_request = fs.readFileSync(UPDATE_TRIGGER_FILE, "utf8").trim(); } catch {}
+  try {
+    const data = fs.readFileSync(UPDATE_LOG_FILE, "utf8");
+    log_tail = data.split(/\r?\n/).slice(-50).join("\n");
+  } catch {}
+  return json(res, 200, { ok: true, watcher_alive: watcherIsAlive(), status, last_request, log_tail });
 }
 
 // ============ Certificados Digitais A1 (ICP-Brasil) ============
