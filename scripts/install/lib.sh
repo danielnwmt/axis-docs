@@ -2642,6 +2642,19 @@ server {
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
     gzip_min_length 256;
 
+    # MIME correto para ES Modules (.mjs) — necessário para o worker do pdf.js
+    types {
+        application/javascript mjs js;
+        application/wasm wasm;
+    }
+    default_type application/octet-stream;
+
+    # Garante Content-Type correto e cache longo para .mjs (worker do pdfjs)
+    location ~* \.mjs$ {
+        types { } default_type application/javascript;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
     # ===== Security headers (aplicados a todas as respostas) =====
     add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
