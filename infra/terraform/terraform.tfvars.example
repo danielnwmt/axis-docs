@@ -1,0 +1,11 @@
+project                           = "axisdocs"
+environment                       = "production"
+aws_region                        = "sa-east-1"
+allowed_origins                   = ["https://app.seudominio.com.br"]
+log_retention_days                = 90
+noncurrent_version_retention_days = 90
+
+# ARNs dos segredos usados pela task ECS (SUPABASE_SERVICE_ROLE_KEY etc.)
+api_secret_arns = [
+  # "arn:aws:secretsmanager:sa-east-1:000000000000:secret:axisdocs/api-XXXXXX",
+]
