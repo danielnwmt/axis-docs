@@ -51,32 +51,3 @@ export async function triggerSystemUpdate(): Promise<{ ok: boolean; message?: st
     return { ok: false, message: "Atualização disponível apenas na instalação local (servidor Ubuntu)." };
   }
 }
-
-export type SystemUpdateStatus = {
-  ok: boolean;
-  watcher_alive?: boolean;
-  status?: string | null;
-  last_request?: string | null;
-  log_tail?: string | null;
-  message?: string;
-};
-
-export async function fetchSystemUpdateStatus(): Promise<SystemUpdateStatus> {
-  try {
-    const { data: sess } = await supabase.auth.getSession();
-    const token = sess.session?.access_token;
-    if (!token) return { ok: false, message: "Sessão expirada." };
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/system-update-status`;
-    const res = await fetch(url, {
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-      cache: "no-store",
-    });
-    if (!res.ok) return { ok: false, message: `Erro ${res.status}` };
-    return await res.json();
-  } catch {
-    return { ok: false, message: "Status disponível apenas na instalação local." };
-  }
-}

@@ -201,8 +201,8 @@ CREATE POLICY "Users can delete own documents" ON storage.objects
 -- Storage policies for settings bucket
 CREATE POLICY "Admins can manage settings" ON storage.objects
   FOR ALL TO authenticated USING (bucket_id = 'settings' AND has_role(auth.uid(), 'Administrador'));
-CREATE POLICY "Admins can read settings" ON storage.objects
-  FOR SELECT TO authenticated USING (bucket_id = 'settings' AND has_role(auth.uid(), 'Administrador'));
+CREATE POLICY "Authenticated can read settings" ON storage.objects
+  FOR SELECT TO authenticated USING (bucket_id = 'settings');
 
 -- ============================================
 -- DADOS PADRÃO (Categorias e Unidades)

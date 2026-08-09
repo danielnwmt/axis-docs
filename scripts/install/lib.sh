@@ -2030,26 +2030,6 @@ async function systemVersion(req, res) {
   return json(res, 200, { commit, built_at, branch });
 }
 
-// ============ Sistema de atualização via watcher (padrão BilheteiaPro) ============
-// O botão grava um arquivo-gatilho. Um serviço systemd separado (axisdocs-updater)
-// monitora esse arquivo e roda update.sh fora do cgroup do servidor de funções,
-// para que o restart dos serviços durante a atualização não mate o processo.
-const UPDATE_TRIGGER_DIR = "/var/lib/axisdocs/update-trigger";
-const UPDATE_TRIGGER_FILE = path.join(UPDATE_TRIGGER_DIR, "request");
-const UPDATE_HEARTBEAT_FILE = path.join(UPDATE_TRIGGER_DIR, "watcher-alive");
-const UPDATE_STATUS_FILE = path.join(UPDATE_TRIGGER_DIR, "status");
-const UPDATE_LOG_FILE = "/var/log/axisdocs-update.log";
-
-function watcherIsAlive() {
-  try {
-    const raw = fs.readFileSync(UPDATE_HEARTBEAT_FILE, "utf8");
-    const last = Number(String(raw).trim());
-    if (!Number.isFinite(last)) return false;
-    const age = Math.floor(Date.now() / 1000) - last;
-    return age >= 0 && age < 60;
-  } catch { return false; }
-}
-
 async function systemUpdate(req, res, claims) {
   if (!(await requireAdmin(claims))) return json(res, 403, { ok: false, message: "Apenas administradores" });
   const updateScript = path.join(APP_DIR, "update.sh");
@@ -2057,31 +2037,13 @@ async function systemUpdate(req, res, claims) {
     return json(res, 400, { ok: false, message: "Script update.sh não encontrado. Use a instalação local." });
   }
   try {
-    try { fs.mkdirSync(UPDATE_TRIGGER_DIR, { recursive: true }); } catch {}
-    fs.writeFileSync(UPDATE_TRIGGER_FILE, `${Date.now()}\n`, "utf8");
-    if (watcherIsAlive()) {
-      return json(res, 200, { ok: true, mode: "trigger", watcher: true, message: "Atualização solicitada. O watcher irá processar." });
-    }
-    // Fallback: watcher fora do ar — tenta rodar update.sh diretamente em background.
-    const out = fs.openSync(UPDATE_LOG_FILE, "a");
-    const child = spawn("setsid", ["bash", updateScript], { detached: true, stdio: ["ignore", out, out] });
+    const out = fs.openSync("/var/log/axisdocs-update.log", "a");
+    const child = spawn("bash", [updateScript], { detached: true, stdio: ["ignore", out, out] });
     child.unref();
-    return json(res, 200, { ok: true, mode: "spawn", watcher: false, pid: child.pid, message: "Watcher offline. Atualização iniciada em background." });
+    return json(res, 200, { ok: true, pid: child.pid, message: "Atualização iniciada em background" });
   } catch (e) {
     return json(res, 500, { ok: false, message: e.message });
   }
-}
-
-async function systemUpdateStatus(req, res, claims) {
-  if (!(await requireAdmin(claims))) return json(res, 403, { ok: false, message: "Apenas administradores" });
-  let status = null, log_tail = null, last_request = null;
-  try { status = fs.readFileSync(UPDATE_STATUS_FILE, "utf8").trim(); } catch {}
-  try { last_request = fs.readFileSync(UPDATE_TRIGGER_FILE, "utf8").trim(); } catch {}
-  try {
-    const data = fs.readFileSync(UPDATE_LOG_FILE, "utf8");
-    log_tail = data.split(/\r?\n/).slice(-50).join("\n");
-  } catch {}
-  return json(res, 200, { ok: true, watcher_alive: watcherIsAlive(), status, last_request, log_tail });
 }
 
 // ============ Certificados Digitais A1 (ICP-Brasil) ============
@@ -2503,7 +2465,6 @@ async function handle(req, res) {
     if (fnPath === "validate-license" && req.method === "POST") return await validateLicense(req, res, claims);
     if (fnPath === "license-temp-unlock" && req.method === "POST") return await licenseTempUnlock(req, res, claims);
     if (fnPath === "system-update" && req.method === "POST") return await systemUpdate(req, res, claims);
-    if (fnPath === "system-update-status" && req.method === "GET") return await systemUpdateStatus(req, res, claims);
     if (fnPath === "upload-certificate" && req.method === "POST") return await uploadCertificate(req, res, claims);
     if (fnPath === "change-certificate-password" && req.method === "POST") return await changeCertificatePassword(req, res, claims);
     if (fnPath === "backup-restore" && req.method === "POST") return await backupRestore(req, res, claims);
@@ -2544,95 +2505,6 @@ EOF_FUNC
 
   success "Servidor de funções locais rodando na porta 5556"
 }
-
-install_updater_watcher() {
-  log "Configurando watcher de atualização do sistema"
-
-  mkdir -p /var/lib/axisdocs/update-trigger
-  chmod 755 /var/lib/axisdocs /var/lib/axisdocs/update-trigger
-  touch /var/log/axisdocs-update.log
-  chmod 644 /var/log/axisdocs-update.log
-
-  cat > /opt/axisdocs/update-watcher.sh <<'EOF_WATCHER'
-#!/usr/bin/env bash
-# AxisDocs — Watcher de atualização (roda como serviço systemd independente).
-# Detecta o arquivo-gatilho gravado pelo botão "Atualizar sistema" no painel
-# e executa /opt/axisdocs/update.sh em um processo fora do cgroup do servidor
-# de funções, para que o restart dos serviços não derrube o update.
-set -u
-
-APP_DIR="${APP_DIR:-/opt/axisdocs}"
-TRIGGER_DIR="/var/lib/axisdocs/update-trigger"
-TRIGGER_FILE="$TRIGGER_DIR/request"
-HEARTBEAT_FILE="$TRIGGER_DIR/watcher-alive"
-STATUS_FILE="$TRIGGER_DIR/status"
-LOG_FILE="/var/log/axisdocs-update.log"
-
-mkdir -p "$TRIGGER_DIR"
-chmod 755 "$TRIGGER_DIR"
-date +%s > "$HEARTBEAT_FILE" 2>/dev/null || true
-
-LAST=""
-[ -f "$TRIGGER_FILE" ] && LAST="$(cat "$TRIGGER_FILE" 2>/dev/null || true)"
-
-heartbeat_loop() {
-  while true; do
-    date +%s > "$HEARTBEAT_FILE" 2>/dev/null || true
-    sleep 10
-  done
-}
-heartbeat_loop &
-HB_PID=$!
-trap 'kill "$HB_PID" 2>/dev/null || true' EXIT
-
-echo ">> [$(date)] Watcher de atualização ativo. Monitorando $TRIGGER_FILE" >> "$LOG_FILE"
-
-while true; do
-  date +%s > "$HEARTBEAT_FILE" 2>/dev/null || true
-  if [ -f "$TRIGGER_FILE" ]; then
-    CUR="$(cat "$TRIGGER_FILE" 2>/dev/null || true)"
-    if [ -n "$CUR" ] && [ "$CUR" != "$LAST" ]; then
-      LAST="$CUR"
-      echo "iniciada $(date)" > "$STATUS_FILE" 2>/dev/null || true
-      echo ">> [$(date)] Atualização solicitada pelo painel. Rodando update.sh..." >> "$LOG_FILE"
-      if (cd "$APP_DIR" && bash "$APP_DIR/update.sh") >> "$LOG_FILE" 2>&1; then
-        echo "ok $(date)" > "$STATUS_FILE" 2>/dev/null || true
-        echo ">> [$(date)] Atualização concluída com sucesso." >> "$LOG_FILE"
-      else
-        echo "falha $(date)" > "$STATUS_FILE" 2>/dev/null || true
-        echo ">> [$(date)] FALHA na atualização. Veja $LOG_FILE" >> "$LOG_FILE"
-      fi
-    fi
-  fi
-  sleep 3
-done
-EOF_WATCHER
-  chmod +x /opt/axisdocs/update-watcher.sh
-
-  cat > /etc/systemd/system/axisdocs-updater.service <<EOF_UPD
-[Unit]
-Description=AxisDocs Update Watcher
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/env bash /opt/axisdocs/update-watcher.sh
-Restart=always
-RestartSec=5
-KillMode=process
-WorkingDirectory=/opt/axisdocs
-
-[Install]
-WantedBy=multi-user.target
-EOF_UPD
-
-  systemctl daemon-reload
-  systemctl enable axisdocs-updater >/dev/null 2>&1 || true
-  systemctl restart axisdocs-updater
-
-  success "Watcher de atualização ativo (axisdocs-updater.service)"
-}
-
 
 install_ssl_packages() {
   if [ -z "$APP_DOMAIN" ]; then
@@ -3229,22 +3101,17 @@ echo "➡️  Removendo AxisDocs..."
 systemctl stop axisdocs-auth 2>/dev/null || true
 systemctl stop axisdocs-storage 2>/dev/null || true
 systemctl stop axisdocs-functions 2>/dev/null || true
-systemctl stop axisdocs-updater 2>/dev/null || true
 systemctl stop postgrest 2>/dev/null || true
 systemctl disable axisdocs-auth 2>/dev/null || true
 systemctl disable axisdocs-storage 2>/dev/null || true
 systemctl disable axisdocs-functions 2>/dev/null || true
-systemctl disable axisdocs-updater 2>/dev/null || true
 systemctl disable postgrest 2>/dev/null || true
 
 rm -f /etc/systemd/system/axisdocs-auth.service
 rm -f /etc/systemd/system/axisdocs-storage.service
 rm -f /etc/systemd/system/axisdocs-functions.service
-rm -f /etc/systemd/system/axisdocs-updater.service
 rm -f /etc/systemd/system/postgrest.service
 systemctl daemon-reload
-
-rm -rf /var/lib/axisdocs
 
 rm -f /etc/nginx/sites-enabled/axisdocs
 rm -f /etc/nginx/sites-available/axisdocs
@@ -3489,7 +3356,6 @@ main_install() {
   install_auth_server
   install_storage_server
   install_local_functions
-  install_updater_watcher
   install_ssl_packages
   prepare_app_files
   write_env_file
