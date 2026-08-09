@@ -381,6 +381,10 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS full_name text NOT NULL DEF
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS cpf text NOT NULL DEFAULT '';
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+-- Trigger de segurança para perfis
+sudo -u postgres psql -d "$PG_DB" -c "DROP TRIGGER IF EXISTS enforce_profile_security ON public.profiles;" 2>/dev/null
+sudo -u postgres psql -d "$PG_DB" -c "CREATE TRIGGER enforce_profile_security BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.prevent_profile_sensitive_changes();" 2>/dev/null
+
 -- Tabela de categorias documentais
 CREATE TABLE IF NOT EXISTS public.categories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

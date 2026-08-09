@@ -19,6 +19,11 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS full_name text NOT NULL DEF
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS cpf text NOT NULL DEFAULT '';
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+CREATE TRIGGER enforce_profile_security
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.prevent_profile_sensitive_changes();
+
 -- Tabela de categorias documentais
 CREATE TABLE IF NOT EXISTS public.categories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
