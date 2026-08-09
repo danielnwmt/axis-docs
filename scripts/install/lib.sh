@@ -707,6 +707,15 @@ DO $$ BEGIN
     CREATE POLICY "Users read own or admin reads all audit logs" ON public.audit_logs
       FOR SELECT TO authenticated USING (auth.uid() = user_id OR has_role(auth.uid(), 'Administrador'));
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Block updates on audit_logs' AND tablename = 'audit_logs') THEN
+    CREATE POLICY "Block updates on audit_logs" ON public.audit_logs FOR UPDATE TO public USING (false);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Block deletes on audit_logs' AND tablename = 'audit_logs') THEN
+    CREATE POLICY "Block deletes on audit_logs" ON public.audit_logs FOR DELETE TO public USING (false);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Block direct client inserts on audit_logs' AND tablename = 'audit_logs') THEN
+    CREATE POLICY "Block direct client inserts on audit_logs" ON public.audit_logs FOR INSERT TO public WITH CHECK (false);
+  END IF;
 
   -- License Config (leitura liberada para qualquer autenticado; escrita só admin)
   DROP POLICY IF EXISTS "Admins read license config" ON public.license_config;
