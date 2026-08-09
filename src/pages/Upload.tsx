@@ -377,7 +377,7 @@ export default function Upload() {
       for (const file of files) {
         const isPdf = file.type === "application/pdf";
 
-        // Validação de magic bytes (header %PDF-) — não confiar só no MIME do navegador
+        // Validação de magic bytes (header %PDF-)
         let hasPdfMagic = false;
         if (isPdf) {
           const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
@@ -385,36 +385,40 @@ export default function Upload() {
             head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 &&
             head[3] === 0x46 && head[4] === 0x2d;
         }
-        if (!isPdf || !hasPdfMagic) {
-          toast({
-            title: "Formato não permitido",
-            description: `"${file.name}" não é um PDF válido. Apenas PDFs com assinatura ICP-Brasil são aceitos.`,
-            variant: "destructive",
-          });
-          setLoading(false);
-          return;
-        }
 
-        const alreadyIcp = (signedFiles.has(file.name) || (await isPdfIcpBrasilSigned(file)));
-        const hasAnySignature = !alreadyIcp && (await isPdfSigned(file));
-        const shouldSign = signDocument && !alreadyIcp;
-        if (hasAnySignature && !shouldSign) {
-          toast({
-            title: "Certificado não é ICP-Brasil",
-            description: `"${file.name}" está assinado, mas o certificado NÃO é ICP-Brasil. Marque "Assinar digitalmente" para reassinar com ICP-Brasil.`,
-            variant: "destructive",
-          });
-          setLoading(false);
-          return;
-        }
-        if (!alreadyIcp && !shouldSign) {
-          toast({
-            title: "Assinatura ICP-Brasil obrigatória",
-            description: `"${file.name}" não possui assinatura ICP-Brasil. Marque "Assinar digitalmente" ou envie um PDF já assinado com certificado ICP-Brasil.`,
-            variant: "destructive",
-          });
-          setLoading(false);
-          return;
+        const alreadyIcp = isPdf ? (signedFiles.has(file.name) || (await isPdfIcpBrasilSigned(file))) : false;
+        const shouldSign = signDocument && isPdf && !alreadyIcp;
+
+        if (isPdf) {
+          if (!hasPdfMagic) {
+            toast({
+              title: "Formato PDF inválido",
+              description: `"${file.name}" parece ser um PDF corrompido ou inválido.`,
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
+
+          const hasAnySignature = !alreadyIcp && (await isPdfSigned(file));
+          if (hasAnySignature && !shouldSign) {
+            toast({
+              title: "Certificado não é ICP-Brasil",
+              description: `"${file.name}" está assinado, mas o certificado NÃO é ICP-Brasil. Marque "Assinar digitalmente" para reassinar com ICP-Brasil.`,
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
+          if (!alreadyIcp && !shouldSign) {
+            toast({
+              title: "Assinatura ICP-Brasil obrigatória",
+              description: `"${file.name}" não possui assinatura ICP-Brasil. Marque "Assinar digitalmente" ou envie um PDF já assinado com certificado ICP-Brasil.`,
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
         }
 
         let driveFileId: string | null = null;
