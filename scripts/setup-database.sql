@@ -148,6 +148,9 @@ $$;
 -- ============================================
 
 -- Profiles
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles FORCE ROW LEVEL SECURITY;
+
 CREATE POLICY "Users can read own profile or admin reads all" ON public.profiles
   FOR SELECT TO authenticated USING (auth.uid() = id OR has_role(auth.uid(), 'Administrador'));
 
@@ -189,6 +192,9 @@ CREATE POLICY "Admins can delete units" ON public.units
   FOR DELETE TO authenticated USING (has_role(auth.uid(), 'Administrador'));
 
 -- Documents
+ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.documents FORCE ROW LEVEL SECURITY;
+
 CREATE POLICY "Users read own or admin reads all documents" ON public.documents
   FOR SELECT TO authenticated USING (auth.uid() = user_id OR has_role(auth.uid(), 'Administrador'));
 CREATE POLICY "Authenticated users can insert documents" ON public.documents
@@ -199,8 +205,16 @@ CREATE POLICY "Users can delete own documents" ON public.documents
   FOR DELETE TO authenticated USING (auth.uid() = user_id);
 
 -- Audit Logs
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs FORCE ROW LEVEL SECURITY;
+
 CREATE POLICY "Users read own or admin reads all audit logs" ON public.audit_logs
   FOR SELECT TO authenticated USING (auth.uid() = user_id OR has_role(auth.uid(), 'Administrador'));
+
+-- Audit logs are append-only via SECURITY DEFINER functions, block direct client mutations
+CREATE POLICY "Block updates on audit_logs" ON public.audit_logs FOR UPDATE TO authenticated, anon USING (false);
+CREATE POLICY "Block deletes on audit_logs" ON public.audit_logs FOR DELETE TO authenticated, anon USING (false);
+CREATE POLICY "Block direct client inserts on audit_logs" ON public.audit_logs FOR INSERT TO authenticated, anon WITH CHECK (false);
 
 -- ============================================
 -- STORAGE BUCKETS
