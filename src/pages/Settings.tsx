@@ -436,6 +436,15 @@ function ParametrosSection() {
   );
 }
 
+async function driveConfigPath(): Promise<string> {
+  const { data: auth } = await supabase.auth.getUser();
+  const uid = auth?.user?.id;
+  if (!uid) return "google-drive-config.json";
+  const { data } = await supabase.from("profiles").select("org_id").eq("id", uid).maybeSingle();
+  const orgId = (data as any)?.org_id;
+  return orgId ? `orgs/${orgId}/google-drive-config.json` : "google-drive-config.json";
+}
+
 function GoogleDriveSection() {
   const [jsonContent, setJsonContent] = useState("");
   const [rootFolderId, setRootFolderId] = useState("");
@@ -447,7 +456,11 @@ function GoogleDriveSection() {
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const { data } = await supabase.storage.from("settings").download("google-drive-config.json");
+        const path = await driveConfigPath();
+        let { data } = await supabase.storage.from("settings").download(path);
+        if (!data && path !== "google-drive-config.json") {
+          ({ data } = await supabase.storage.from("settings").download("google-drive-config.json"));
+        }
         if (data) {
           const text = await data.text();
           const config = JSON.parse(text);
@@ -508,8 +521,9 @@ function GoogleDriveSection() {
       };
 
       const blob = new Blob([JSON.stringify(config)], { type: "application/json" });
-      await supabase.storage.from("settings").remove(["google-drive-config.json"]);
-      const { error } = await supabase.storage.from("settings").upload("google-drive-config.json", blob, { upsert: true });
+      const path = await driveConfigPath();
+      await supabase.storage.from("settings").remove([path]);
+      const { error } = await supabase.storage.from("settings").upload(path, blob, { upsert: true });
       if (error) throw error;
 
       setStatus("saved");
