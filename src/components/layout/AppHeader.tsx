@@ -247,7 +247,7 @@ function StorageInfoButton() {
       <PopoverContent align="end" className="w-80">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-foreground">Armazenamento da licença</p>
+            <p className="text-sm font-semibold text-foreground">Armazenamento da organização</p>
             <span className="text-xs text-muted-foreground">{percent.toFixed(1)}% usado</span>
           </div>
           <div className="h-2 rounded-full bg-secondary overflow-hidden">

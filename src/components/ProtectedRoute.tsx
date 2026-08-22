@@ -2,7 +2,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Navigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { LicenseGate } from "@/components/LicenseGate";
 import { useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 
@@ -75,5 +74,5 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/change-password" replace />;
   }
 
-  return <LicenseGate>{children}</LicenseGate>;
+  return <>{children}</>;
 }
