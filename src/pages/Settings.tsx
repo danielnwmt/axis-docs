@@ -8,16 +8,15 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchManagedList } from "@/lib/adminLookups";
-import { loadLicenseConfig, saveLicenseConfig, validateLicense, clearLicenseCache, unlockTemporary, normalizeLicenseServerUrl, type LicenseInfo } from "@/lib/license";
 import { getStorageQuota, formatBytes, type StorageQuota } from "@/lib/storageQuota";
 import { MyCertificateSection } from "@/components/settings/MyCertificateSection";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 
-type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "licenca" | "mobile" | "minhasenha" | "mfa" | null;
+type Section = "orgao" | "categorias" | "unidades" | "parametros" | "googledrive" | "meucertificado" | "backup" | "mobile" | "minhasenha" | "mfa" | null;
 
 // Apenas Administrador
-const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive", "licenca"];
+const ADMIN_ONLY_SECTIONS: Section[] = ["orgao", "categorias", "unidades", "parametros", "googledrive"];
 // Administrador + Operador (escondidas apenas para Usuário)
 const STAFF_SECTIONS: Section[] = ["backup"];
 
@@ -32,7 +31,6 @@ const sectionCards = [
   { id: "minhasenha" as Section, icon: KeyRound, title: "Minha Senha", description: "Alterar a sua senha de acesso ao sistema" },
   { id: "mfa" as Section, icon: ShieldCheck, title: "Autenticação 2 Fatores", description: "Ative o segundo fator (TOTP) usando Google Authenticator, Authy, 1Password etc." },
   { id: "backup" as Section, icon: DatabaseBackup, title: "Backup & Restauração", description: "Exportar e importar usuários, auditoria e referências de documentos" },
-  { id: "licenca" as Section, icon: KeyRound, title: "Licença", description: "Ativar e consultar o status da licença do AxisDocs" },
   { id: "mobile" as Section, icon: Smartphone, title: "Acesso Mobile", description: "QR Code para abrir o sistema no aplicativo" },
 ];
 
@@ -932,287 +930,6 @@ function BackupSection() {
   );
 }
 
-function LicencaSection() {
-  const [config, setConfig] = useState<LicenseInfo | null>(null);
-  const [serverUrl, setServerUrl] = useState("");
-  const [licenseKey, setLicenseKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [unlockCode, setUnlockCode] = useState("");
-  const [unlocking, setUnlocking] = useState(false);
-  const [quota, setQuota] = useState<StorageQuota | null>(null);
-
-  const refreshQuota = async () => {
-    try { setQuota(await getStorageQuota()); } catch {}
-  };
-
-  const handleUnlock = async () => {
-    setUnlocking(true);
-    try {
-      const res = await unlockTemporary();
-      if (res.ok) {
-        clearLicenseCache();
-        await validateLicense();
-        const c = await loadLicenseConfig();
-        setConfig(c);
-        await refreshQuota();
-        toast({
-          title: "Sistema desbloqueado",
-          description: res.valid_until
-            ? `Válido até ${new Date(res.valid_until).toLocaleString("pt-BR")}`
-            : "Desbloqueio temporário ativado por 24h.",
-        });
-      } else {
-        toast({ title: "Não foi possível desbloquear", description: res.message || "Tente novamente mais tarde.", variant: "destructive" });
-      }
-    } catch (e: any) {
-      toast({ title: "Falha no desbloqueio", description: e.message, variant: "destructive" });
-    } finally {
-      setUnlocking(false);
-    }
-  };
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const c = await loadLicenseConfig();
-        if (c) {
-          setConfig(c);
-          setServerUrl(c.server_url || "");
-          setLicenseKey(c.license_key || "");
-        }
-      } catch (e: any) {
-        toast({ title: "Erro", description: e.message, variant: "destructive" });
-      } finally {
-        setLoading(false);
-      }
-    })();
-    refreshQuota();
-  }, []);
-
-  const handleSave = async () => {
-    if (!serverUrl.trim() || !licenseKey.trim()) {
-      toast({ title: "Preencha URL e chave", variant: "destructive" });
-      return;
-    }
-    setSaving(true);
-    try {
-      await saveLicenseConfig(normalizeLicenseServerUrl(serverUrl), licenseKey.trim());
-      clearLicenseCache();
-      toast({ title: "Configuração salva. Validando..." });
-      await handleValidate();
-    } catch (e: any) {
-      toast({ title: "Erro ao salvar", description: e.message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleValidate = async () => {
-    setChecking(true);
-    try {
-      const parseCustomer = (raw?: string | null) => {
-        if (!raw) return { cpf_cnpj: "", name: "" };
-        try {
-          const p = JSON.parse(raw);
-          return {
-            cpf_cnpj: String(p?.cpf_cnpj || p?.cpf || p?.cnpj || "").trim(),
-            name: String(p?.full_name || p?.name || p?.email || "").trim(),
-          };
-        } catch {
-          return { cpf_cnpj: "", name: raw };
-        }
-      };
-      const prev = parseCustomer(config?.customer_name);
-      const res = await validateLicense();
-      const c = await loadLicenseConfig();
-      setConfig(c);
-      await refreshQuota();
-      const next = parseCustomer(res.customer_name || c?.customer_name);
-      if (res.status === "active") {
-        const desc = next.name || next.cpf_cnpj || "Validação concluída.";
-        toast({ title: "Licença ativa", description: desc });
-        if (prev.cpf_cnpj && next.cpf_cnpj && prev.cpf_cnpj !== next.cpf_cnpj) {
-          toast({
-            title: "CPF/CNPJ da licença foi alterado",
-            description: `Anterior: ${prev.cpf_cnpj} → Atual: ${next.cpf_cnpj}${next.name ? ` (${next.name})` : ""}`,
-          });
-        }
-      } else {
-        toast({
-          title: `Status: ${res.status}`,
-          description: res.message || "Verifique a chave e o servidor.",
-          variant: "destructive",
-        });
-      }
-    } catch (e: any) {
-      toast({ title: "Falha na validação", description: e.message, variant: "destructive" });
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  if (loading) return <div className="text-sm text-muted-foreground">Carregando...</div>;
-
-  const status = config?.status || "inactive";
-  const statusColor =
-    status === "active"
-      ? "text-success"
-      : status === "blocked" || status === "expired" || status === "invalid"
-      ? "text-destructive"
-      : "text-muted-foreground";
-  const StatusIcon = status === "active" ? ShieldCheck : ShieldAlert;
-
-  return (
-    <div className="space-y-6 max-w-2xl">
-      {/* Status atual */}
-      <div className="bg-muted/30 rounded-lg p-4 border border-border">
-        <div className="flex items-center gap-3 mb-3">
-          <StatusIcon className={`w-6 h-6 ${statusColor}`} />
-          <div>
-            <p className="text-sm text-muted-foreground">Status da licença</p>
-            <p className={`text-lg font-semibold capitalize ${statusColor}`}>{status}</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-          {config?.customer_name && (() => {
-            let parsed: any = null;
-            try { parsed = JSON.parse(config.customer_name); } catch { /* not json */ }
-            if (parsed && typeof parsed === "object") {
-              return parsed.cpf_cnpj ? (
-                <div><span className="text-muted-foreground">CPF/CNPJ:</span> <span className="font-medium">{parsed.cpf_cnpj}</span></div>
-              ) : null;
-            }
-            return null;
-          })()}
-          {quota && (
-            <>
-              <div>
-                <span className="text-muted-foreground">Armazenamento:</span>{" "}
-                <span className="font-medium">
-                  {formatBytes(quota.usedBytes)} / {quota.hasLimit ? formatBytes(quota.limitBytes) : "Sem limite"}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Utilizado:</span>{" "}
-                <span className={`font-medium ${quota.hasLimit ? (quota.level === "full" ? "text-destructive" : quota.level === "warn" ? "text-warning" : "text-success") : "text-muted-foreground"}`}>
-                  {quota.hasLimit ? `${quota.percent.toFixed(1)}%` : "—"}
-                </span>
-              </div>
-            </>
-          )}
-          {config?.last_check && (
-            <div><span className="text-muted-foreground">Última verificação:</span> <span className="font-medium">{new Date(config.last_check).toLocaleString("pt-BR")}</span></div>
-          )}
-          {config?.hardware_id && (
-            <div className="truncate"><span className="text-muted-foreground">ID hardware:</span> <span className="font-mono text-xs">{config.hardware_id}</span></div>
-          )}
-        </div>
-        {config?.message && (
-          <p className="mt-3 text-xs text-muted-foreground italic">{config.message}</p>
-        )}
-      </div>
-
-      {/* Armazenamento da licença */}
-      {quota && quota.hasLimit && (() => {
-        // formatBytes imported at top
-        const barColor = quota.level === "full" ? "bg-destructive" : quota.level === "warn" ? "bg-warning" : "bg-primary";
-        return (
-          <div className="bg-muted/30 rounded-lg p-4 border border-border">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-foreground">Armazenamento da licença</p>
-              <p className="text-xs text-muted-foreground">{quota.percent.toFixed(1)}% usado</p>
-            </div>
-            <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-              <div className={`h-full ${barColor} transition-all`} style={{ width: `${quota.percent}%` }} />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm mt-3">
-              <div><span className="text-muted-foreground">Usado:</span> <span className="font-medium">{formatBytes(quota.usedBytes)}</span></div>
-              <div><span className="text-muted-foreground">Limite:</span> <span className="font-medium">{formatBytes(quota.limitBytes)}</span></div>
-              <div>
-                <span className="text-muted-foreground">Disponível:</span>{" "}
-                <span className={`font-medium ${quota.level === "full" ? "text-destructive" : quota.level === "warn" ? "text-warning" : "text-success"}`}>
-                  {formatBytes(quota.remainingBytes)}
-                </span>
-              </div>
-            </div>
-            {quota.level === "full" && (
-              <p className="mt-3 text-xs text-destructive font-medium">Limite atingido. Novos uploads estão bloqueados.</p>
-            )}
-            {quota.level === "warn" && (
-              <p className="mt-3 text-xs text-warning font-medium">Atenção: você ultrapassou 80% do limite contratado.</p>
-            )}
-          </div>
-        );
-      })()}
-
-      <div className="rounded-lg border border-border p-4 space-y-3 bg-card">
-        <div>
-          <h3 className="text-base font-semibold text-foreground">Desbloqueio temporário (24h)</h3>
-          <p className="text-xs text-muted-foreground">
-            Libere o sistema por 24 horas mesmo que a licença esteja bloqueada ou o servidor inacessível. Disponível apenas uma vez a cada 30 dias.
-          </p>
-          {config?.temp_unlock_until && new Date(config.temp_unlock_until).getTime() > Date.now() && (
-            <p className="mt-2 text-xs text-success font-medium">
-              Desbloqueio ativo até {new Date(config.temp_unlock_until).toLocaleString("pt-BR")}
-            </p>
-          )}
-        </div>
-        <Button onClick={handleUnlock} disabled={unlocking} className="w-full sm:w-auto">
-          <KeyRound className="w-4 h-4 mr-2" />
-          {unlocking ? "Liberando..." : "Desbloquear por 24 horas"}
-        </Button>
-      </div>
-
-      <div className="space-y-3">
-        <div className="space-y-1">
-          <Label>URL do servidor de licenças</Label>
-          <Input
-            value={serverUrl}
-            onChange={(e) => setServerUrl(e.target.value)}
-            placeholder="https://licencas.suaempresa.com/api/validar"
-          />
-          <p className="text-xs text-muted-foreground">
-            Endpoint POST que recebe <code>{`{ license_key, hostname }`}</code> e retorna{" "}
-            <code>{`{ ok?, status: "active|blocked|expired|invalid", customer_name?, expires_at?, message? }`}</code>.
-          </p>
-        </div>
-        <div className="space-y-1">
-          <Label>Chave de licença</Label>
-          <div className="relative">
-            <Input
-              type={showKey ? "text" : "password"}
-              value={licenseKey}
-              onChange={(e) => setLicenseKey(e.target.value)}
-              placeholder="AXIS-XXXX-XXXX-XXXX"
-              className="pr-10 font-mono"
-            />
-            <button
-              type="button"
-              onClick={() => setShowKey((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-        <div className="flex gap-2 pt-2">
-          <Button onClick={handleSave} disabled={saving || checking}>
-            <Save className="w-4 h-4 mr-2" />
-            {saving ? "Salvando..." : "Salvar e ativar"}
-          </Button>
-          <Button variant="outline" onClick={handleValidate} disabled={checking || saving || !config?.server_url}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${checking ? "animate-spin" : ""}`} />
-            Verificar status
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function MfaSection() {
   const [loading, setLoading] = useState(true);
   const [hasFactor, setHasFactor] = useState(false);
@@ -1318,7 +1035,6 @@ export default function Settings() {
       
       case "meucertificado": return <MyCertificateSection />;
       case "backup": return <BackupSection />;
-      case "licenca": return <LicencaSection />;
       case "mobile": return <MobileAccessSection />;
       case "minhasenha": return <MyPasswordSection />;
       case "mfa": return <MfaSection />;

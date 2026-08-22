@@ -52,7 +52,7 @@ const faqs = [
   },
   {
     q: "Onde vejo o uso de armazenamento?",
-    a: "No topo da tela, clique no ícone de HD. É exibido o consumo atual e o limite da licença.",
+    a: "No topo da tela, clique no ícone de HD. É exibido o consumo atual e o limite da organização.",
   },
 ];
 
