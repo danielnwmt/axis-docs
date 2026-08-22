@@ -147,6 +147,7 @@ async function findOrCreateFolder(token: string, name: string, parentId: string)
 
 async function uploadSignedToDrive(
   supabase: any,
+  orgId: string | null,
   signedName: string,
   signedPdfBuf: Uint8Array,
   unitName?: string,
@@ -401,7 +402,7 @@ Deno.serve(async (req) => {
       const signedName = fileName.replace(/\.pdf$/i, "") + "_assinado.pdf";
       // Upload pela aba Upload (fluxo normal): cria Unidade/Categoria no Drive.
       // A pasta centralizada "Assinatura Digital" é exclusiva da aba Signature.tsx (modo JSON legado).
-      const { driveFileId, driveLink } = await uploadSignedToDrive(supabase, signedName, signedPdfBuf, unitName, categoryName, false);
+      const { driveFileId, driveLink } = await uploadSignedToDrive(supabase, orgId, signedName, signedPdfBuf, unitName, categoryName, false);
       const signTimestamp = new Date().toISOString();
       const certInfo = {
         provider: "Servidor local (PAdES)", cert_type: "A1", standard: "ICP-Brasil", pades: true,
@@ -534,6 +535,7 @@ Deno.serve(async (req) => {
       const isSignatureTabDoc = (doc as any).category === "Assinatura Digital" && (doc as any).unit === "Assinatura Digital";
       const up = await uploadSignedToDrive(
         supabase,
+        orgId,
         signedName,
         signedPdfBuf,
         (doc as any).unit || "",
