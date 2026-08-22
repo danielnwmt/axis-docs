@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { downloadOrgDriveConfig, resolveOrgId } from "../_shared/orgDrive.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -96,10 +97,9 @@ async function deleteDriveFile(token: string, fileId: string): Promise<boolean> 
   return r.ok || r.status === 404;
 }
 
-async function loadDriveConfig(admin: any): Promise<DriveConfig> {
-  const { data, error } = await admin.storage.from("settings").download("google-drive-config.json");
-  if (error || !data) throw new Error("Google Drive não configurado.");
-  const cfg = JSON.parse(await data.text()) as DriveConfig;
+async function loadDriveConfig(admin: any, orgId?: string | null): Promise<DriveConfig> {
+  const cfg = (await downloadOrgDriveConfig(admin, orgId)) as DriveConfig;
+  if (!cfg) throw new Error("Google Drive não configurado.");
   if (!cfg.serviceAccount?.client_email || !cfg.serviceAccount?.private_key) throw new Error("Configuração do Google Drive incompleta.");
   if (!cfg.rootFolderId) throw new Error("Pasta raiz do Google Drive não configurada.");
   return cfg;
@@ -234,6 +234,7 @@ Deno.serve(async (req) => {
     const { data: userData } = await userClient.auth.getUser();
     if (!userData?.user) return json({ error: "Não autorizado" }, 401);
     const { data: profile } = await admin.from("profiles").select("role, active").eq("id", userData.user.id).maybeSingle();
+    const orgId = await resolveOrgId(admin, userData.user.id);
     if (!profile || profile.role !== "Administrador" || !profile.active) {
       return json({ error: "Apenas administradores podem realizar backup/restauração" }, 403);
     }
@@ -253,7 +254,7 @@ Deno.serve(async (req) => {
     if (req.method === "POST" && action === "export-to-drive") {
       const { data: settings } = await admin.from("backup_settings").select("*").limit(1).maybeSingle();
       const retentionDays = Math.max(1, Number(settings?.retention_days || 5));
-      const cfg = await loadDriveConfig(admin);
+      const cfg = await loadDriveConfig(admin, orgId);
       const token = await getDriveToken(cfg.serviceAccount);
       const rootId = extractFolderId(cfg.rootFolderId);
       const backupsFolderId = await resolveBackupFolder(admin, token, settings, rootId);
@@ -319,7 +320,7 @@ Deno.serve(async (req) => {
 
 
     if (req.method === "POST" && action === "cleanup-now") {
-      return await runCleanup(admin, userData.user.id, userData.user.email || "");
+      return await runCleanup(admin, userData.user.id, userData.user.email || "", orgId);
     }
 
     if (req.method === "POST" && action === "delete-drive-backup") {
@@ -327,7 +328,7 @@ Deno.serve(async (req) => {
       const { data: row } = await admin.from("backup_files").select("*").eq("id", id).maybeSingle();
       if (!row) return json({ error: "Backup não encontrado" }, 404);
       try {
-        const cfg = await loadDriveConfig(admin);
+        const cfg = await loadDriveConfig(admin, orgId);
         const token = await getDriveToken(cfg.serviceAccount);
         await deleteDriveFile(token, row.drive_file_id);
       } catch (e) { console.warn("Drive delete failed:", e); }
@@ -345,7 +346,7 @@ Deno.serve(async (req) => {
   }
 });
 
-async function runCleanup(admin: any, userId?: string, userEmail?: string) {
+async function runCleanup(admin: any, userId?: string, userEmail?: string, orgId?: string | null) {
   const { data: settings } = await admin.from("backup_settings").select("*").limit(1).maybeSingle();
   if (settings && settings.auto_cleanup === false) {
     return json({ success: true, deleted: 0, skipped: "auto_cleanup disabled" });
@@ -355,7 +356,7 @@ async function runCleanup(admin: any, userId?: string, userEmail?: string) {
   if (!expired || expired.length === 0) return json({ success: true, deleted: 0 });
   let token: string | null = null;
   try {
-    const cfg = await loadDriveConfig(admin);
+    const cfg = await loadDriveConfig(admin, orgId ?? settings?.org_id ?? null);
     token = await getDriveToken(cfg.serviceAccount);
   } catch (e) {
     console.warn("Cleanup skipped — Drive not configured:", e);
@@ -395,9 +396,9 @@ async function resolveBackupFolder(admin: any, token: string, settings: any, roo
   return await ensureFolder(token, month, yearId);
 }
 
-async function performDriveBackup(admin: any, settings: any, createdBy: string) {
+async function performDriveBackup(admin: any, settings: any, createdBy: string, orgId?: string | null) {
   const retentionDays = Math.max(1, Number(settings?.retention_days || 5));
-  const cfg = await loadDriveConfig(admin);
+  const cfg = await loadDriveConfig(admin, orgId ?? settings?.org_id ?? null);
   const token = await getDriveToken(cfg.serviceAccount);
   const rootId = extractFolderId(cfg.rootFolderId);
   const backupsFolderId = await resolveBackupFolder(admin, token, settings, rootId);
@@ -439,7 +440,7 @@ async function runScheduledBackup(admin: any) {
     return json({ success: true, skipped: "already_ran_today" });
   }
   try {
-    const result = await performDriveBackup(admin, settings, "00000000-0000-0000-0000-000000000000");
+    const result = await performDriveBackup(admin, settings, "00000000-0000-0000-0000-000000000000", settings?.org_id ?? null);
     await admin.from("backup_settings").update({ last_scheduled_run: today, updated_at: new Date().toISOString() }).eq("id", settings.id);
     await admin.from("audit_logs").insert({
       user_id: "00000000-0000-0000-0000-000000000000",
