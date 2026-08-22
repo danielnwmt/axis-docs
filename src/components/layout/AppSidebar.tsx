@@ -1,5 +1,5 @@
 import { 
-  LayoutDashboard, FileText, Upload, ScanText, Search, PenTool, Shield, Users, Settings, HelpCircle, LogOut
+  LayoutDashboard, FileText, Upload, ScanText, Search, PenTool, Shield, Users, Settings, HelpCircle, LogOut, Building2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -43,6 +43,20 @@ export function AppSidebar() {
     gcTime: 30 * 60 * 1000,
   });
 
+  const { data: isOwner } = useQuery({
+    queryKey: ["sidebar-platform-owner", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("platform_owners")
+        .select("user_id")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return !!data;
+    },
+    enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const items = navItems.filter((it) => {
     if (it.key === "users") {
       if (roleLoading) return true;
@@ -73,6 +87,20 @@ export function AppSidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 space-y-0.5">
+        {isOwner && (
+          <button
+            onClick={() => navigate("/platform")}
+            className={cn(
+              "flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+              location.pathname === "/platform"
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+            )}
+          >
+            <Building2 className="w-[18px] h-[18px] shrink-0" />
+            <span>Plataforma</span>
+          </button>
+        )}
         {items.map((item) => {
           const isActive = location.pathname === item.path;
           return (
