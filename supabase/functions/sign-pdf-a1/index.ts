@@ -4,7 +4,7 @@ import { SignPdf } from "npm:@signpdf/signpdf@3.2.4";
 import { P12Signer } from "npm:@signpdf/signer-p12@3.2.4";
 import { pdflibAddPlaceholder } from "npm:@signpdf/placeholder-pdf-lib@3.2.4";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
-import { downloadOrgDriveConfig } from "../_shared/orgDrive.ts";
+import { downloadOrgDriveConfig, resolveOrgId } from "../_shared/orgDrive.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
