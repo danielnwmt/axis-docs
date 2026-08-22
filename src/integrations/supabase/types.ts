@@ -179,7 +179,7 @@ export type Database = {
           id?: string
           is_default?: boolean
           name: string
-          org_id: string
+          org_id?: string
         }
         Update: {
           active?: boolean
@@ -334,7 +334,7 @@ export type Database = {
           notes?: string | null
           ocr_status?: string
           ocr_text?: string | null
-          org_id: string
+          org_id?: string
           sign_certificate_info?: Json | null
           sign_status?: string
           sign_timestamp?: string | null
@@ -535,7 +535,7 @@ export type Database = {
           expires_at?: string
           id?: string
           invited_by?: string | null
-          org_id: string
+          org_id?: string
           role?: string
           token?: string
           unit?: string
@@ -817,7 +817,7 @@ export type Database = {
           id?: string
           is_default?: boolean
           name: string
-          org_id: string
+          org_id?: string
         }
         Update: {
           active?: boolean
