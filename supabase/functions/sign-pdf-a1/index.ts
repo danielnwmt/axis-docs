@@ -354,6 +354,8 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authErr } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authErr || !user) return new Response(JSON.stringify({ error: "Token inválido" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    const orgId = await resolveOrgId(supabase, user.id);
+
     const contentType = req.headers.get("content-type") || "";
 
     // ========= MODE: multipart/form-data — assina o PDF SEM antes subir o original ao Drive =========
