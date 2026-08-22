@@ -351,7 +351,7 @@ export default function Upload() {
         return;
       }
 
-      // New document mode — enforce license storage quota first
+      // New document mode — enforce org storage quota first
       const { getStorageQuota, formatBytes } = await import("@/lib/storageQuota");
       const quota = await getStorageQuota();
       if (quota.hasLimit) {
@@ -359,7 +359,7 @@ export default function Upload() {
         if (quota.usedBytes + incoming > quota.limitBytes) {
           toast({
             title: "Limite de armazenamento atingido",
-            description: `Sua licença permite ${formatBytes(quota.limitBytes)}. Disponível: ${formatBytes(quota.remainingBytes)}.`,
+            description: `Seu plano permite ${formatBytes(quota.limitBytes)}. Disponível: ${formatBytes(quota.remainingBytes)}.`,
             variant: "destructive",
           });
           setLoading(false);
@@ -368,7 +368,7 @@ export default function Upload() {
         if (quota.percent >= 80) {
           toast({
             title: "Atenção: armazenamento alto",
-            description: `Você está usando ${quota.percent.toFixed(1)}% da licença.`,
+            description: `Você está usando ${quota.percent.toFixed(1)}% do seu plano.`,
           });
         }
       }
@@ -689,7 +689,7 @@ export default function Upload() {
                 </div>
                 <div className="text-center">
                   <p className="font-semibold text-foreground">{blocked ? (quotaFull ? "Limite de armazenamento atingido" : "Upload bloqueado") : editId ? "Adicionar novos arquivos" : "Arraste arquivos aqui"}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{blocked ? (quotaFull && quotaInfo ? `Sua licença permite ${quotaInfo.limit} (usado ${quotaInfo.used}). Contate o administrador.` : "Cadastre um certificado digital para enviar arquivos") : "ou clique para selecionar"}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{blocked ? (quotaFull && quotaInfo ? `Seu plano permite ${quotaInfo.limit} (usado ${quotaInfo.used}). Contate o administrador.` : "Cadastre um certificado digital para enviar arquivos") : "ou clique para selecionar"}</p>
                   <p className="text-xs text-muted-foreground mt-2">PDF, JPG, PNG, DOCX, XLSX</p>
                 </div>
                 <input id="file-input" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" className="hidden" onChange={handleFileSelect} disabled={blocked} />
