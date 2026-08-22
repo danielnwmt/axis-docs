@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
+import { loadDriveConfigForUser } from "../_shared/orgDrive.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -92,9 +93,8 @@ Deno.serve(async (req) => {
     const { data: { user } } = await admin.auth.getUser(auth.replace("Bearer ", ""));
     if (!user) return new Response(JSON.stringify({ error: "Token inválido" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { data: cfgFile } = await admin.storage.from("settings").download("google-drive-config.json");
-    if (!cfgFile) throw new Error("Google Drive não configurado");
-    const cfg: GoogleDriveConfig = JSON.parse(await cfgFile.text());
+    const cfg: GoogleDriveConfig = await loadDriveConfigForUser(admin, user.id);
+    if (!cfg) throw new Error("Google Drive não configurado");
     const rootId = extractFolderId(cfg.rootFolderId);
     if (!rootId) throw new Error("rootFolderId não configurado");
 

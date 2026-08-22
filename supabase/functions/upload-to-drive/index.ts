@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
+import { loadDriveConfigForUser } from "../_shared/orgDrive.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -131,9 +132,9 @@ Deno.serve(async (req) => {
     }
 
     // Load Google Drive config
-    const { data: configData, error: configError } = await supabase.storage
-      .from("settings")
-      .download("google-drive-config.json");
+    const orgConfig = await loadDriveConfigForUser(supabase, user.id);
+    const configData = orgConfig ? true : null;
+    const configError = orgConfig ? null : new Error("no config");
 
     if (configError || !configData) {
       return new Response(
@@ -142,7 +143,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const config: GoogleDriveConfig = JSON.parse(await configData.text());
+    const config: GoogleDriveConfig = orgConfig;
 
     if (!config.serviceAccount?.client_email || !config.serviceAccount?.private_key) {
       return new Response(
