@@ -4,6 +4,7 @@ import { SignPdf } from "npm:@signpdf/signpdf@3.2.4";
 import { P12Signer } from "npm:@signpdf/signer-p12@3.2.4";
 import { pdflibAddPlaceholder } from "npm:@signpdf/placeholder-pdf-lib@3.2.4";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
+import { downloadOrgDriveConfig } from "../_shared/orgDrive.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -89,10 +90,9 @@ function extractFolderId(input: string | undefined | null): string {
   return m ? m[0] : s;
 }
 
-async function loadDriveConfig(supabase: any) {
-  const { data: cfgFile, error } = await supabase.storage.from("settings").download("google-drive-config.json");
-  if (error || !cfgFile) throw new Error("Google Drive não configurado");
-  const cfg = JSON.parse(await cfgFile.text());
+async function loadDriveConfig(supabase: any, orgId?: string | null) {
+  const cfg = await downloadOrgDriveConfig(supabase, orgId);
+  if (!cfg) throw new Error("Google Drive não configurado");
   // Normaliza: aceita rootFolderId (formato novo) ou folderId (legado).
   // Sem isso o upload vai para "My Drive" da Service Account, que não tem cota.
   cfg.folderId = extractFolderId(cfg.rootFolderId || cfg.folderId);
@@ -153,7 +153,7 @@ async function uploadSignedToDrive(
   categoryName?: string,
   useSignatureFolder: boolean = false,
 ) {
-  const cfg = await loadDriveConfig(supabase);
+  const cfg = await loadDriveConfig(supabase, orgId);
   if (!cfg.folderId) throw new Error("ID da pasta raiz do Google Drive não configurado. Configure em Configurações.");
   const token = await getDriveAccessToken(cfg.serviceAccount);
 
@@ -479,7 +479,7 @@ Deno.serve(async (req) => {
     let pdfBytes: Uint8Array;
     if (filePath.startsWith("drive://")) {
       const driveId = doc.drive_file_id || filePath.replace("drive://", "");
-      const cfg = await loadDriveConfig(supabase);
+      const cfg = await loadDriveConfig(supabase, orgId);
       const token = await getDriveAccessToken(cfg.serviceAccount);
       const r = await fetch(`https://www.googleapis.com/drive/v3/files/${driveId}?alt=media&supportsAllDrives=true`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -556,7 +556,7 @@ Deno.serve(async (req) => {
       try {
         const oldDriveId = doc.drive_file_id || filePath.replace("drive://", "");
         if (oldDriveId && oldDriveId !== newDriveFileId) {
-          const cfg = await loadDriveConfig(supabase);
+          const cfg = await loadDriveConfig(supabase, orgId);
           const token = await getDriveAccessToken(cfg.serviceAccount);
           await fetch(`https://www.googleapis.com/drive/v3/files/${oldDriveId}?supportsAllDrives=true`, {
             method: "DELETE",
