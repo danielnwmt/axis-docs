@@ -207,8 +207,9 @@ Deno.serve(async (req) => {
 
     if (req.method === "POST" && action === "toggle") {
       const { userId, active } = await req.json();
+      if (!(await assertSameOrg(userId))) return json({ error: "Usuário de outra organização" }, 403);
 
-      const { error } = await supabaseAdmin.from("profiles").update({ active }).eq("id", userId);
+      const { error } = await supabaseAdmin.from("profiles").update({ active }).eq("id", userId).eq("org_id", callerOrgId);
       if (error) {
         return new Response(JSON.stringify({ error: error.message }), {
           status: 400,
@@ -224,6 +225,7 @@ Deno.serve(async (req) => {
 
     if (req.method === "POST" && action === "delete") {
       const { userId } = await req.json();
+      if (!(await assertSameOrg(userId))) return json({ error: "Usuário de outra organização" }, 403);
 
       const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
       if (error) {
@@ -248,10 +250,12 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      if (!(await assertSameOrg(userId))) return json({ error: "Usuário de outra organização" }, 403);
 
       const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
         password: newPassword,
       });
+
 
       if (error) {
         return new Response(JSON.stringify({ error: error.message }), {
