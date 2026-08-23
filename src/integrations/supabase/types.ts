@@ -564,12 +564,20 @@ export type Database = {
       }
       organizations: {
         Row: {
+          city: string | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
           created_at: string
+          doc_type: string
+          document: string | null
           id: string
           max_users: number
           name: string
+          notes: string | null
           plan: string
           slug: string
+          state: string | null
           status: string
           storage_limit_gb: number
           storage_used_bytes: number
@@ -577,12 +585,20 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          city?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
           created_at?: string
+          doc_type?: string
+          document?: string | null
           id?: string
           max_users?: number
           name: string
+          notes?: string | null
           plan?: string
           slug: string
+          state?: string | null
           status?: string
           storage_limit_gb?: number
           storage_used_bytes?: number
@@ -590,12 +606,20 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          city?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
           created_at?: string
+          doc_type?: string
+          document?: string | null
           id?: string
           max_users?: number
           name?: string
+          notes?: string | null
           plan?: string
           slug?: string
+          state?: string | null
           status?: string
           storage_limit_gb?: number
           storage_used_bytes?: number
