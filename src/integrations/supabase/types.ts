@@ -426,6 +426,56 @@ export type Database = {
           },
         ]
       }
+      invoices: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          description: string
+          due_date: string | null
+          id: string
+          kind: string
+          notes: string | null
+          org_id: string
+          paid_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents?: number
+          created_at?: string
+          description: string
+          due_date?: string | null
+          id?: string
+          kind?: string
+          notes?: string | null
+          org_id: string
+          paid_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          description?: string
+          due_date?: string | null
+          id?: string
+          kind?: string
+          notes?: string | null
+          org_id?: string
+          paid_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       license_config: {
         Row: {
           customer_name: string | null
@@ -624,6 +674,45 @@ export type Database = {
           storage_limit_gb?: number
           storage_used_bytes?: number
           trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      plans: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          id: string
+          max_users: number
+          name: string
+          price_cents: number
+          slug: string
+          storage_gb: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          max_users?: number
+          name: string
+          price_cents?: number
+          slug: string
+          storage_gb?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          max_users?: number
+          name?: string
+          price_cents?: number
+          slug?: string
+          storage_gb?: number
           updated_at?: string
         }
         Relationships: []
