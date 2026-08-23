@@ -44,6 +44,7 @@ type Org = {
   max_users: number;
   storage_limit_gb: number;
   storage_used_bytes: number;
+  created_at?: string;
 };
 
 type Plan = {
