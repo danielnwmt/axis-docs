@@ -1008,10 +1008,11 @@ export default function Platform() {
           <div className="grid gap-4">
             <div>
               <Label>GB adicionais</Label>
-              <Input type="number" min={1} value={addonGb} onChange={(e) => setAddonGb(Number(e.target.value))} />
+              <Input type="number" min={1} value={addonGb} onChange={(e) => changeAddonGb(Number(e.target.value))} />
               {addonOrg && (
                 <p className="text-xs text-muted-foreground mt-1">
                   Novo limite: {Number(addonOrg.storage_limit_gb) + (Number(addonGb) || 0)} GB
+                  {gbPriceCents > 0 && ` · ${brl(gbPriceCents)}/GB`}
                 </p>
               )}
             </div>
@@ -1025,10 +1026,24 @@ export default function Platform() {
                 <Input
                   type="number" min={0} step="0.01"
                   value={addonPrice / 100}
-                  onChange={(e) => setAddonPrice(Math.round(Number(e.target.value) * 100))}
+                  onChange={(e) => { setAddonPriceTouched(true); setAddonPrice(Math.round(Number(e.target.value) * 100)); }}
                 />
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-xs text-muted-foreground">
+                    {gbPriceCents > 0
+                      ? `Calculado: ${addonGb} GB × ${brl(gbPriceCents)} = ${brl(Math.round((Number(addonGb) || 0) * gbPriceCents))}`
+                      : "Defina o preço por GB na aba Planos."}
+                  </p>
+                  {addonPriceTouched && gbPriceCents > 0 && (
+                    <Button size="sm" variant="ghost" className="h-6 text-xs"
+                      onClick={() => { setAddonPriceTouched(false); setAddonPrice(Math.round((Number(addonGb) || 0) * gbPriceCents)); }}>
+                      Recalcular
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
+
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddonOrg(null)}>Cancelar</Button>
