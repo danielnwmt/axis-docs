@@ -45,12 +45,27 @@ Deno.serve(async (req) => {
     }
     const { data: callerProfile } = await supabaseAdmin
       .from("profiles")
-      .select("role, active")
+      .select("role, active, org_id")
       .eq("id", callerData.user.id)
       .maybeSingle();
     if (!callerProfile || !callerProfile.active) {
       return json({ error: "Permissão negada" }, 403);
     }
+    const callerOrgId = (callerProfile as any).org_id as string | null;
+    if (!callerOrgId) {
+      return json({ error: "Usuário sem organização vinculada" }, 403);
+    }
+
+    // garante que o alvo pertence à mesma organização do solicitante
+    const assertSameOrg = async (userId: string) => {
+      const { data } = await supabaseAdmin
+        .from("profiles")
+        .select("org_id")
+        .eq("id", userId)
+        .maybeSingle();
+      return !!data && (data as any).org_id === callerOrgId;
+    };
+
     const isAdmin = callerProfile.role === "Administrador";
     const isOperator = callerProfile.role === "Operador";
 
