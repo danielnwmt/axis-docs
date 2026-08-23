@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -129,7 +129,13 @@ export default function Platform() {
   const [addonOrg, setAddonOrg] = useState<Org | null>(null);
   const [addonGb, setAddonGb] = useState(10);
   const [addonPrice, setAddonPrice] = useState(0);
+  const [addonPriceTouched, setAddonPriceTouched] = useState(false);
   const [addonInvoice, setAddonInvoice] = useState(true);
+
+  // preço do armazenamento (por GB)
+  const [gbPriceInput, setGbPriceInput] = useState("0");
+  const [savingGbPrice, setSavingGbPrice] = useState(false);
+
 
   const { data: isOwner, isLoading: loadingOwner } = useQuery({
     queryKey: ["is-platform-owner", user?.id],
@@ -173,6 +179,36 @@ export default function Platform() {
     },
     enabled: !!isOwner,
   });
+
+  const { data: settings } = useQuery({
+    queryKey: ["platform-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("platform_settings" as any)
+        .select("*").limit(1).maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as any;
+    },
+    enabled: !!isOwner,
+  });
+
+  const gbPriceCents = Number(settings?.storage_price_cents_per_gb ?? 0);
+
+  useEffect(() => {
+    setGbPriceInput(((gbPriceCents || 0) / 100).toString());
+  }, [gbPriceCents]);
+
+  const saveGbPrice = async () => {
+    setSavingGbPrice(true);
+    const cents = Math.round((Number(gbPriceInput.replace(",", ".")) || 0) * 100);
+    const { error } = await supabase.from("platform_settings" as any)
+      .upsert({ id: true, storage_price_cents_per_gb: cents } as any);
+    setSavingGbPrice(false);
+    if (error) { toast.error("Erro ao salvar preço", { description: error.message }); return; }
+    toast.success("Preço do armazenamento atualizado");
+    qc.invalidateQueries({ queryKey: ["platform-settings"] });
+  };
+
+
 
   const { data: counts } = useQuery({
     queryKey: ["platform-org-users"],
@@ -406,8 +442,16 @@ export default function Platform() {
 
   // ---------- storage add-on ----------
   const openAddon = (o: Org) => {
-    setAddonOrg(o); setAddonGb(10); setAddonPrice(0); setAddonInvoice(true);
+    setAddonOrg(o); setAddonGb(10);
+    setAddonPrice(10 * gbPriceCents); setAddonPriceTouched(false);
+    setAddonInvoice(true);
   };
+
+  const changeAddonGb = (gb: number) => {
+    setAddonGb(gb);
+    if (!addonPriceTouched) setAddonPrice(Math.round((Number(gb) || 0) * gbPriceCents));
+  };
+
 
   const saveAddon = async () => {
     if (!addonOrg) return;
@@ -622,6 +666,26 @@ export default function Platform() {
           {/* ---------------- Planos ---------------- */}
           <TabsContent value="plans" className="space-y-4 mt-6">
             <Card className="p-5">
+              <h2 className="font-semibold flex items-center gap-2 mb-4">
+                <HardDrive className="w-4 h-4" /> Preço do armazenamento
+              </h2>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="w-48">
+                  <Label>Valor por GB (R$)</Label>
+                  <Input type="number" min={0} step="0.01" value={gbPriceInput}
+                    onChange={(e) => setGbPriceInput(e.target.value)} />
+                </div>
+                <Button onClick={saveGbPrice} disabled={savingGbPrice}>
+                  {savingGbPrice ? "Salvando..." : "Salvar preço"}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Usado para calcular automaticamente o valor ao adicionar GB a um cliente.
+                </p>
+              </div>
+            </Card>
+
+            <Card className="p-5">
+
               <div className="flex items-center justify-between gap-3 mb-4">
                 <h2 className="font-semibold flex items-center gap-2">
                   <Package className="w-4 h-4" /> Planos ({planList.length})
@@ -964,10 +1028,11 @@ export default function Platform() {
           <div className="grid gap-4">
             <div>
               <Label>GB adicionais</Label>
-              <Input type="number" min={1} value={addonGb} onChange={(e) => setAddonGb(Number(e.target.value))} />
+              <Input type="number" min={1} value={addonGb} onChange={(e) => changeAddonGb(Number(e.target.value))} />
               {addonOrg && (
                 <p className="text-xs text-muted-foreground mt-1">
                   Novo limite: {Number(addonOrg.storage_limit_gb) + (Number(addonGb) || 0)} GB
+                  {gbPriceCents > 0 && ` · ${brl(gbPriceCents)}/GB`}
                 </p>
               )}
             </div>
@@ -981,10 +1046,24 @@ export default function Platform() {
                 <Input
                   type="number" min={0} step="0.01"
                   value={addonPrice / 100}
-                  onChange={(e) => setAddonPrice(Math.round(Number(e.target.value) * 100))}
+                  onChange={(e) => { setAddonPriceTouched(true); setAddonPrice(Math.round(Number(e.target.value) * 100)); }}
                 />
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-xs text-muted-foreground">
+                    {gbPriceCents > 0
+                      ? `Calculado: ${addonGb} GB × ${brl(gbPriceCents)} = ${brl(Math.round((Number(addonGb) || 0) * gbPriceCents))}`
+                      : "Defina o preço por GB na aba Planos."}
+                  </p>
+                  {addonPriceTouched && gbPriceCents > 0 && (
+                    <Button size="sm" variant="ghost" className="h-6 text-xs"
+                      onClick={() => { setAddonPriceTouched(false); setAddonPrice(Math.round((Number(addonGb) || 0) * gbPriceCents)); }}>
+                      Recalcular
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
+
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddonOrg(null)}>Cancelar</Button>
