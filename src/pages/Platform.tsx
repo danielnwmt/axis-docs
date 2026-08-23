@@ -151,6 +151,7 @@ export default function Platform() {
   const openEdit = (o: Org) => {
     setEditing(o);
     setForm({
+      ...emptyForm,
       name: o.name, slug: o.slug, doc_type: o.doc_type ?? "CNPJ", document: o.document ?? "",
       contact_name: o.contact_name ?? "", contact_email: o.contact_email ?? "",
       contact_phone: o.contact_phone ?? "", city: o.city ?? "", state: o.state ?? "",
@@ -162,26 +163,46 @@ export default function Platform() {
 
   const save = async () => {
     if (!form.name.trim()) return;
-    setSaving(true);
+    const { admin_email, admin_password, admin_name, ...orgFields } = form;
     const payload = {
-      ...form,
+      ...orgFields,
       name: form.name.trim(),
       slug: form.slug.trim() || slugify(form.name),
       max_users: Number(form.max_users) || 1,
       storage_limit_gb: Number(form.storage_limit_gb) || 1,
     };
-    const { error } = editing
-      ? await supabase.from("organizations").update(payload as any).eq("id", editing.id)
-      : await supabase.from("organizations").insert(payload as any);
-    setSaving(false);
-    if (error) {
-      toast.error(editing ? "Erro ao salvar cliente" : "Erro ao criar cliente", { description: error.message });
+
+    if (!editing && (!admin_email.trim() || admin_password.length < 6)) {
+      toast.error("Informe e-mail e senha (mín. 6 caracteres) do usuário padrão da empresa");
       return;
     }
-    toast.success(editing ? "Cliente atualizado" : "Cliente cadastrado");
+
+    setSaving(true);
+    if (editing) {
+      const { error } = await supabase.from("organizations").update(payload as any).eq("id", editing.id);
+      setSaving(false);
+      if (error) {
+        toast.error("Erro ao salvar cliente", { description: error.message });
+        return;
+      }
+      toast.success("Cliente atualizado");
+    } else {
+      const { data, error } = await supabase.functions.invoke("provision-org", {
+        body: { org: payload, admin_email, admin_password, admin_name },
+      });
+      setSaving(false);
+      const errMsg = (data as any)?.error || error?.message;
+      if (errMsg) {
+        toast.error("Erro ao criar cliente", { description: errMsg });
+        return;
+      }
+      toast.success("Cliente criado", { description: `Usuário padrão: ${admin_email.trim()}` });
+    }
     setOpen(false);
     qc.invalidateQueries({ queryKey: ["platform-orgs"] });
+    qc.invalidateQueries({ queryKey: ["platform-org-users"] });
   };
+
 
   if (loadingOwner) {
     return <AppLayout><div className="p-6 text-sm text-muted-foreground">Carregando...</div></AppLayout>;
