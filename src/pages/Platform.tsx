@@ -501,41 +501,37 @@ export default function Platform() {
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="bg-card rounded-xl border border-border shadow-sm lg:col-span-2 animate-fade-in">
                 <div className="px-5 py-4 border-b border-border flex items-center gap-2">
-                  <HardDrive className="w-4 h-4 text-muted-foreground" />
+                  <TrendingUp className="w-4 h-4 text-muted-foreground" />
                   <h3 className="font-display font-semibold text-foreground">
-                    Consumo de armazenamento por cliente (GB)
+                    Evolução de clientes (12 meses)
                   </h3>
                 </div>
                 <div className="p-5 h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={storageChart} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <LineChart data={trendChart} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis
                         dataKey="name"
                         tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
                         stroke="hsl(var(--border))"
-                        tickLine={false}
-                        interval={0}
                       />
                       <YAxis
                         tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
                         stroke="hsl(var(--border))"
-                        tickLine={false}
-                        axisLine={false}
-                        width={40}
                       />
                       <Tooltip
-                        cursor={{ fill: "hsl(var(--muted) / 0.4)" }}
                         contentStyle={{
                           backgroundColor: "hsl(var(--card))",
                           border: "1px solid hsl(var(--border))",
                           borderRadius: "8px",
                           fontSize: "12px",
                         }}
-                        formatter={(v: number) => [`${v} GB`, "Armazenamento"]}
                       />
-                      <Bar dataKey="GB" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} maxBarSize={48} />
-                    </BarChart>
+                      <Legend wrapperStyle={{ fontSize: "12px" }} />
+                      <Line type="monotone" dataKey="Total" stroke="hsl(var(--foreground))" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="Ativos" stroke="hsl(var(--info))" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="Novos" stroke="hsl(var(--success))" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
                   </ResponsiveContainer>
                 </div>
               </div>
