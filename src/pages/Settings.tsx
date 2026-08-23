@@ -144,44 +144,51 @@ function MobileAccessSection() {
 }
 
 function OrgaoSection() {
-  const [data, setData] = useState({
-    nome: "",
-    cnpj: "",
-    endereco: "",
-    telefone: "",
-    email: "",
-    responsavel: "",
-  });
+  const [org, setOrg] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleSave = () => {
-    toast({ title: "Dados salvos com sucesso!" });
-  };
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("organizations")
+        .select("name, document, doc_type, contact_name, contact_email, contact_phone, city, state, plan, max_users, storage_limit_gb")
+        .limit(1)
+        .maybeSingle();
+      setOrg(data);
+      setLoading(false);
+    })();
+  }, []);
+
+  if (loading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (!org) return <p className="text-sm text-muted-foreground">Nenhum órgão vinculado à sua conta.</p>;
+
+  const fields = [
+    { label: "Nome do Órgão", value: org.name },
+    { label: org.doc_type === "cpf" ? "CPF" : "CNPJ", value: org.document },
+    { label: "Cidade/UF", value: [org.city, org.state].filter(Boolean).join(" - ") },
+    { label: "Telefone", value: org.contact_phone },
+    { label: "E-mail institucional", value: org.contact_email },
+    { label: "Responsável", value: org.contact_name },
+    { label: "Plano", value: org.plan },
+    { label: "Limite de usuários", value: org.max_users ? String(org.max_users) : "" },
+    { label: "Armazenamento contratado", value: org.storage_limit_gb ? `${org.storage_limit_gb} GB` : "" },
+  ];
 
   return (
     <div className="space-y-4 max-w-xl">
-      {[
-        { key: "nome", label: "Nome do Órgão" },
-        { key: "cnpj", label: "CNPJ" },
-        { key: "endereco", label: "Endereço" },
-        { key: "telefone", label: "Telefone" },
-        { key: "email", label: "E-mail institucional" },
-        { key: "responsavel", label: "Responsável" },
-      ].map((field) => (
-        <div key={field.key} className="space-y-1">
+      {fields.map((field) => (
+        <div key={field.label} className="space-y-1">
           <Label>{field.label}</Label>
-          <Input
-            value={data[field.key as keyof typeof data]}
-            onChange={(e) => setData({ ...data, [field.key]: e.target.value })}
-            placeholder={field.label}
-          />
+          <Input value={field.value || "—"} readOnly className="bg-muted/40" />
         </div>
       ))}
-      <Button onClick={handleSave} className="mt-2">
-        <Save className="w-4 h-4 mr-2" /> Salvar
-      </Button>
+      <p className="text-xs text-muted-foreground">
+        Estes dados são definidos no cadastro do órgão. Para alterá-los, solicite ao suporte da plataforma.
+      </p>
     </div>
   );
 }
+
 
 
 function ListManager({ itemLabel, tableName }: { itemLabel: string; tableName: "categories" | "units" }) {
