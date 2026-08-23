@@ -442,8 +442,16 @@ export default function Platform() {
 
   // ---------- storage add-on ----------
   const openAddon = (o: Org) => {
-    setAddonOrg(o); setAddonGb(10); setAddonPrice(0); setAddonInvoice(true);
+    setAddonOrg(o); setAddonGb(10);
+    setAddonPrice(10 * gbPriceCents); setAddonPriceTouched(false);
+    setAddonInvoice(true);
   };
+
+  const changeAddonGb = (gb: number) => {
+    setAddonGb(gb);
+    if (!addonPriceTouched) setAddonPrice(Math.round((Number(gb) || 0) * gbPriceCents));
+  };
+
 
   const saveAddon = async () => {
     if (!addonOrg) return;
