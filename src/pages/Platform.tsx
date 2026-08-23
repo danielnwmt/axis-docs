@@ -20,10 +20,10 @@ import {
 import { toast } from "sonner";
 import {
   Building2, Plus, Search, Pencil, Users, HardDrive, CheckCircle2,
-  Package, Receipt, DollarSign, Trash2,
+  Package, Receipt, DollarSign, Trash2, TrendingUp,
 } from "lucide-react";
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
 
