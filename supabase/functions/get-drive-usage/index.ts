@@ -87,34 +87,48 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(supabaseUrl, serviceKey);
 
-    // Auth check
+    // Auth check (compatível com signing keys)
     const auth = req.headers.get("authorization");
-    if (!auth) return new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    const { data: { user } } = await admin.auth.getUser(auth.replace("Bearer ", ""));
-    if (!user) return new Response(JSON.stringify({ error: "Token inválido" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!auth?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const jwt = auth.replace("Bearer ", "").trim();
+    const anon = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
+    let userId: string | null = null;
+    const { data: claimsData } = await anon.auth.getClaims(jwt);
+    userId = (claimsData?.claims?.sub as string) ?? null;
+    if (!userId) {
+      const { data: u } = await admin.auth.getUser(jwt);
+      userId = u?.user?.id ?? null;
+    }
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Token inválido" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
-    const cfg: GoogleDriveConfig = await loadDriveConfigForUser(admin, user.id);
-    if (!cfg) throw new Error("Google Drive não configurado");
-    const rootId = extractFolderId(cfg.rootFolderId);
-    if (!rootId) throw new Error("rootFolderId não configurado");
+    const { data: prof } = await admin.from("profiles").select("org_id").eq("id", userId).maybeSingle();
+    const orgId = prof?.org_id ?? null;
 
-    const token = await getAccessToken(cfg.serviceAccount);
-    const usedBytes = await sumFolder(token, rootId);
+    const cfg: GoogleDriveConfig = await loadDriveConfigForUser(admin, userId);
+    const rootId = cfg ? extractFolderId(cfg.rootFolderId) : "";
 
-    const { data: lic } = await admin
-      .from("license_config")
-      .select("id, storage_limit_gb")
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    let usedBytes = 0;
+    if (cfg && rootId) {
+      const token = await getAccessToken(cfg.serviceAccount);
+      usedBytes = await sumFolder(token, rootId);
+    }
 
-    const limitGb = Number(lic?.storage_limit_gb || 0);
+    const { data: org } = orgId
+      ? await admin.from("organizations").select("id, storage_limit_gb").eq("id", orgId).maybeSingle()
+      : { data: null as any };
+
+    const limitGb = Number(org?.storage_limit_gb || 0);
     const limitBytes = limitGb > 0 ? Math.floor(limitGb * 1024 ** 3) : 0;
     const full = limitBytes > 0 && usedBytes >= limitBytes;
 
-    if (lic?.id) {
-      await admin.from("license_config").update({ storage_used_bytes: usedBytes, updated_at: new Date().toISOString() }).eq("id", lic.id);
+    if (org?.id) {
+      await admin.from("organizations").update({ storage_used_bytes: usedBytes }).eq("id", org.id);
     }
+
 
     return new Response(JSON.stringify({ usedBytes, limitBytes, full, rootFolderId: rootId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
