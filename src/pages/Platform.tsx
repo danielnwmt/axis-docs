@@ -129,7 +129,13 @@ export default function Platform() {
   const [addonOrg, setAddonOrg] = useState<Org | null>(null);
   const [addonGb, setAddonGb] = useState(10);
   const [addonPrice, setAddonPrice] = useState(0);
+  const [addonPriceTouched, setAddonPriceTouched] = useState(false);
   const [addonInvoice, setAddonInvoice] = useState(true);
+
+  // preço do armazenamento (por GB)
+  const [gbPriceInput, setGbPriceInput] = useState("0");
+  const [savingGbPrice, setSavingGbPrice] = useState(false);
+
 
   const { data: isOwner, isLoading: loadingOwner } = useQuery({
     queryKey: ["is-platform-owner", user?.id],
