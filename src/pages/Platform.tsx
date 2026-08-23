@@ -45,7 +45,9 @@ const emptyForm = {
   name: "", slug: "", doc_type: "CNPJ", document: "", contact_name: "",
   contact_email: "", contact_phone: "", city: "", state: "", notes: "",
   plan: "trial", status: "active", max_users: 10, storage_limit_gb: 10,
+  admin_email: "", admin_password: "", admin_name: "",
 };
+
 
 const slugify = (v: string) =>
   v.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -149,6 +151,7 @@ export default function Platform() {
   const openEdit = (o: Org) => {
     setEditing(o);
     setForm({
+      ...emptyForm,
       name: o.name, slug: o.slug, doc_type: o.doc_type ?? "CNPJ", document: o.document ?? "",
       contact_name: o.contact_name ?? "", contact_email: o.contact_email ?? "",
       contact_phone: o.contact_phone ?? "", city: o.city ?? "", state: o.state ?? "",
@@ -160,26 +163,46 @@ export default function Platform() {
 
   const save = async () => {
     if (!form.name.trim()) return;
-    setSaving(true);
+    const { admin_email, admin_password, admin_name, ...orgFields } = form;
     const payload = {
-      ...form,
+      ...orgFields,
       name: form.name.trim(),
       slug: form.slug.trim() || slugify(form.name),
       max_users: Number(form.max_users) || 1,
       storage_limit_gb: Number(form.storage_limit_gb) || 1,
     };
-    const { error } = editing
-      ? await supabase.from("organizations").update(payload as any).eq("id", editing.id)
-      : await supabase.from("organizations").insert(payload as any);
-    setSaving(false);
-    if (error) {
-      toast.error(editing ? "Erro ao salvar cliente" : "Erro ao criar cliente", { description: error.message });
+
+    if (!editing && (!admin_email.trim() || admin_password.length < 6)) {
+      toast.error("Informe e-mail e senha (mín. 6 caracteres) do usuário padrão da empresa");
       return;
     }
-    toast.success(editing ? "Cliente atualizado" : "Cliente cadastrado");
+
+    setSaving(true);
+    if (editing) {
+      const { error } = await supabase.from("organizations").update(payload as any).eq("id", editing.id);
+      setSaving(false);
+      if (error) {
+        toast.error("Erro ao salvar cliente", { description: error.message });
+        return;
+      }
+      toast.success("Cliente atualizado");
+    } else {
+      const { data, error } = await supabase.functions.invoke("provision-org", {
+        body: { org: payload, admin_email, admin_password, admin_name },
+      });
+      setSaving(false);
+      const errMsg = (data as any)?.error || error?.message;
+      if (errMsg) {
+        toast.error("Erro ao criar cliente", { description: errMsg });
+        return;
+      }
+      toast.success("Cliente criado", { description: `Usuário padrão: ${admin_email.trim()}` });
+    }
     setOpen(false);
     qc.invalidateQueries({ queryKey: ["platform-orgs"] });
+    qc.invalidateQueries({ queryKey: ["platform-org-users"] });
   };
+
 
   if (loadingOwner) {
     return <AppLayout><div className="p-6 text-sm text-muted-foreground">Carregando...</div></AppLayout>;
@@ -398,6 +421,32 @@ export default function Platform() {
               <Textarea rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
           </div>
+
+          {!editing && (
+            <div className="rounded-lg border p-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold">Usuário padrão da empresa</p>
+                <p className="text-xs text-muted-foreground">
+                  Administrador criado junto com o cliente. A senha deverá ser trocada no primeiro acesso.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <Label>Nome</Label>
+                  <Input value={form.admin_name} onChange={(e) => setForm({ ...form, admin_name: e.target.value })} />
+                </div>
+                <div>
+                  <Label>E-mail *</Label>
+                  <Input type="email" value={form.admin_email} onChange={(e) => setForm({ ...form, admin_email: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Senha *</Label>
+                  <Input type="text" value={form.admin_password} onChange={(e) => setForm({ ...form, admin_password: e.target.value })} />
+                </div>
+              </div>
+            </div>
+          )}
+
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
