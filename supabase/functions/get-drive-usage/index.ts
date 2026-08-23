@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
       userId = u?.user?.id ?? null;
     }
     if (!userId) {
-      return new Response(JSON.stringify({ error: "Token inválido", debug: { jwtLen: jwt.length, role: (claimsData as any)?.claims?.role ?? null } }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Token inválido" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const { data: prof } = await admin.from("profiles").select("org_id").eq("id", userId).maybeSingle();
