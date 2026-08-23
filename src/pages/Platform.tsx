@@ -128,6 +128,7 @@ export default function Platform() {
   // storage add-on
   const [addonOrg, setAddonOrg] = useState<Org | null>(null);
   const [addonGb, setAddonGb] = useState(10);
+  const [addonMode, setAddonMode] = useState<"add" | "remove">("add");
   const [addonPrice, setAddonPrice] = useState(0);
   const [addonPriceTouched, setAddonPriceTouched] = useState(false);
   const [addonInvoice, setAddonInvoice] = useState(true);
