@@ -190,6 +190,7 @@ Deno.serve(async (req) => {
         role: role || "Administrador",
         unit: unit || "",
         active: true,
+        org_id: callerOrgId,
       });
 
       if (upsertError) {
