@@ -480,17 +480,24 @@ export default function Platform() {
           <TabsContent value="clients" className="space-y-6 mt-6">
             <div className="grid gap-4 lg:grid-cols-3">
               <Card className="p-5 lg:col-span-2">
-                <h2 className="font-semibold mb-4 text-sm">Consumo por cliente</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-semibold text-sm">Consumo de armazenamento (GB)</h2>
+                  <span className="text-xs text-muted-foreground">{stats.gb.toFixed(2)} GB total</span>
+                </div>
                 <div className="h-[260px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={storageChart}>
+                    <BarChart data={storageChart} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="barGb" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="hsl(195 85% 55%)" />
+                          <stop offset="100%" stopColor="hsl(215 75% 38%)" />
+                        </linearGradient>
+                      </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="GB" fill={CHART_COLORS[0]} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Usuários" fill={CHART_COLORS[1]} radius={[4, 4, 0, 0]} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} interval={0} />
+                      <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} width={40} />
+                      <Tooltip cursor={{ fill: "hsl(var(--muted) / 0.4)" }} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, boxShadow: "0 8px 24px -8px hsl(215 60% 20% / 0.35)" }} formatter={(v: number, n: string) => n === "GB" ? [`${v} GB`, "Armazenamento"] : [`${v}`, "Usuários"]} />
+                      <Bar dataKey="GB" fill="url(#barGb)" radius={[6, 6, 0, 0]} maxBarSize={56} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -501,13 +508,13 @@ export default function Platform() {
                 <div className="h-[260px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={planChart} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={3}>
+                      <Pie data={planChart} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={3} stroke="hsl(var(--card))" strokeWidth={2}>
                         {planChart.map((_, i) => (
                           <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, boxShadow: "0 8px 24px -8px hsl(215 60% 20% / 0.35)" }} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
