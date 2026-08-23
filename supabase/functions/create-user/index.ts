@@ -149,6 +149,7 @@ Deno.serve(async (req) => {
         cpf: cpf || "",
         active: true,
         must_change_password: true,
+        org_id: callerOrgId,
       });
 
       if (profileError) {
