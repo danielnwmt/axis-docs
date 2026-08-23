@@ -462,14 +462,32 @@ export default function Platform() {
     const { error } = await supabase.from("organizations")
       .update({ storage_limit_gb: newLimit } as any).eq("id", addonOrg.id);
     if (!error && addonInvoice) {
-      await supabase.from("invoices").insert({
-        org_id: addonOrg.id,
-        description: `Armazenamento adicional: +${gb} GB`,
-        kind: "storage_addon",
-        amount_cents: Math.round(Number(addonPrice) || 0),
-        status: "open",
-      } as any);
+      const addCents = Math.round(Number(addonPrice) || 0);
+      // procura a próxima fatura em aberto do cliente para somar o valor
+      const { data: nextInv } = await supabase.from("invoices")
+        .select("id, description, amount_cents")
+        .eq("org_id", addonOrg.id)
+        .eq("status", "open")
+        .order("due_date", { ascending: true, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (nextInv) {
+        await supabase.from("invoices").update({
+          amount_cents: Number((nextInv as any).amount_cents || 0) + addCents,
+          description: `${(nextInv as any).description} + ${gb} GB extra`,
+        } as any).eq("id", (nextInv as any).id);
+      } else {
+        await supabase.from("invoices").insert({
+          org_id: addonOrg.id,
+          description: `Armazenamento adicional: +${gb} GB`,
+          kind: "storage_addon",
+          amount_cents: addCents,
+          status: "open",
+        } as any);
+      }
     }
+
     setSaving(false);
     if (error) { toast.error("Erro ao adicionar armazenamento", { description: error.message }); return; }
     toast.success(`+${gb} GB adicionados`, { description: `Novo limite: ${newLimit} GB` });
