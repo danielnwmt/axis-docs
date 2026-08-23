@@ -434,13 +434,19 @@ function ParametrosSection() {
   );
 }
 
-async function driveConfigPath(): Promise<string> {
+async function driveConfigPath(): Promise<string | null> {
   const { data: auth } = await supabase.auth.getUser();
   const uid = auth?.user?.id;
-  if (!uid) return "google-drive-config.json";
+  if (!uid) return null;
   const { data } = await supabase.from("profiles").select("org_id").eq("id", uid).maybeSingle();
   const orgId = (data as any)?.org_id;
-  return orgId ? `orgs/${orgId}/google-drive-config.json` : "google-drive-config.json";
+  return orgId ? `orgs/${orgId}/google-drive-config.json` : null;
+}
+
+// Fallback ao arquivo global antigo apenas para a organização legada
+async function isLegacyOrg(): Promise<boolean> {
+  const { data } = await supabase.rpc("get_my_org");
+  return (data as any)?.[0]?.slug === "default";
 }
 
 function GoogleDriveSection() {
