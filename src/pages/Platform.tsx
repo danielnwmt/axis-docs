@@ -445,7 +445,7 @@ export default function Platform() {
 
   // ---------- storage add-on ----------
   const openAddon = (o: Org) => {
-    setAddonOrg(o); setAddonGb(10);
+    setAddonOrg(o); setAddonGb(10); setAddonMode("add");
     setAddonPrice(10 * gbPriceCents); setAddonPriceTouched(false);
     setAddonInvoice(true);
   };
@@ -460,11 +460,19 @@ export default function Platform() {
     if (!addonOrg) return;
     const gb = Number(addonGb) || 0;
     if (gb <= 0) { toast.error("Informe a quantidade de GB"); return; }
+    const removing = addonMode === "remove";
+    const current = Number(addonOrg.storage_limit_gb);
+    const newLimit = removing ? current - gb : current + gb;
+    if (newLimit < 1) { toast.error("O limite não pode ficar abaixo de 1 GB"); return; }
+    const usedGb = Number(addonOrg.storage_used_bytes || 0) / 1024 ** 3;
+    if (removing && newLimit < usedGb) {
+      toast.error("Limite menor que o uso atual", { description: `Cliente já usa ${usedGb.toFixed(2)} GB` });
+      return;
+    }
     setSaving(true);
-    const newLimit = Number(addonOrg.storage_limit_gb) + gb;
     const { error } = await supabase.from("organizations")
       .update({ storage_limit_gb: newLimit } as any).eq("id", addonOrg.id);
-    if (!error && addonInvoice) {
+    if (!error && addonInvoice && !removing) {
       const addCents = Math.round(Number(addonPrice) || 0);
       // procura a próxima fatura em aberto do cliente para somar o valor
       const { data: nextInv } = await supabase.from("invoices")
@@ -492,12 +500,13 @@ export default function Platform() {
     }
 
     setSaving(false);
-    if (error) { toast.error("Erro ao adicionar armazenamento", { description: error.message }); return; }
-    toast.success(`+${gb} GB adicionados`, { description: `Novo limite: ${newLimit} GB` });
+    if (error) { toast.error("Erro ao atualizar armazenamento", { description: error.message }); return; }
+    toast.success(removing ? `-${gb} GB removidos` : `+${gb} GB adicionados`, { description: `Novo limite: ${newLimit} GB` });
     setAddonOrg(null);
     qc.invalidateQueries({ queryKey: ["platform-orgs"] });
     qc.invalidateQueries({ queryKey: ["platform-invoices"] });
   };
+
 
   if (loadingOwner) {
     return <AppLayout><div className="p-6 text-sm text-muted-foreground">Carregando...</div></AppLayout>;
