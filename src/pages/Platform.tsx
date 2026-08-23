@@ -20,10 +20,10 @@ import {
 import { toast } from "sonner";
 import {
   Building2, Plus, Search, Pencil, Users, HardDrive, CheckCircle2,
-  Package, Receipt, DollarSign, Trash2,
+  Package, Receipt, DollarSign, Trash2, TrendingUp,
 } from "lucide-react";
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
 
@@ -44,6 +44,7 @@ type Org = {
   max_users: number;
   storage_limit_gb: number;
   storage_used_bytes: number;
+  created_at?: string;
 };
 
 type Plan = {
@@ -219,14 +220,33 @@ export default function Platform() {
     };
   }, [list, counts, planList, invoiceList]);
 
-  const storageChart = useMemo(
-    () => list.map((o) => ({
-      name: o.name.length > 14 ? o.name.slice(0, 14) + "…" : o.name,
-      GB: Number((Number(o.storage_used_bytes || 0) / 1024 ** 3).toFixed(2)),
-      Usuários: counts?.[o.id] ?? 0,
-    })).slice(0, 8),
-    [list, counts]
-  );
+  const trendChart = useMemo(() => {
+    const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+    const now = new Date();
+    const months: { label: string; year: number; month: number }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        label: `${MONTHS_PT[d.getMonth()]}/${String(d.getFullYear()).slice(-2)}`,
+        year: d.getFullYear(),
+        month: d.getMonth(),
+      });
+    }
+    let acc = 0;
+    return months.map((m) => {
+      const end = new Date(m.year, m.month + 1, 1).getTime();
+      const novos = list.filter((o) => {
+        if (!o.created_at) return false;
+        const dt = new Date(o.created_at);
+        return dt.getFullYear() === m.year && dt.getMonth() === m.month;
+      }).length;
+      acc = list.filter((o) => o.created_at && new Date(o.created_at).getTime() < end).length;
+      const ativos = list.filter(
+        (o) => o.status === "active" && o.created_at && new Date(o.created_at).getTime() < end
+      ).length;
+      return { name: m.label, Total: acc, Novos: novos, Ativos: ativos };
+    });
+  }, [list]);
 
   const planChart = useMemo(() => {
     const map: Record<string, number> = {};
@@ -481,41 +501,37 @@ export default function Platform() {
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="bg-card rounded-xl border border-border shadow-sm lg:col-span-2 animate-fade-in">
                 <div className="px-5 py-4 border-b border-border flex items-center gap-2">
-                  <HardDrive className="w-4 h-4 text-muted-foreground" />
+                  <TrendingUp className="w-4 h-4 text-muted-foreground" />
                   <h3 className="font-display font-semibold text-foreground">
-                    Consumo de armazenamento por cliente (GB)
+                    Evolução de clientes (12 meses)
                   </h3>
                 </div>
                 <div className="p-5 h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={storageChart} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <LineChart data={trendChart} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis
                         dataKey="name"
                         tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
                         stroke="hsl(var(--border))"
-                        tickLine={false}
-                        interval={0}
                       />
                       <YAxis
                         tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
                         stroke="hsl(var(--border))"
-                        tickLine={false}
-                        axisLine={false}
-                        width={40}
                       />
                       <Tooltip
-                        cursor={{ fill: "hsl(var(--muted) / 0.4)" }}
                         contentStyle={{
                           backgroundColor: "hsl(var(--card))",
                           border: "1px solid hsl(var(--border))",
                           borderRadius: "8px",
                           fontSize: "12px",
                         }}
-                        formatter={(v: number) => [`${v} GB`, "Armazenamento"]}
                       />
-                      <Bar dataKey="GB" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} maxBarSize={48} />
-                    </BarChart>
+                      <Legend wrapperStyle={{ fontSize: "12px" }} />
+                      <Line type="monotone" dataKey="Total" stroke="hsl(var(--foreground))" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="Ativos" stroke="hsl(var(--info))" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="Novos" stroke="hsl(var(--success))" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
                   </ResponsiveContainer>
                 </div>
               </div>
