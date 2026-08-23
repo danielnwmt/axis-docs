@@ -479,33 +479,55 @@ export default function Platform() {
           {/* ---------------- Clientes ---------------- */}
           <TabsContent value="clients" className="space-y-6 mt-6">
             <div className="grid gap-4 lg:grid-cols-3">
-              <Card className="p-5 lg:col-span-2">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-semibold text-sm">Consumo de armazenamento (GB)</h2>
-                  <span className="text-xs text-muted-foreground">{stats.gb.toFixed(2)} GB total</span>
+              <div className="bg-card rounded-xl border border-border shadow-sm lg:col-span-2 animate-fade-in">
+                <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+                  <HardDrive className="w-4 h-4 text-muted-foreground" />
+                  <h3 className="font-display font-semibold text-foreground">
+                    Consumo de armazenamento por cliente (GB)
+                  </h3>
                 </div>
-                <div className="h-[260px]">
+                <div className="p-5 h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={storageChart} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="barGb" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="hsl(195 85% 55%)" />
-                          <stop offset="100%" stopColor="hsl(215 75% 38%)" />
-                        </linearGradient>
-                      </defs>
+                    <BarChart data={storageChart} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} interval={0} />
-                      <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} width={40} />
-                      <Tooltip cursor={{ fill: "hsl(var(--muted) / 0.4)" }} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, boxShadow: "0 8px 24px -8px hsl(215 60% 20% / 0.35)" }} formatter={(v: number, n: string) => n === "GB" ? [`${v} GB`, "Armazenamento"] : [`${v}`, "Usuários"]} />
-                      <Bar dataKey="GB" fill="url(#barGb)" radius={[6, 6, 0, 0]} maxBarSize={56} />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                        stroke="hsl(var(--border))"
+                        tickLine={false}
+                        interval={0}
+                      />
+                      <YAxis
+                        tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                        stroke="hsl(var(--border))"
+                        tickLine={false}
+                        axisLine={false}
+                        width={40}
+                      />
+                      <Tooltip
+                        cursor={{ fill: "hsl(var(--muted) / 0.4)" }}
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                          fontSize: "12px",
+                        }}
+                        formatter={(v: number) => [`${v} GB`, "Armazenamento"]}
+                      />
+                      <Bar dataKey="GB" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} maxBarSize={48} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-              </Card>
+              </div>
 
-              <Card className="p-5">
-                <h2 className="font-semibold mb-4 text-sm">Clientes por plano</h2>
-                <div className="h-[260px]">
+              <div className="bg-card rounded-xl border border-border shadow-sm animate-fade-in">
+                <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+                  <Package className="w-4 h-4 text-muted-foreground" />
+                  <h3 className="font-display font-semibold text-foreground">
+                    Clientes por plano
+                  </h3>
+                </div>
+                <div className="p-5 h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie data={planChart} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={3} stroke="hsl(var(--card))" strokeWidth={2}>
@@ -513,12 +535,19 @@ export default function Platform() {
                           <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, boxShadow: "0 8px 24px -8px hsl(215 60% 20% / 0.35)" }} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                          fontSize: "12px",
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: "12px" }} iconType="circle" />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-              </Card>
+              </div>
             </div>
 
             <Card className="p-5">
