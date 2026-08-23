@@ -243,8 +243,11 @@ export default function Platform() {
     const totalUsers = Object.values(counts ?? {}).reduce((a, b) => a + b, 0);
     const totalGb = list.reduce((a, o) => a + Number(o.storage_used_bytes || 0), 0) / 1024 ** 3;
     const mrr = list.reduce((a, o) => {
+      if (o.status !== "active") return a;
       const p = planList.find((x) => x.slug === o.plan);
-      return a + (o.status === "active" ? Number(p?.price_cents ?? 0) : 0);
+      const base = Number(p?.price_cents ?? 0);
+      const extraGb = Math.max(0, Number(o.storage_limit_gb || 0) - Number(p?.storage_gb ?? 0));
+      return a + base + Math.round(extraGb * gbPriceCents);
     }, 0);
     return {
       orgs: list.length,
