@@ -257,7 +257,7 @@ export default function Platform() {
       mrr,
       open: invoiceList.filter((i) => i.status === "open").reduce((a, i) => a + i.amount_cents, 0),
     };
-  }, [list, counts, planList, invoiceList]);
+  }, [list, counts, planList, invoiceList, gbPriceCents]);
 
   const trendChart = useMemo(() => {
     const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
