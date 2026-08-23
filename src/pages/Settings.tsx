@@ -461,8 +461,9 @@ function GoogleDriveSection() {
     const loadConfig = async () => {
       try {
         const path = await driveConfigPath();
+        if (!path) return;
         let { data } = await supabase.storage.from("settings").download(path);
-        if (!data && path !== "google-drive-config.json") {
+        if (!data && (await isLegacyOrg())) {
           ({ data } = await supabase.storage.from("settings").download("google-drive-config.json"));
         }
         if (data) {
