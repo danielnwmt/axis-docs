@@ -128,6 +128,7 @@ export default function Platform() {
   // storage add-on
   const [addonOrg, setAddonOrg] = useState<Org | null>(null);
   const [addonGb, setAddonGb] = useState(10);
+  const [addonMode, setAddonMode] = useState<"add" | "remove">("add");
   const [addonPrice, setAddonPrice] = useState(0);
   const [addonPriceTouched, setAddonPriceTouched] = useState(false);
   const [addonInvoice, setAddonInvoice] = useState(true);
@@ -243,8 +244,11 @@ export default function Platform() {
     const totalUsers = Object.values(counts ?? {}).reduce((a, b) => a + b, 0);
     const totalGb = list.reduce((a, o) => a + Number(o.storage_used_bytes || 0), 0) / 1024 ** 3;
     const mrr = list.reduce((a, o) => {
+      if (o.status !== "active") return a;
       const p = planList.find((x) => x.slug === o.plan);
-      return a + (o.status === "active" ? Number(p?.price_cents ?? 0) : 0);
+      const base = Number(p?.price_cents ?? 0);
+      const extraGb = Math.max(0, Number(o.storage_limit_gb || 0) - Number(p?.storage_gb ?? 0));
+      return a + base + Math.round(extraGb * gbPriceCents);
     }, 0);
     return {
       orgs: list.length,
@@ -254,7 +258,7 @@ export default function Platform() {
       mrr,
       open: invoiceList.filter((i) => i.status === "open").reduce((a, i) => a + i.amount_cents, 0),
     };
-  }, [list, counts, planList, invoiceList]);
+  }, [list, counts, planList, invoiceList, gbPriceCents]);
 
   const trendChart = useMemo(() => {
     const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -442,7 +446,7 @@ export default function Platform() {
 
   // ---------- storage add-on ----------
   const openAddon = (o: Org) => {
-    setAddonOrg(o); setAddonGb(10);
+    setAddonOrg(o); setAddonGb(10); setAddonMode("add");
     setAddonPrice(10 * gbPriceCents); setAddonPriceTouched(false);
     setAddonInvoice(true);
   };
@@ -457,11 +461,19 @@ export default function Platform() {
     if (!addonOrg) return;
     const gb = Number(addonGb) || 0;
     if (gb <= 0) { toast.error("Informe a quantidade de GB"); return; }
+    const removing = addonMode === "remove";
+    const current = Number(addonOrg.storage_limit_gb);
+    const newLimit = removing ? current - gb : current + gb;
+    if (newLimit < 1) { toast.error("O limite não pode ficar abaixo de 1 GB"); return; }
+    const usedGb = Number(addonOrg.storage_used_bytes || 0) / 1024 ** 3;
+    if (removing && newLimit < usedGb) {
+      toast.error("Limite menor que o uso atual", { description: `Cliente já usa ${usedGb.toFixed(2)} GB` });
+      return;
+    }
     setSaving(true);
-    const newLimit = Number(addonOrg.storage_limit_gb) + gb;
     const { error } = await supabase.from("organizations")
       .update({ storage_limit_gb: newLimit } as any).eq("id", addonOrg.id);
-    if (!error && addonInvoice) {
+    if (!error && addonInvoice && !removing) {
       const addCents = Math.round(Number(addonPrice) || 0);
       // procura a próxima fatura em aberto do cliente para somar o valor
       const { data: nextInv } = await supabase.from("invoices")
@@ -489,12 +501,13 @@ export default function Platform() {
     }
 
     setSaving(false);
-    if (error) { toast.error("Erro ao adicionar armazenamento", { description: error.message }); return; }
-    toast.success(`+${gb} GB adicionados`, { description: `Novo limite: ${newLimit} GB` });
+    if (error) { toast.error("Erro ao atualizar armazenamento", { description: error.message }); return; }
+    toast.success(removing ? `-${gb} GB removidos` : `+${gb} GB adicionados`, { description: `Novo limite: ${newLimit} GB` });
     setAddonOrg(null);
     qc.invalidateQueries({ queryKey: ["platform-orgs"] });
     qc.invalidateQueries({ queryKey: ["platform-invoices"] });
   };
+
 
   if (loadingOwner) {
     return <AppLayout><div className="p-6 text-sm text-muted-foreground">Carregando...</div></AppLayout>;
@@ -1038,55 +1051,75 @@ export default function Platform() {
       <Dialog open={!!addonOrg} onOpenChange={(v) => !v && setAddonOrg(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Adicionar armazenamento</DialogTitle>
+            <DialogTitle>Ajustar armazenamento</DialogTitle>
             <DialogDescription>
               {addonOrg ? `${addonOrg.name} — limite atual: ${addonOrg.storage_limit_gb} GB` : ""}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant={addonMode === "add" ? "default" : "outline"}
+                onClick={() => setAddonMode("add")}>Adicionar GB</Button>
+              <Button type="button" variant={addonMode === "remove" ? "default" : "outline"}
+                onClick={() => { setAddonMode("remove"); setAddonInvoice(false); }}>Reduzir GB</Button>
+            </div>
             <div>
-              <Label>GB adicionais</Label>
+              <Label>{addonMode === "add" ? "GB adicionais" : "GB a remover"}</Label>
               <Input type="number" min={1} value={addonGb} onChange={(e) => changeAddonGb(Number(e.target.value))} />
               {addonOrg && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Novo limite: {Number(addonOrg.storage_limit_gb) + (Number(addonGb) || 0)} GB
+                  Novo limite: {addonMode === "add"
+                    ? Number(addonOrg.storage_limit_gb) + (Number(addonGb) || 0)
+                    : Number(addonOrg.storage_limit_gb) - (Number(addonGb) || 0)} GB
                   {gbPriceCents > 0 && ` · ${brl(gbPriceCents)}/GB`}
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-3">
-              <Switch checked={addonInvoice} onCheckedChange={setAddonInvoice} />
-              <Label className="mb-0">Cobrar na próxima fatura</Label>
-            </div>
-            {addonInvoice && (
-              <div>
-                <Label>Valor da cobrança (R$)</Label>
-                <Input
-                  type="number" min={0} step="0.01"
-                  value={addonPrice / 100}
-                  onChange={(e) => { setAddonPriceTouched(true); setAddonPrice(Math.round(Number(e.target.value) * 100)); }}
-                />
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-xs text-muted-foreground">
-                    {gbPriceCents > 0
-                      ? `Calculado: ${addonGb} GB × ${brl(gbPriceCents)} = ${brl(Math.round((Number(addonGb) || 0) * gbPriceCents))}`
-                      : "Defina o preço por GB na aba Planos."}
-                  </p>
-                  {addonPriceTouched && gbPriceCents > 0 && (
-                    <Button size="sm" variant="ghost" className="h-6 text-xs"
-                      onClick={() => { setAddonPriceTouched(false); setAddonPrice(Math.round((Number(addonGb) || 0) * gbPriceCents)); }}>
-                      Recalcular
-                    </Button>
-                  )}
+            {addonMode === "add" ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <Switch checked={addonInvoice} onCheckedChange={setAddonInvoice} />
+                  <Label className="mb-0">Cobrar na próxima fatura</Label>
                 </div>
-              </div>
+                {addonInvoice && (
+                  <div>
+                    <Label>Valor da cobrança (R$)</Label>
+                    <Input
+                      type="number" min={0} step="0.01"
+                      value={addonPrice / 100}
+                      onChange={(e) => { setAddonPriceTouched(true); setAddonPrice(Math.round(Number(e.target.value) * 100)); }}
+                    />
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">
+                        {gbPriceCents > 0
+                          ? `Calculado: ${addonGb} GB × ${brl(gbPriceCents)} = ${brl(Math.round((Number(addonGb) || 0) * gbPriceCents))}`
+                          : "Defina o preço por GB na aba Planos."}
+                      </p>
+                      {addonPriceTouched && gbPriceCents > 0 && (
+                        <Button size="sm" variant="ghost" className="h-6 text-xs"
+                          onClick={() => { setAddonPriceTouched(false); setAddonPrice(Math.round((Number(addonGb) || 0) * gbPriceCents)); }}>
+                          Recalcular
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                A receita mensal do cliente será reduzida em{" "}
+                {brl(Math.round((Number(addonGb) || 0) * gbPriceCents))} automaticamente.
+              </p>
             )}
 
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddonOrg(null)}>Cancelar</Button>
-            <Button onClick={saveAddon} disabled={saving}>{saving ? "Salvando..." : "Adicionar"}</Button>
+            <Button onClick={saveAddon} disabled={saving}>
+              {saving ? "Salvando..." : addonMode === "add" ? "Adicionar" : "Reduzir"}
+            </Button>
           </DialogFooter>
+
         </DialogContent>
       </Dialog>
     </AppLayout>
