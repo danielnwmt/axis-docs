@@ -434,13 +434,19 @@ function ParametrosSection() {
   );
 }
 
-async function driveConfigPath(): Promise<string> {
+async function driveConfigPath(): Promise<string | null> {
   const { data: auth } = await supabase.auth.getUser();
   const uid = auth?.user?.id;
-  if (!uid) return "google-drive-config.json";
+  if (!uid) return null;
   const { data } = await supabase.from("profiles").select("org_id").eq("id", uid).maybeSingle();
   const orgId = (data as any)?.org_id;
-  return orgId ? `orgs/${orgId}/google-drive-config.json` : "google-drive-config.json";
+  return orgId ? `orgs/${orgId}/google-drive-config.json` : null;
+}
+
+// Fallback ao arquivo global antigo apenas para a organização legada
+async function isLegacyOrg(): Promise<boolean> {
+  const { data } = await supabase.rpc("get_my_org");
+  return (data as any)?.[0]?.slug === "default";
 }
 
 function GoogleDriveSection() {
@@ -455,8 +461,9 @@ function GoogleDriveSection() {
     const loadConfig = async () => {
       try {
         const path = await driveConfigPath();
+        if (!path) return;
         let { data } = await supabase.storage.from("settings").download(path);
-        if (!data && path !== "google-drive-config.json") {
+        if (!data && (await isLegacyOrg())) {
           ({ data } = await supabase.storage.from("settings").download("google-drive-config.json"));
         }
         if (data) {
@@ -520,6 +527,7 @@ function GoogleDriveSection() {
 
       const blob = new Blob([JSON.stringify(config)], { type: "application/json" });
       const path = await driveConfigPath();
+      if (!path) throw new Error("Usuário sem organização vinculada.");
       await supabase.storage.from("settings").remove([path]);
       const { error } = await supabase.storage.from("settings").upload(path, blob, { upsert: true });
       if (error) throw error;

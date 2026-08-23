@@ -13,18 +13,28 @@ export function orgDriveConfigPath(orgId: string | null | undefined): string {
   return orgId ? `orgs/${orgId}/google-drive-config.json` : "google-drive-config.json";
 }
 
+// Só a organização legada (slug 'default') pode usar o arquivo global antigo.
+// Qualquer outra organização precisa ter a própria conta do Google configurada,
+// caso contrário haveria vazamento de dados entre clientes.
+async function isLegacyOrg(admin: any, orgId: string): Promise<boolean> {
+  const { data } = await admin.from("organizations").select("slug").eq("id", orgId).maybeSingle();
+  return data?.slug === "default";
+}
+
 export async function downloadOrgDriveConfig(admin: any, orgId: string | null | undefined): Promise<any | null> {
-  if (orgId) {
-    const { data } = await admin.storage.from("settings").download(orgDriveConfigPath(orgId));
-    if (data) {
-      try {
-        return JSON.parse(await data.text());
-      } catch {
-        return null;
-      }
+  if (!orgId) return null;
+
+  const { data } = await admin.storage.from("settings").download(orgDriveConfigPath(orgId));
+  if (data) {
+    try {
+      return JSON.parse(await data.text());
+    } catch {
+      return null;
     }
   }
-  // Fallback: instalação anterior de tenant único
+
+  if (!(await isLegacyOrg(admin, orgId))) return null;
+
   const { data: legacy } = await admin.storage.from("settings").download("google-drive-config.json");
   if (!legacy) return null;
   try {
