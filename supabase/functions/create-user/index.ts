@@ -305,7 +305,9 @@ Deno.serve(async (req) => {
         });
       }
 
-      const { error } = await supabaseAdmin.from("profiles").update(updates).eq("id", userId);
+      if (!(await assertSameOrg(userId))) return json({ error: "Usuário de outra organização" }, 403);
+
+      const { error } = await supabaseAdmin.from("profiles").update(updates).eq("id", userId).eq("org_id", callerOrgId);
       if (error) {
         return new Response(JSON.stringify({ error: error.message }), {
           status: 400,
