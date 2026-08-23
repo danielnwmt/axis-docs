@@ -422,6 +422,32 @@ export default function Platform() {
             </div>
           </div>
 
+          {!editing && (
+            <div className="rounded-lg border p-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold">Usuário padrão da empresa</p>
+                <p className="text-xs text-muted-foreground">
+                  Administrador criado junto com o cliente. A senha deverá ser trocada no primeiro acesso.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <Label>Nome</Label>
+                  <Input value={form.admin_name} onChange={(e) => setForm({ ...form, admin_name: e.target.value })} />
+                </div>
+                <div>
+                  <Label>E-mail *</Label>
+                  <Input type="email" value={form.admin_email} onChange={(e) => setForm({ ...form, admin_email: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Senha *</Label>
+                  <Input type="text" value={form.admin_password} onChange={(e) => setForm({ ...form, admin_password: e.target.value })} />
+                </div>
+              </div>
+            </div>
+          )}
+
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
             <Button onClick={save} disabled={saving || !form.name.trim()}>
