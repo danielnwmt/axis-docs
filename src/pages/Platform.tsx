@@ -180,6 +180,36 @@ export default function Platform() {
     enabled: !!isOwner,
   });
 
+  const { data: settings } = useQuery({
+    queryKey: ["platform-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("platform_settings" as any)
+        .select("*").limit(1).maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as any;
+    },
+    enabled: !!isOwner,
+  });
+
+  const gbPriceCents = Number(settings?.storage_price_cents_per_gb ?? 0);
+
+  useEffect(() => {
+    setGbPriceInput(((gbPriceCents || 0) / 100).toString());
+  }, [gbPriceCents]);
+
+  const saveGbPrice = async () => {
+    setSavingGbPrice(true);
+    const cents = Math.round((Number(gbPriceInput.replace(",", ".")) || 0) * 100);
+    const { error } = await supabase.from("platform_settings" as any)
+      .upsert({ id: true, storage_price_cents_per_gb: cents } as any);
+    setSavingGbPrice(false);
+    if (error) { toast.error("Erro ao salvar preço", { description: error.message }); return; }
+    toast.success("Preço do armazenamento atualizado");
+    qc.invalidateQueries({ queryKey: ["platform-settings"] });
+  };
+
+
+
   const { data: counts } = useQuery({
     queryKey: ["platform-org-users"],
     queryFn: async () => {
