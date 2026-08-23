@@ -1056,7 +1056,7 @@ export default function Platform() {
             </div>
             <div className="flex items-center gap-3">
               <Switch checked={addonInvoice} onCheckedChange={setAddonInvoice} />
-              <Label className="mb-0">Gerar fatura</Label>
+              <Label className="mb-0">Cobrar na próxima fatura</Label>
             </div>
             {addonInvoice && (
               <div>
