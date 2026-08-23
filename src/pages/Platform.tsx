@@ -220,14 +220,33 @@ export default function Platform() {
     };
   }, [list, counts, planList, invoiceList]);
 
-  const storageChart = useMemo(
-    () => list.map((o) => ({
-      name: o.name.length > 14 ? o.name.slice(0, 14) + "…" : o.name,
-      GB: Number((Number(o.storage_used_bytes || 0) / 1024 ** 3).toFixed(2)),
-      Usuários: counts?.[o.id] ?? 0,
-    })).slice(0, 8),
-    [list, counts]
-  );
+  const trendChart = useMemo(() => {
+    const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+    const now = new Date();
+    const months: { label: string; year: number; month: number }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        label: `${MONTHS_PT[d.getMonth()]}/${String(d.getFullYear()).slice(-2)}`,
+        year: d.getFullYear(),
+        month: d.getMonth(),
+      });
+    }
+    let acc = 0;
+    return months.map((m) => {
+      const end = new Date(m.year, m.month + 1, 1).getTime();
+      const novos = list.filter((o) => {
+        if (!o.created_at) return false;
+        const dt = new Date(o.created_at);
+        return dt.getFullYear() === m.year && dt.getMonth() === m.month;
+      }).length;
+      acc = list.filter((o) => o.created_at && new Date(o.created_at).getTime() < end).length;
+      const ativos = list.filter(
+        (o) => o.status === "active" && o.created_at && new Date(o.created_at).getTime() < end
+      ).length;
+      return { name: m.label, Total: acc, Novos: novos, Ativos: ativos };
+    });
+  }, [list]);
 
   const planChart = useMemo(() => {
     const map: Record<string, number> = {};
