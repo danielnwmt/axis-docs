@@ -527,6 +527,7 @@ function GoogleDriveSection() {
 
       const blob = new Blob([JSON.stringify(config)], { type: "application/json" });
       const path = await driveConfigPath();
+      if (!path) throw new Error("Usuário sem organização vinculada.");
       await supabase.storage.from("settings").remove([path]);
       const { error } = await supabase.storage.from("settings").upload(path, blob, { upsert: true });
       if (error) throw error;
