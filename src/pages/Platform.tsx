@@ -666,6 +666,26 @@ export default function Platform() {
           {/* ---------------- Planos ---------------- */}
           <TabsContent value="plans" className="space-y-4 mt-6">
             <Card className="p-5">
+              <h2 className="font-semibold flex items-center gap-2 mb-4">
+                <HardDrive className="w-4 h-4" /> Preço do armazenamento
+              </h2>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="w-48">
+                  <Label>Valor por GB (R$)</Label>
+                  <Input type="number" min={0} step="0.01" value={gbPriceInput}
+                    onChange={(e) => setGbPriceInput(e.target.value)} />
+                </div>
+                <Button onClick={saveGbPrice} disabled={savingGbPrice}>
+                  {savingGbPrice ? "Salvando..." : "Salvar preço"}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Usado para calcular automaticamente o valor ao adicionar GB a um cliente.
+                </p>
+              </div>
+            </Card>
+
+            <Card className="p-5">
+
               <div className="flex items-center justify-between gap-3 mb-4">
                 <h2 className="font-semibold flex items-center gap-2">
                   <Package className="w-4 h-4" /> Planos ({planList.length})
