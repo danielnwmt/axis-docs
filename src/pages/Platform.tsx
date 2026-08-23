@@ -45,7 +45,9 @@ const emptyForm = {
   name: "", slug: "", doc_type: "CNPJ", document: "", contact_name: "",
   contact_email: "", contact_phone: "", city: "", state: "", notes: "",
   plan: "trial", status: "active", max_users: 10, storage_limit_gb: 10,
+  admin_email: "", admin_password: "", admin_name: "",
 };
+
 
 const slugify = (v: string) =>
   v.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
