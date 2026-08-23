@@ -45,12 +45,27 @@ Deno.serve(async (req) => {
     }
     const { data: callerProfile } = await supabaseAdmin
       .from("profiles")
-      .select("role, active")
+      .select("role, active, org_id")
       .eq("id", callerData.user.id)
       .maybeSingle();
     if (!callerProfile || !callerProfile.active) {
       return json({ error: "Permissão negada" }, 403);
     }
+    const callerOrgId = (callerProfile as any).org_id as string | null;
+    if (!callerOrgId) {
+      return json({ error: "Usuário sem organização vinculada" }, 403);
+    }
+
+    // garante que o alvo pertence à mesma organização do solicitante
+    const assertSameOrg = async (userId: string) => {
+      const { data } = await supabaseAdmin
+        .from("profiles")
+        .select("org_id")
+        .eq("id", userId)
+        .maybeSingle();
+      return !!data && (data as any).org_id === callerOrgId;
+    };
+
     const isAdmin = callerProfile.role === "Administrador";
     const isOperator = callerProfile.role === "Operador";
 
@@ -106,6 +121,7 @@ Deno.serve(async (req) => {
           cpf: cpf || "",
           active: true,
           must_change_password: true,
+          org_id: callerOrgId,
         });
         if (repairError) {
           console.error("[create-user] orphan profile repair failed", repairError);
@@ -133,6 +149,7 @@ Deno.serve(async (req) => {
         cpf: cpf || "",
         active: true,
         must_change_password: true,
+        org_id: callerOrgId,
       });
 
       if (profileError) {
@@ -173,6 +190,7 @@ Deno.serve(async (req) => {
         role: role || "Administrador",
         unit: unit || "",
         active: true,
+        org_id: callerOrgId,
       });
 
       if (upsertError) {
@@ -190,8 +208,9 @@ Deno.serve(async (req) => {
 
     if (req.method === "POST" && action === "toggle") {
       const { userId, active } = await req.json();
+      if (!(await assertSameOrg(userId))) return json({ error: "Usuário de outra organização" }, 403);
 
-      const { error } = await supabaseAdmin.from("profiles").update({ active }).eq("id", userId);
+      const { error } = await supabaseAdmin.from("profiles").update({ active }).eq("id", userId).eq("org_id", callerOrgId);
       if (error) {
         return new Response(JSON.stringify({ error: error.message }), {
           status: 400,
@@ -207,6 +226,7 @@ Deno.serve(async (req) => {
 
     if (req.method === "POST" && action === "delete") {
       const { userId } = await req.json();
+      if (!(await assertSameOrg(userId))) return json({ error: "Usuário de outra organização" }, 403);
 
       const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
       if (error) {
@@ -231,10 +251,12 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      if (!(await assertSameOrg(userId))) return json({ error: "Usuário de outra organização" }, 403);
 
       const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
         password: newPassword,
       });
+
 
       if (error) {
         return new Response(JSON.stringify({ error: error.message }), {
@@ -284,7 +306,9 @@ Deno.serve(async (req) => {
         });
       }
 
-      const { error } = await supabaseAdmin.from("profiles").update(updates).eq("id", userId);
+      if (!(await assertSameOrg(userId))) return json({ error: "Usuário de outra organização" }, 403);
+
+      const { error } = await supabaseAdmin.from("profiles").update(updates).eq("id", userId).eq("org_id", callerOrgId);
       if (error) {
         return new Response(JSON.stringify({ error: error.message }), {
           status: 400,

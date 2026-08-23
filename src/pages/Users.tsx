@@ -96,11 +96,25 @@ export default function Users() {
     : ["Operador", "Usuário"];
 
   const fetchUsers = async () => {
-    const { data, error } = await supabase.from("profiles" as any).select("*").order("created_at", { ascending: true });
+    if (!currentUser?.id) return;
+    // limita a listagem à organização do usuário logado
+    const { data: me } = await supabase
+      .from("profiles" as any)
+      .select("org_id")
+      .eq("id", currentUser.id)
+      .maybeSingle();
+    const orgId = (me as any)?.org_id;
+    if (!orgId) { setUsers([]); return; }
+    const { data, error } = await supabase
+      .from("profiles" as any)
+      .select("*")
+      .eq("org_id", orgId)
+      .order("created_at", { ascending: true });
     if (!error && data) {
       setUsers(data as any as UserProfile[]);
     }
   };
+
 
   const fetchUnits = async () => {
     try {
