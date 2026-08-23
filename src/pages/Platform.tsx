@@ -1051,55 +1051,75 @@ export default function Platform() {
       <Dialog open={!!addonOrg} onOpenChange={(v) => !v && setAddonOrg(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Adicionar armazenamento</DialogTitle>
+            <DialogTitle>Ajustar armazenamento</DialogTitle>
             <DialogDescription>
               {addonOrg ? `${addonOrg.name} — limite atual: ${addonOrg.storage_limit_gb} GB` : ""}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant={addonMode === "add" ? "default" : "outline"}
+                onClick={() => setAddonMode("add")}>Adicionar GB</Button>
+              <Button type="button" variant={addonMode === "remove" ? "default" : "outline"}
+                onClick={() => { setAddonMode("remove"); setAddonInvoice(false); }}>Reduzir GB</Button>
+            </div>
             <div>
-              <Label>GB adicionais</Label>
+              <Label>{addonMode === "add" ? "GB adicionais" : "GB a remover"}</Label>
               <Input type="number" min={1} value={addonGb} onChange={(e) => changeAddonGb(Number(e.target.value))} />
               {addonOrg && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Novo limite: {Number(addonOrg.storage_limit_gb) + (Number(addonGb) || 0)} GB
+                  Novo limite: {addonMode === "add"
+                    ? Number(addonOrg.storage_limit_gb) + (Number(addonGb) || 0)
+                    : Number(addonOrg.storage_limit_gb) - (Number(addonGb) || 0)} GB
                   {gbPriceCents > 0 && ` · ${brl(gbPriceCents)}/GB`}
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-3">
-              <Switch checked={addonInvoice} onCheckedChange={setAddonInvoice} />
-              <Label className="mb-0">Cobrar na próxima fatura</Label>
-            </div>
-            {addonInvoice && (
-              <div>
-                <Label>Valor da cobrança (R$)</Label>
-                <Input
-                  type="number" min={0} step="0.01"
-                  value={addonPrice / 100}
-                  onChange={(e) => { setAddonPriceTouched(true); setAddonPrice(Math.round(Number(e.target.value) * 100)); }}
-                />
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-xs text-muted-foreground">
-                    {gbPriceCents > 0
-                      ? `Calculado: ${addonGb} GB × ${brl(gbPriceCents)} = ${brl(Math.round((Number(addonGb) || 0) * gbPriceCents))}`
-                      : "Defina o preço por GB na aba Planos."}
-                  </p>
-                  {addonPriceTouched && gbPriceCents > 0 && (
-                    <Button size="sm" variant="ghost" className="h-6 text-xs"
-                      onClick={() => { setAddonPriceTouched(false); setAddonPrice(Math.round((Number(addonGb) || 0) * gbPriceCents)); }}>
-                      Recalcular
-                    </Button>
-                  )}
+            {addonMode === "add" ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <Switch checked={addonInvoice} onCheckedChange={setAddonInvoice} />
+                  <Label className="mb-0">Cobrar na próxima fatura</Label>
                 </div>
-              </div>
+                {addonInvoice && (
+                  <div>
+                    <Label>Valor da cobrança (R$)</Label>
+                    <Input
+                      type="number" min={0} step="0.01"
+                      value={addonPrice / 100}
+                      onChange={(e) => { setAddonPriceTouched(true); setAddonPrice(Math.round(Number(e.target.value) * 100)); }}
+                    />
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">
+                        {gbPriceCents > 0
+                          ? `Calculado: ${addonGb} GB × ${brl(gbPriceCents)} = ${brl(Math.round((Number(addonGb) || 0) * gbPriceCents))}`
+                          : "Defina o preço por GB na aba Planos."}
+                      </p>
+                      {addonPriceTouched && gbPriceCents > 0 && (
+                        <Button size="sm" variant="ghost" className="h-6 text-xs"
+                          onClick={() => { setAddonPriceTouched(false); setAddonPrice(Math.round((Number(addonGb) || 0) * gbPriceCents)); }}>
+                          Recalcular
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                A receita mensal do cliente será reduzida em{" "}
+                {brl(Math.round((Number(addonGb) || 0) * gbPriceCents))} automaticamente.
+              </p>
             )}
 
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddonOrg(null)}>Cancelar</Button>
-            <Button onClick={saveAddon} disabled={saving}>{saving ? "Salvando..." : "Adicionar"}</Button>
+            <Button onClick={saveAddon} disabled={saving}>
+              {saving ? "Salvando..." : addonMode === "add" ? "Adicionar" : "Reduzir"}
+            </Button>
           </DialogFooter>
+
         </DialogContent>
       </Dialog>
     </AppLayout>
