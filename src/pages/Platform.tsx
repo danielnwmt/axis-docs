@@ -235,7 +235,7 @@ export default function Platform() {
     if (!q) return list;
     const digits = q.replace(/\D/g, "");
     return list.filter((o) =>
-      [o.name, o.slug, o.contact_name, o.contact_email, o.city, o.state]
+      [o.name, o.slug, o.contact_name, o.contact_email, o.city, o.state, o.org_key]
         .some((f) => (f ?? "").toLowerCase().includes(q)) ||
       (digits.length > 0 && (o.document ?? "").replace(/\D/g, "").includes(digits))
     );
