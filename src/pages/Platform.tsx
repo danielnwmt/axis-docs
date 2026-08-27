@@ -20,7 +20,7 @@ import {
 import { toast } from "sonner";
 import {
   Building2, Plus, Search, Pencil, Users, HardDrive, CheckCircle2,
-  Package, Receipt, DollarSign, Trash2, TrendingUp,
+  Package, Receipt, DollarSign, Trash2, TrendingUp, Copy, KeyRound, RefreshCw,
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
