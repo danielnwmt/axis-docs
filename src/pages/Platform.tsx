@@ -44,6 +44,7 @@ type Org = {
   max_users: number;
   storage_limit_gb: number;
   storage_used_bytes: number;
+  org_key?: string | null;
   created_at?: string;
 };
 
