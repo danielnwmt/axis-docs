@@ -688,6 +688,18 @@ export default function Platform() {
                         {(Number(o.storage_used_bytes || 0) / 1024 ** 3).toFixed(2)} GB de {o.storage_limit_gb} GB
                         {o.contact_email ? ` · ${o.contact_email}` : ""}
                       </p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <KeyRound className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
+                          {o.org_key ?? "—"}
+                        </code>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copyKey(o)} title="Copiar chave">
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => regenerateKey(o)} title="Gerar nova chave">
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{o.plan}</Badge>
@@ -701,6 +713,7 @@ export default function Platform() {
                       <Button size="sm" variant="ghost" onClick={() => openEdit(o)}>
                         <Pencil className="w-4 h-4" />
                       </Button>
+
                     </div>
                   </div>
                 ))}
