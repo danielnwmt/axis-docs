@@ -625,6 +625,7 @@ export type Database = {
           max_users: number
           name: string
           notes: string | null
+          org_key: string | null
           plan: string
           slug: string
           state: string | null
@@ -646,6 +647,7 @@ export type Database = {
           max_users?: number
           name: string
           notes?: string | null
+          org_key?: string | null
           plan?: string
           slug: string
           state?: string | null
@@ -667,6 +669,7 @@ export type Database = {
           max_users?: number
           name?: string
           notes?: string | null
+          org_key?: string | null
           plan?: string
           slug?: string
           state?: string | null
@@ -1043,6 +1046,7 @@ export type Database = {
     Functions: {
       anonymize_user: { Args: { _target: string }; Returns: undefined }
       current_org_id: { Args: never; Returns: string }
+      generate_org_key: { Args: never; Returns: string }
       get_license_status_public: {
         Args: never
         Returns: {
@@ -1110,6 +1114,7 @@ export type Database = {
         }
         Returns: string
       }
+      regenerate_org_key: { Args: { _org_id: string }; Returns: string }
       report_incident_anpd: {
         Args: { _incident_id: string; _protocol: string }
         Returns: undefined

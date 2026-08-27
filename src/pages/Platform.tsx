@@ -20,7 +20,7 @@ import {
 import { toast } from "sonner";
 import {
   Building2, Plus, Search, Pencil, Users, HardDrive, CheckCircle2,
-  Package, Receipt, DollarSign, Trash2, TrendingUp,
+  Package, Receipt, DollarSign, Trash2, TrendingUp, Copy, KeyRound, RefreshCw,
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -44,6 +44,7 @@ type Org = {
   max_users: number;
   storage_limit_gb: number;
   storage_used_bytes: number;
+  org_key?: string | null;
   created_at?: string;
 };
 
@@ -234,7 +235,7 @@ export default function Platform() {
     if (!q) return list;
     const digits = q.replace(/\D/g, "");
     return list.filter((o) =>
-      [o.name, o.slug, o.contact_name, o.contact_email, o.city, o.state]
+      [o.name, o.slug, o.contact_name, o.contact_email, o.city, o.state, o.org_key]
         .some((f) => (f ?? "").toLowerCase().includes(q)) ||
       (digits.length > 0 && (o.document ?? "").replace(/\D/g, "").includes(digits))
     );
@@ -444,12 +445,28 @@ export default function Platform() {
     qc.invalidateQueries({ queryKey: ["platform-invoices"] });
   };
 
+  // ---------- chave do cliente ----------
+  const copyKey = async (o: Org) => {
+    if (!o.org_key) return;
+    await navigator.clipboard.writeText(o.org_key);
+    toast.success("Chave copiada");
+  };
+
+  const regenerateKey = async (o: Org) => {
+    if (!confirm(`Gerar uma nova chave para "${o.name}"? A chave atual deixará de valer.`)) return;
+    const { data, error } = await supabase.rpc("regenerate_org_key" as any, { _org_id: o.id });
+    if (error) { toast.error("Erro ao gerar chave", { description: error.message }); return; }
+    toast.success("Nova chave gerada", { description: String(data ?? "") });
+    qc.invalidateQueries({ queryKey: ["platform-orgs"] });
+  };
+
   // ---------- storage add-on ----------
   const openAddon = (o: Org) => {
     setAddonOrg(o); setAddonGb(10); setAddonMode("add");
     setAddonPrice(10 * gbPriceCents); setAddonPriceTouched(false);
     setAddonInvoice(true);
   };
+
 
   const changeAddonGb = (gb: number) => {
     setAddonGb(gb);
@@ -671,6 +688,18 @@ export default function Platform() {
                         {(Number(o.storage_used_bytes || 0) / 1024 ** 3).toFixed(2)} GB de {o.storage_limit_gb} GB
                         {o.contact_email ? ` · ${o.contact_email}` : ""}
                       </p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <KeyRound className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
+                          {o.org_key ?? "—"}
+                        </code>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copyKey(o)} title="Copiar chave">
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => regenerateKey(o)} title="Gerar nova chave">
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{o.plan}</Badge>
@@ -684,6 +713,7 @@ export default function Platform() {
                       <Button size="sm" variant="ghost" onClick={() => openEdit(o)}>
                         <Pencil className="w-4 h-4" />
                       </Button>
+
                     </div>
                   </div>
                 ))}
