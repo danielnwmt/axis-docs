@@ -445,7 +445,6 @@ export default function Platform() {
     qc.invalidateQueries({ queryKey: ["platform-invoices"] });
   };
 
-  // ---------- storage add-on ----------
   // ---------- chave do cliente ----------
   const copyKey = async (o: Org) => {
     if (!o.org_key) return;
