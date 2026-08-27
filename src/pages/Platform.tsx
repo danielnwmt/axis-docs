@@ -446,11 +446,28 @@ export default function Platform() {
   };
 
   // ---------- storage add-on ----------
+  // ---------- chave do cliente ----------
+  const copyKey = async (o: Org) => {
+    if (!o.org_key) return;
+    await navigator.clipboard.writeText(o.org_key);
+    toast.success("Chave copiada");
+  };
+
+  const regenerateKey = async (o: Org) => {
+    if (!confirm(`Gerar uma nova chave para "${o.name}"? A chave atual deixará de valer.`)) return;
+    const { data, error } = await supabase.rpc("regenerate_org_key" as any, { _org_id: o.id });
+    if (error) { toast.error("Erro ao gerar chave", { description: error.message }); return; }
+    toast.success("Nova chave gerada", { description: String(data ?? "") });
+    qc.invalidateQueries({ queryKey: ["platform-orgs"] });
+  };
+
+  // ---------- storage add-on ----------
   const openAddon = (o: Org) => {
     setAddonOrg(o); setAddonGb(10); setAddonMode("add");
     setAddonPrice(10 * gbPriceCents); setAddonPriceTouched(false);
     setAddonInvoice(true);
   };
+
 
   const changeAddonGb = (gb: number) => {
     setAddonGb(gb);
